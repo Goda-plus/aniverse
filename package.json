@@ -5,10 +5,26 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint",
+    "server": "nodemon api_serve/app.js",
+    "dev": "concurrently \"npm run serve\" \"npm run server\"",
+    "start": "concurrently \"npm run serve\" \"npm run server\""
   },
   "dependencies": {
+    "@escook/express-joi": "^1.1.1",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
     "core-js": "^3.8.3",
+    "cors": "^2.8.5",
+    "element-plus": "^2.7.8",
+    "express": "^5.2.1",
+    "express-jwt": "^8.5.1",
+    "joi": "^18.0.2",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "mysql": "^2.18.1",
+    "pinia": "^2.1.7",
+    "socket.io": "^4.8.3",
     "vue": "^3.2.13",
     "vue-router": "^4.0.3"
   },
@@ -20,11 +36,13 @@
     "@vue/cli-plugin-router": "~5.0.0",
     "@vue/cli-service": "~5.0.0",
     "@vue/eslint-config-standard": "^6.1.0",
+    "concurrently": "^8.2.2",
     "eslint": "^7.32.0",
     "eslint-plugin-import": "^2.25.3",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^5.1.0",
-    "eslint-plugin-vue": "^8.0.3"
+    "eslint-plugin-vue": "^8.0.3",
+    "nodemon": "^3.1.11"
   },
   "eslintConfig": {
     "root": true,

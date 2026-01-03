@@ -1,19 +1,68 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
+import DashboardView from '../views/DashboardView.vue'
+import CommunityView from '../views/CommunityView.vue'
+import ScenesView from '../views/ScenesView.vue'
+import MatchView from '../views/MatchView.vue'
+import MallView from '../views/MallView.vue'
+import CrowdView from '../views/CrowdView.vue'
+import ProfileView from '../views/ProfileView.vue'
+import LoginView from '../views/LoginView.vue'
 
 const routes = [
   {
     path: '/',
-    name: 'home',
-    component: HomeView
+    name: 'dashboard',
+    component: DashboardView
   },
   {
-    path: '/about',
-    name: 'about',
-    // route level code-splitting
-    // this generates a separate chunk (about.[hash].js) for this route
-    // which is lazy-loaded when the route is visited.
-    component: () => import(/* webpackChunkName: "about" */ '../views/AboutView.vue')
+    path: '/popular',
+    name: 'popular',
+    component: DashboardView
+  },
+  {
+    path: '/browse',
+    name: 'browse',
+    component: DashboardView
+  },
+  {
+    path: '/community',
+    name: 'community',
+    component: CommunityView
+  },
+  {
+    path: '/scenes',
+    name: 'scenes',
+    component: ScenesView
+  },
+  {
+    path: '/match',
+    name: 'match',
+    component: MatchView
+  },
+  {
+    path: '/mall',
+    name: 'mall',
+    component: MallView
+  },
+  {
+    path: '/crowd',
+    name: 'crowd',
+    component: CrowdView
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: ProfileView
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: LoginView
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: LoginView
   }
 ]
 
