@@ -1,0 +1,263 @@
+/* 覆盖所有w-e开头的弹出层 - 这些可能被添加到body下 */
+body > div[class*="w-e-"],
+body > div[class*="w-e-"] > div {
+  background: var(--card-bg) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 所有弹出层容器 */
+div[class*="w-e-"][class*="popup"],
+div[class*="w-e-"][class*="modal"],
+div[class*="w-e-"][class*="panel"],
+div[class*="w-e-"][class*="picker"],
+div[class*="w-e-"][class*="dropdown"],
+div[class*="w-e-"][class*="menu"],
+div[class*="w-e-"][class*="select"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的所有文本元素 - 但不覆盖编辑器内容区域的内联样式 */
+div[class*="w-e-"] input,
+div[class*="w-e-"] textarea,
+div[class*="w-e-"] label {
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的 span 和 div（排除编辑器内容区域和emoji） */
+div[class*="w-e-"][class*="popup"] span:not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="modal"] span:not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="panel"] span:not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="popup"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="modal"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="panel"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"]) {
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的输入框 */
+div[class*="w-e-"] input[type="text"],
+div[class*="w-e-"] input[type="url"],
+div[class*="w-e-"] textarea {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+div[class*="w-e-"] input:focus,
+div[class*="w-e-"] textarea:focus {
+  border-color: #ff4500 !important;
+  outline: none !important;
+}
+
+/* 弹出层内的按钮 */
+div[class*="w-e-"] button {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+div[class*="w-e-"] button:hover {
+  background: var(--bg-hover) !important;
+}
+
+div[class*="w-e-"] button[class*="primary"],
+div[class*="w-e-"] button[type="submit"] {
+  background: #ff4500 !important;
+  color: #ffffff !important;
+  border-color: #ff4500 !important;
+}
+
+div[class*="w-e-"] button[class*="primary"]:hover,
+div[class*="w-e-"] button[type="submit"]:hover {
+  background: #ff5722 !important;
+}
+
+/* 弹出层内的列表项 */
+div[class*="w-e-"] [class*="item"],
+div[class*="w-e-"] [class*="option"],
+div[class*="w-e-"] [class*="list-item"] {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+div[class*="w-e-"] [class*="item"]:hover,
+div[class*="w-e-"] [class*="option"]:hover,
+div[class*="w-e-"] [class*="list-item"]:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 选中项 */
+div[class*="w-e-"] [class*="item"][class*="active"],
+div[class*="w-e-"] [class*="item"][class*="selected"],
+div[class*="w-e-"] [class*="option"][class*="active"],
+div[class*="w-e-"] [class*="option"][class*="selected"] {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+/* 颜色选择器面板 - 文字颜色和背景色 */
+ul.w-e-panel-content-color,
+ul.w-e-panel-content-bgColor {
+  background: var(--card-bg) !important;
+}
+
+/* 颜色选择器中的色块边框 - 使用主题色 */
+ul.w-e-panel-content-color li,
+ul.w-e-panel-content-bgColor li {
+  border: 1px solid var(--card-border) !important;
+}
+
+ul.w-e-panel-content-color li:hover,
+ul.w-e-panel-content-bgColor li:hover {
+  border-color: var(--text-primary) !important;
+}
+
+/* 通用颜色选择器色块样式 */
+[class*="w-e-panel-content-color"] li,
+[class*="w-e-panel-content-bgColor"] li,
+[class*="w-e-panel-content"][class*="color"] li {
+  border: 1px solid var(--card-border) !important;
+}
+
+[class*="w-e-panel-content-color"] li:hover,
+[class*="w-e-panel-content-bgColor"] li:hover,
+[class*="w-e-panel-content"][class*="color"] li:hover {
+  border-color: var(--text-primary) !important;
+}
+
+/* 编辑器内容区域的图片和视频样式（全局） */
+.w-e-text-container img,
+.w-e-text-container [data-slate-editor] img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 12px 0 !important;
+  border-radius: 4px !important;
+}
+
+.w-e-text-container video,
+.w-e-text-container [data-slate-editor] video {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 12px 0 !important;
+  border-radius: 4px !important;
+}
+
+.w-e-text-container iframe,
+.w-e-text-container [data-slate-editor] iframe {
+  max-width: 100% !important;
+  display: block !important;
+  margin: 12px 0 !important;
+  border-radius: 4px !important;
+}
+
+/* 确保编辑器内容区域内的内联样式（颜色、加粗等）不被覆盖 - 内联样式优先级最高 */
+
+.w-e-text-container strong,
+.w-e-text-container b,
+.w-e-text-container [data-slate-editor] strong,
+.w-e-text-container [data-slate-editor] b {
+  font-weight: bold !important;
+}
+
+.w-e-text-container em,
+.w-e-text-container i,
+.w-e-text-container [data-slate-editor] em,
+.w-e-text-container [data-slate-editor] i {
+  font-style: italic !important;
+}
+
+.w-e-text-container u,
+.w-e-text-container [data-slate-editor] u {
+  text-decoration: underline !important;
+}
+
+/* 代码块样式 - 深色主题（全局） */
+div[class*="w-e-"] pre,
+.w-e-text-container pre,
+.w-e-text-container [data-slate-editor] pre,
+.w-e-text-container [data-slate-editor] pre > code {
+  background: var(--bg-tertiary) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 12px 16px !important;
+  margin: 12px 0 !important;
+  overflow-x: auto !important;
+  color: var(--text-primary) !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+div[class*="w-e-"] code,
+.w-e-text-container code {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 0.9em !important;
+}
+
+div[class*="w-e-"] pre code,
+.w-e-text-container pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+/* 底部工具栏（代码块相关弹出层）- 全局样式 */
+div[class*="w-e-bar-bottom"],
+div[class*="w-e-hover-bar"],
+div[class*="w-e-bar"][class*="bar-bottom"],
+div.w-e-bar.w-e-bar-bottom,
+div.w-e-bar.w-e-hover-bar.w-e-bar-bottom,
+div.w-e-bar.w-e-bar-show.w-e-bar-bottom {
+  background: var(--bg-secondary) !important;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+div[class*="w-e-bar-bottom"] button,
+div[class*="w-e-hover-bar"] button,
+div[class*="w-e-bar"][class*="bar-bottom"] button,
+div.w-e-bar.w-e-bar-bottom button,
+div.w-e-bar.w-e-bar-bottom .w-e-bar-item {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+div[class*="w-e-bar-bottom"] button:hover,
+div[class*="w-e-hover-bar"] button:hover,
+div[class*="w-e-bar"][class*="bar-bottom"] button:hover,
+div.w-e-bar.w-e-bar-bottom button:hover,
+div.w-e-bar.w-e-bar-bottom .w-e-bar-item:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖编辑器默认的工具栏变量 - 全局 */
+div[class*="w-e-bar"] {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 代码块相关的下拉菜单和弹出层 */
+div[class*="w-e-"][class*="code"] [class*="popup"],
+div[class*="w-e-"][class*="code"] [class*="menu"],
+div[class*="w-e-"][class*="code"] [class*="panel"],
+div[class*="w-e-"][class*="code"] [class*="dropdown"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  color: var(--text-primary) !important;
+}

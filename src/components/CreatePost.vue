@@ -56,10 +56,12 @@
             class="editor-toolbar"
           />
           <Editor
+            :key="editorKey"
             v-model="formData.content"
             :default-config="editorConfig"
             style="height: 400px; overflow-y: hidden;"
             @on-created="handleEditorCreated"
+            @on-change="handleEditorChange"
           />
         </div>
       </div>
@@ -78,13 +80,13 @@
 </template>
 
 <script setup>
-  import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, defineEmits } from 'vue'
+  import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, defineEmits, nextTick } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { Close } from '@element-plus/icons-vue'
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
-  import { getAllSubreddits, createPost, uploadPostImage } from '@/axios/api'
+  import { getAllSubreddits, createPost, uploadPostImage, uploadPostVideo } from '@/axios/api'
 
   const router = useRouter()
   const route = useRoute()
@@ -100,6 +102,14 @@
 
   // 编辑器实例
   const editorRef = shallowRef(null)
+  // 标记是否正在清空编辑器，避免触发onChange事件
+  const isClearingEditor = ref(false)
+  // 编辑器key，用于强制重新创建编辑器
+  const editorKey = ref(0)
+  // 组件挂载状态
+  const isMounted = ref(true)
+  // 存储定时器ID，用于清理
+  const timers = ref([])
 
   // 工具栏配置
   const toolbarConfig = reactive({
@@ -116,34 +126,106 @@
     placeholder: '请输入帖子内容...',
     readOnly: false,
     autoFocus: false,
+    // 添加错误处理
+    onError: (error) => {
+      console.warn('编辑器错误:', error)
+      // 不阻止编辑器继续工作
+    },
     MENU_CONF: {
       uploadImage: {
-        server: '/api/post/upload-image',
-        fieldName: 'image',
-        maxFileSize: 5 * 1024 * 1024, // 5MB
-        allowedFileTypes: ['image/*'],
-        meta: {
-          token: localStorage.getItem('token') || sessionStorage.getItem('token')
-        },
-        metaWithUrl: false,
-        headers: {
-          Authorization: localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-        },
-        // 自定义上传
+        // 自定义上传函数
         async customUpload (file, insertFn) {
           try {
+            // 验证文件大小
+            const maxSize = 5 * 1024 * 1024 // 5MB
+            if (file.size > maxSize) {
+              ElMessage.error('图片大小不能超过 5MB')
+              return
+            }
+
+            // 验证文件类型
+            if (!file.type.startsWith('image/')) {
+              ElMessage.error('只能上传图片文件')
+              return
+            }
+
+            // 上传文件
             const res = await uploadPostImage(file)
-            if (res.status === 0 && res.data) {
-              // 插入图片
+            
+            // 处理响应 - 根据实际后端返回格式调整
+            // 如果后端返回格式为 { status: 0, data: { url: 'xxx' } }
+            if (res && res.status === 0 && res.data && res.data.url) {
+              // 插入图片到编辑器
               insertFn(res.data.url, res.data.alt || '', res.data.href || '')
-            } else {
-              ElMessage.error(res.message || '图片上传失败')
+            } 
+            // 如果后端直接返回 { url: 'xxx' }
+            else if (res && res.url) {
+              insertFn(res.url, res.alt || '', res.href || '')
+            }
+            // 如果后端返回 { data: { url: 'xxx' } }
+            else if (res && res.data && res.data.url) {
+              insertFn(res.data.url, res.data.alt || '', res.data.href || '')
+            }
+            else {
+              console.error('上传响应格式不正确:', res)
+              ElMessage.error('上传失败：服务器响应格式错误')
             }
           } catch (error) {
-            console.error('上传图片失败:', error)
-            ElMessage.error('图片上传失败，请重试')
+            console.error('图片上传失败:', error)
+            const errorMessage = error.response?.data?.message || error.message || '上传失败，请重试'
+            ElMessage.error(errorMessage)
           }
-        }
+        },
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        allowedFileTypes: ['image/*']
+      },
+      uploadVideo: {
+        // 自定义上传函数
+        async customUpload (file, insertFn) {
+          try {
+            // 验证文件大小（视频通常更大，设置为 100MB）
+            const maxSize = 100 * 1024 * 1024 // 100MB
+            if (file.size > maxSize) {
+              ElMessage.error('视频大小不能超过 100MB')
+              return
+            }
+
+            // 验证文件类型
+            const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo']
+            if (!allowedTypes.includes(file.type)) {
+              ElMessage.error('只支持 MP4、WebM、OGG、MOV、AVI 格式的视频')
+              return
+            }
+
+            // 上传文件
+            const res = await uploadPostVideo(file)
+            
+            // 处理响应 - 根据实际后端返回格式调整
+            // 如果后端返回格式为 { status: 0, data: { url: 'xxx' } }
+            if (res && res.status === 0 && res.data && res.data.url) {
+              // 插入视频到编辑器
+              insertFn(res.data.url, res.data.poster || '', res.data.width || '', res.data.height || '')
+            } 
+            // 如果后端直接返回 { url: 'xxx' }
+            else if (res && res.url) {
+              insertFn(res.url, res.poster || '', res.width || '', res.height || '')
+            }
+            // 如果后端返回 { data: { url: 'xxx' } }
+            else if (res && res.data && res.data.url) {
+              insertFn(res.data.url, res.data.poster || '', res.data.width || '', res.data.height || '')
+            }
+            else {
+              console.error('上传响应格式不正确:', res)
+              ElMessage.error('上传失败：服务器响应格式错误')
+            }
+          } catch (error) {
+            console.error('视频上传失败:', error)
+            const errorMessage = error.response?.data?.message || error.message || '上传失败，请重试'
+            ElMessage.error(errorMessage)
+          }
+        },
+        maxFileSize: 100 * 1024 * 1024, // 100MB
+        allowedFileTypes: ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo']
       }
     }
   })
@@ -157,6 +239,62 @@
   // 初始化编辑器
   const handleEditorCreated = (editor) => {
     editorRef.value = editor
+  }
+
+  // 编辑器内容变化处理
+  const handleEditorChange = () => {
+    // 如果正在清空编辑器，不处理变化事件
+    if (isClearingEditor.value) {
+      return
+    }
+  }
+
+  // 安全获取编辑器实例
+  const getEditorInstance = () => {
+    // 如果组件已卸载，不再访问编辑器
+    if (!isMounted.value) {
+      return null
+    }
+    if (!editorRef.value) {
+      return null
+    }
+    try {
+      if (editorRef.value.isDestroyed) {
+        return null
+      }
+      return editorRef.value
+    } catch (error) {
+      console.warn('编辑器实例无效:', error)
+      return null
+    }
+  }
+
+  // 安全获取编辑器HTML内容
+  const getEditorHtml = () => {
+    const editor = getEditorInstance()
+    if (!editor) {
+      return formData.content || ''
+    }
+    try {
+      return editor.getHtml() || formData.content || ''
+    } catch (error) {
+      console.warn('获取编辑器HTML失败:', error)
+      return formData.content || ''
+    }
+  }
+
+  // 安全获取编辑器文本内容
+  const getEditorText = () => {
+    const editor = getEditorInstance()
+    if (!editor) {
+      return ''
+    }
+    try {
+      return editor.getText() || ''
+    } catch (error) {
+      console.warn('获取编辑器文本失败:', error)
+      return ''
+    }
   }
 
   // 获取社区列表
@@ -189,10 +327,10 @@
   // 提交表单
   const handleSubmit = async () => {
     // 验证表单
-    if (!formData.subreddit) {
-      ElMessage.warning('请选择社区')
-      return
-    }
+    // if (!formData.subreddit) {
+    //   ElMessage.warning('请选择社区')
+    //   return
+    // }
 
     if (!formData.title || formData.title.trim() === '') {
       ElMessage.warning('请输入帖子标题')
@@ -200,7 +338,7 @@
     }
 
     // 检查编辑器内容（去除 HTML 标签后检查是否为空）
-    const editorContent = editorRef.value ? editorRef.value.getHtml() : formData.content
+    const editorContent = getEditorHtml()
     const textContent = editorContent.replace(/<[^>]*>/g, '').trim()
     if (!textContent) {
       ElMessage.warning('请输入帖子内容')
@@ -211,38 +349,32 @@
 
     try {
       // 获取编辑器内容
-      const editorContent = editorRef.value ? editorRef.value.getHtml() : formData.content
+      const finalEditorContent = getEditorHtml()
+      const finalTextContent = getEditorText()
       
       // 创建帖子
       const postData = {
         subreddit: formData.subreddit,
-        title: formData.title.trim(),
-        content: editorContent
+        title: formData.title,
+        content_html: finalEditorContent,
+        content_text: finalTextContent,
       }
 
       const res = await createPost(postData)
-
-      if (res.status === 0) {
-        ElMessage.success('帖子发布成功')
-        emit('success', res.data)
+      ElMessage.success('帖子发布成功')
       
-        // 重置表单
-        formData.subreddit = ''
-        formData.title = ''
-        formData.content = ''
+      // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
+      formData.subreddit = ''
+      formData.title = ''
+      formData.content = ''
       
-        // 清空编辑器
-        if (editorRef.value) {
-          editorRef.value.clear()
-        }
-
-        // 如果是从路由进入的，返回上一页
-        if (route.name === 'create-post') {
-          router.back()
-        }
-      } else {
-        ElMessage.error(res.message || '帖子发布失败')
-      }
+      // 发出成功事件，父组件会处理导航
+      // 注意：发出事件后，组件可能会立即卸载，所以不再执行清空编辑器的操作
+      emit('success', res.data)
+      
+      // 导航逻辑由父组件 CreatePostView 的 handleSuccess 处理
+      // 这里不再执行 router.back()，避免与父组件的导航冲突
+      // 也不再清空编辑器，因为组件即将卸载，清空操作会导致访问已销毁的编辑器实例
     } catch (error) {
       console.error('发布帖子失败:', error)
       ElMessage.error('发布失败，请重试')
@@ -260,22 +392,19 @@
         type: 'warning'
       }).then(() => {
         emit('cancel')
-        if (route.name === 'create-post') {
-          router.back()
-        }
+        // 导航逻辑由父组件 CreatePostView 的 handleCancel 处理
       }).catch(() => {
       // 用户取消
       })
     } else {
       emit('cancel')
-      if (route.name === 'create-post') {
-        router.back()
-      }
+      // 导航逻辑由父组件 CreatePostView 的 handleCancel 处理
     }
   }
 
   // 组件挂载
   onMounted(() => {
+    isMounted.value = true
     loadSubreddits()
   
     // 如果路由中有社区参数，自动填充
@@ -284,12 +413,29 @@
     }
   })
 
-  // 组件卸载前销毁编辑器
+  // 组件卸载前清理资源
   onBeforeUnmount(() => {
-    if (editorRef.value) {
-      editorRef.value.destroy()
-      editorRef.value = null
+    isMounted.value = false
+    
+    // 清理所有定时器
+    timers.value.forEach(timerId => {
+      if (timerId) {
+        clearTimeout(timerId)
+      }
+    })
+    timers.value = []
+    
+    // 销毁编辑器实例
+    const editor = editorRef.value
+    if (editor != null) {
+      try {
+        editor.destroy()
+      } catch (error) {
+        // 忽略销毁时的错误
+        console.warn('销毁编辑器时出错:', error)
+      }
     }
+    editorRef.value = null
   })
 </script>
 
@@ -390,9 +536,16 @@
 /* 编辑器样式调整 */
 :deep(.w-e-text-container) {
   background: var(--card-bg) !important;
-  color: var(--text-primary) !important;
+  /* 不设置默认颜色，让内联样式自然生效 */
   min-height: 300px;
 }
+
+/* 只对没有内联样式的文本元素设置默认颜色 */
+:deep(.w-e-text-container) {
+  color: var(--text-primary);
+}
+
+/* 确保有内联样式的元素不受影响 - 内联样式优先级最高 */
 
 :deep(.w-e-text-placeholder) {
   color: var(--text-secondary) !important;
@@ -428,15 +581,640 @@
   color: #ff4500 !important;
 }
 
-:deep(.w-e-text-container p) {
+/* 底部工具栏（代码块相关弹出层） */
+:deep(.w-e-bar-bottom),
+:deep(.w-e-hover-bar),
+:deep(.w-e-bar.w-e-bar-bottom),
+:deep(.w-e-bar.w-e-hover-bar.w-e-bar-bottom),
+:deep(.w-e-bar.w-e-bar-show.w-e-bar-bottom) {
+  background: var(--bg-secondary) !important;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-bar-bottom button),
+:deep(.w-e-hover-bar button),
+:deep(.w-e-bar.w-e-bar-bottom button),
+:deep(.w-e-bar.w-e-bar-bottom .w-e-bar-item) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-bar-bottom button:hover),
+:deep(.w-e-hover-bar button:hover),
+:deep(.w-e-bar.w-e-bar-bottom button:hover),
+:deep(.w-e-bar.w-e-bar-bottom .w-e-bar-item:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖编辑器默认的工具栏变量 */
+:deep(.w-e-bar) {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 段落样式 - 只对没有内联样式的段落应用默认颜色 */
+:deep(.w-e-text-container p:not([style*="color"])) {
   color: var(--text-primary) !important;
   margin: 0;
   line-height: 1.6;
 }
 
+/* 保留内联样式（颜色、加粗等） */
+:deep(.w-e-text-container p[style*="color"]) {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* 确保加粗、斜体等样式生效 */
+:deep(.w-e-text-container strong),
+:deep(.w-e-text-container b) {
+  font-weight: bold !important;
+}
+
+:deep(.w-e-text-container em),
+:deep(.w-e-text-container i) {
+  font-style: italic !important;
+}
+
+:deep(.w-e-text-container u) {
+  text-decoration: underline !important;
+}
+
+/* 确保编辑器内容区域内的所有内联样式（颜色、背景色等）不被覆盖 - 内联样式优先级最高 */
+
+/* 图片样式 - 确保正确显示 */
 :deep(.w-e-text-container img) {
   max-width: 100%;
   height: auto;
+  display: block;
+  margin: 12px 0;
+  border-radius: 4px;
+}
+
+/* 视频样式 - 确保正确显示 */
+:deep(.w-e-text-container video) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px 0;
+  border-radius: 4px;
+}
+
+/* iframe 视频（如 YouTube） */
+:deep(.w-e-text-container iframe) {
+  max-width: 100%;
+  display: block;
+  margin: 12px 0;
+  border-radius: 4px;
+}
+
+/* 代码块样式 - 深色主题 */
+:deep(.w-e-text-container pre),
+:deep(.w-e-text-container [data-slate-editor] pre),
+:deep(.w-e-text-container [data-slate-editor] pre > code) {
+  background: var(--bg-tertiary) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 12px 16px !important;
+  margin: 12px 0 !important;
+  overflow-x: auto !important;
+  color: var(--text-primary) !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+:deep(.w-e-text-container code) {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 0.9em !important;
+}
+
+:deep(.w-e-text-container pre code) {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+/* 代码块内的语法高亮（如果有） */
+:deep(.w-e-text-container pre .keyword) {
+  color: #c792ea !important;
+}
+
+:deep(.w-e-text-container pre .string) {
+  color: #c3e88d !important;
+}
+
+:deep(.w-e-text-container pre .comment) {
+  color: var(--text-secondary) !important;
+  font-style: italic !important;
+}
+
+:deep(.w-e-text-container pre .number) {
+  color: #f78c6c !important;
+}
+
+:deep(.w-e-text-container pre .function) {
+  color: #82aaff !important;
+}
+
+:deep(.w-e-text-container pre .variable) {
+  color: #ffcb6b !important;
+}
+
+/* 工具栏下拉菜单样式 */
+:deep(.w-e-dropdown-menu) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-dropdown-menu-item) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-dropdown-menu-item:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-dropdown-menu-item.is-active) {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+:deep(.w-e-dropdown-panel) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-dropdown-panel-item) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-dropdown-panel-item:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-dropdown-panel-item.is-active) {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+/* 颜色选择器下拉菜单 */
+:deep(.w-e-color-picker-container) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-color-picker-item) {
+  border: 1px solid var(--card-border) !important;
+}
+
+:deep(.w-e-color-picker-item:hover) {
+  border-color: var(--text-primary) !important;
+}
+
+/* 颜色选择器面板内容 - 文字颜色和背景色选择器 */
+:deep(.w-e-panel-content-color),
+:deep(.w-e-panel-content-bgColor) {
+  background: var(--card-bg) !important;
+}
+
+/* 颜色选择器中的色块（li元素） */
+:deep(.w-e-panel-content-color li),
+:deep(.w-e-panel-content-bgColor li) {
+  border: 1px solid var(--card-border) !important;
+}
+
+:deep(.w-e-panel-content-color li:hover),
+:deep(.w-e-panel-content-bgColor li:hover) {
+  border-color: var(--text-primary) !important;
+}
+
+/* 颜色选择器标题和清除按钮 */
+:deep(.w-e-color-picker-title) {
+  color: var(--text-primary) !important;
+  background: var(--card-bg) !important;
+}
+
+:deep(.w-e-color-picker-clear) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-color-picker-clear:hover) {
+  background: var(--bg-hover) !important;
+}
+
+/* 颜色选择器网格容器 */
+:deep(.w-e-color-picker-grid) {
+  background: var(--card-bg) !important;
+}
+
+/* 字体大小、字体类型等下拉菜单 */
+:deep(.w-e-select-list) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-select-list-item) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-select-list-item:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-select-list-item.is-selected) {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+/* 表情选择器 */
+:deep(.w-e-emoji-picker) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-emoji-picker-container) {
+  background: var(--card-bg) !important;
+}
+
+:deep(.w-e-emoji-picker-tab) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-emoji-picker-tab:hover) {
+  background: var(--bg-hover) !important;
+}
+
+:deep(.w-e-emoji-picker-tab.is-active) {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+/* 表格选择器 */
+:deep(.w-e-table-picker) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-table-picker-container) {
+  background: var(--card-bg) !important;
+}
+
+:deep(.w-e-table-picker-grid) {
+  background: var(--card-bg) !important;
+}
+
+:deep(.w-e-table-picker-cell) {
+  border-color: var(--card-border) !important;
+  background: var(--bg-secondary) !important;
+}
+
+:deep(.w-e-table-picker-cell:hover) {
+  background: var(--bg-hover) !important;
+  border-color: var(--text-primary) !important;
+}
+
+:deep(.w-e-table-picker-size) {
+  color: var(--text-primary) !important;
+  background: var(--card-bg) !important;
+}
+
+/* 链接插入模态框 */
+:deep(.w-e-link-modal) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-link-modal-header) {
+  background: var(--card-bg) !important;
+  border-bottom: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-link-modal-title) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-link-modal-close) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-link-modal-close:hover) {
+  background: var(--bg-hover) !important;
+}
+
+:deep(.w-e-link-modal-body) {
+  background: var(--card-bg) !important;
+}
+
+:deep(.w-e-link-modal-label) {
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-link-modal-input) {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-link-modal-input:focus) {
+  border-color: #ff4500 !important;
+}
+
+:deep(.w-e-link-modal-footer) {
+  background: var(--card-bg) !important;
+  border-top: 1px solid var(--card-border) !important;
+}
+
+:deep(.w-e-link-modal-button) {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.w-e-link-modal-button:hover) {
+  background: var(--bg-hover) !important;
+}
+
+:deep(.w-e-link-modal-button-primary) {
+  background: #ff4500 !important;
+  color: #ffffff !important;
+  border-color: #ff4500 !important;
+}
+
+:deep(.w-e-link-modal-button-primary:hover) {
+  background: #ff5722 !important;
+}
+
+/* 图片上传下拉菜单 */
+:deep(.w-e-image-upload-panel) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-image-upload-item) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-image-upload-item:hover) {
+  background: var(--bg-hover) !important;
+}
+
+/* 视频插入下拉菜单 */
+:deep(.w-e-video-insert-panel) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-video-insert-item) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-video-insert-item:hover) {
+  background: var(--bg-hover) !important;
+}
+
+/* 通用弹出层样式 - 覆盖所有可能的弹出层 */
+:deep([class*="w-e-popup"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep([class*="w-e-popup"] [class*="item"]) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep([class*="w-e-popup"] [class*="item"]:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 对齐方式下拉菜单 */
+:deep(.w-e-bar-divider) {
+  border-color: var(--card-border) !important;
+}
+
+/* 所有工具栏相关的弹出层 */
+:deep(.w-e-toolbar [class*="popup"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.w-e-toolbar [class*="popup"] [class*="item"]) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(.w-e-toolbar [class*="popup"] [class*="item"]:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 通用样式 - 覆盖所有w-e开头的弹出层和模态框 */
+:deep(div[class^="w-e-"][class*="popup"]),
+:deep(div[class^="w-e-"][class*="modal"]),
+:deep(div[class^="w-e-"][class*="panel"]),
+:deep(div[class^="w-e-"][class*="picker"]),
+:deep(div[class^="w-e-"][class*="dropdown"]),
+:deep(div[class^="w-e-"][class*="menu"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖所有弹出层内的文本和输入框 - 排除编辑器内容区域 */
+:deep(div[class^="w-e-"] input),
+:deep(div[class^="w-e-"] textarea),
+:deep(div[class^="w-e-"] label) {
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的 span 和 div（排除编辑器内容区域和emoji） */
+:deep(div[class^="w-e-"][class*="popup"] span:not([class*="emoji"]):not([style*="color"])),
+:deep(div[class^="w-e-"][class*="modal"] span:not([class*="emoji"]):not([style*="color"])),
+:deep(div[class^="w-e-"][class*="panel"] span:not([class*="emoji"]):not([style*="color"])),
+:deep(div[class^="w-e-"][class*="popup"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"])),
+:deep(div[class^="w-e-"][class*="modal"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"])),
+:deep(div[class^="w-e-"][class*="panel"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"])) {
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖所有弹出层内的输入框背景 */
+:deep(div[class^="w-e-"] input[type="text"]),
+:deep(div[class^="w-e-"] input[type="url"]),
+:deep(div[class^="w-e-"] textarea) {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(div[class^="w-e-"] input:focus),
+:deep(div[class^="w-e-"] textarea:focus) {
+  border-color: #ff4500 !important;
+  outline: none !important;
+}
+
+/* 覆盖所有弹出层内的按钮 */
+:deep(div[class^="w-e-"] button) {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(div[class^="w-e-"] button:hover) {
+  background: var(--bg-hover) !important;
+}
+
+:deep(div[class^="w-e-"] button[class*="primary"]) {
+  background: #ff4500 !important;
+  color: #ffffff !important;
+  border-color: #ff4500 !important;
+}
+
+:deep(div[class^="w-e-"] button[class*="primary"]:hover) {
+  background: #ff5722 !important;
+}
+
+/* 覆盖所有弹出层内的列表项 */
+:deep(div[class^="w-e-"] [class*="item"]),
+:deep(div[class^="w-e-"] [class*="option"]),
+:deep(div[class^="w-e-"] [class*="list-item"]) {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+:deep(div[class^="w-e-"] [class*="item"]:hover),
+:deep(div[class^="w-e-"] [class*="option"]:hover),
+:deep(div[class^="w-e-"] [class*="list-item"]:hover) {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖所有弹出层内的选中项 */
+:deep(div[class^="w-e-"] [class*="item"][class*="active"]),
+:deep(div[class^="w-e-"] [class*="item"][class*="selected"]),
+:deep(div[class^="w-e-"] [class*="option"][class*="active"]),
+:deep(div[class^="w-e-"] [class*="option"][class*="selected"]) {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+/* 使用更通用的选择器覆盖所有可能的弹出层 - 包括body下的弹出层 */
+:deep(body > div[class*="w-e-"]),
+:deep(body > div[class*="w-e-"] > div) {
+  background: var(--card-bg) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 确保所有弹出层都有正确的背景色 */
+:deep(.editor-wrapper ~ div[class*="w-e-"]),
+:deep(.editor-wrapper div[class*="w-e-"][style*="position"]),
+:deep(div[class*="w-e-"][style*="position: absolute"],
+div[class*="w-e-"][style*="position: fixed"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖所有可能的表格选择器变体 */
+:deep([class*="table"][class*="picker"]),
+:deep([class*="table"][class*="select"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+}
+
+:deep([class*="table"][class*="picker"] [class*="cell"],
+[class*="table"][class*="select"] [class*="cell"]) {
+  border-color: var(--card-border) !important;
+  background: var(--bg-secondary) !important;
+}
+
+:deep([class*="table"][class*="picker"] [class*="cell"]:hover,
+[class*="table"][class*="select"] [class*="cell"]:hover) {
+  background: var(--bg-hover) !important;
+  border-color: var(--text-primary) !important;
+}
+
+/* 覆盖所有可能的颜色选择器变体 */
+:deep([class*="color"][class*="picker"]),
+:deep([class*="color"][class*="panel"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+}
+
+:deep([class*="color"][class*="picker"] [class*="grid"],
+[class*="color"][class*="panel"] [class*="grid"]) {
+  background: var(--card-bg) !important;
+}
+
+/* 颜色选择器中的所有色块边框 */
+:deep([class*="color"][class*="picker"] li),
+:deep([class*="color"][class*="panel"] li),
+:deep([class*="panel-content-color"] li),
+:deep([class*="panel-content-bgColor"] li) {
+  border: 1px solid var(--card-border) !important;
+}
+
+:deep([class*="color"][class*="picker"] li:hover),
+:deep([class*="color"][class*="panel"] li:hover),
+:deep([class*="panel-content-color"] li:hover),
+:deep([class*="panel-content-bgColor"] li:hover) {
+  border-color: var(--text-primary) !important;
+}
+
+/* 覆盖所有可能的链接模态框变体 */
+:deep([class*="link"][class*="modal"]),
+:deep([class*="link"][class*="dialog"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+}
+
+/* 覆盖所有可能的图片上传面板变体 */
+:deep([class*="image"][class*="upload"]),
+:deep([class*="image"][class*="panel"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+}
+
+/* 覆盖所有可能的视频插入面板变体 */
+:deep([class*="video"][class*="insert"]),
+:deep([class*="video"][class*="panel"]) {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
 }
 
 /* 响应式设计 */
@@ -456,6 +1234,273 @@
   .form-actions .el-button {
     width: 100%;
   }
+}
+</style>
+
+<!-- 全局样式 - 用于覆盖body下的弹出层 -->
+<style>
+/* 覆盖所有w-e开头的弹出层 - 这些可能被添加到body下 */
+body > div[class*="w-e-"],
+body > div[class*="w-e-"] > div {
+  background: var(--card-bg) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 所有弹出层容器 */
+div[class*="w-e-"][class*="popup"],
+div[class*="w-e-"][class*="modal"],
+div[class*="w-e-"][class*="panel"],
+div[class*="w-e-"][class*="picker"],
+div[class*="w-e-"][class*="dropdown"],
+div[class*="w-e-"][class*="menu"],
+div[class*="w-e-"][class*="select"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的所有文本元素 - 但不覆盖编辑器内容区域的内联样式 */
+div[class*="w-e-"] input,
+div[class*="w-e-"] textarea,
+div[class*="w-e-"] label {
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的 span 和 div（排除编辑器内容区域和emoji） */
+div[class*="w-e-"][class*="popup"] span:not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="modal"] span:not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="panel"] span:not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="popup"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="modal"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"]),
+div[class*="w-e-"][class*="panel"] div:not([class*="color"]):not([class*="emoji"]):not([style*="color"]) {
+  color: var(--text-primary) !important;
+}
+
+/* 弹出层内的输入框 */
+div[class*="w-e-"] input[type="text"],
+div[class*="w-e-"] input[type="url"],
+div[class*="w-e-"] textarea {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+div[class*="w-e-"] input:focus,
+div[class*="w-e-"] textarea:focus {
+  border-color: #ff4500 !important;
+  outline: none !important;
+}
+
+/* 弹出层内的按钮 */
+div[class*="w-e-"] button {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+div[class*="w-e-"] button:hover {
+  background: var(--bg-hover) !important;
+}
+
+div[class*="w-e-"] button[class*="primary"],
+div[class*="w-e-"] button[type="submit"] {
+  background: #ff4500 !important;
+  color: #ffffff !important;
+  border-color: #ff4500 !important;
+}
+
+div[class*="w-e-"] button[class*="primary"]:hover,
+div[class*="w-e-"] button[type="submit"]:hover {
+  background: #ff5722 !important;
+}
+
+/* 弹出层内的列表项 */
+div[class*="w-e-"] [class*="item"],
+div[class*="w-e-"] [class*="option"],
+div[class*="w-e-"] [class*="list-item"] {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+div[class*="w-e-"] [class*="item"]:hover,
+div[class*="w-e-"] [class*="option"]:hover,
+div[class*="w-e-"] [class*="list-item"]:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 选中项 */
+div[class*="w-e-"] [class*="item"][class*="active"],
+div[class*="w-e-"] [class*="item"][class*="selected"],
+div[class*="w-e-"] [class*="option"][class*="active"],
+div[class*="w-e-"] [class*="option"][class*="selected"] {
+  background: var(--bg-hover) !important;
+  color: #ff4500 !important;
+}
+
+/* 颜色选择器面板 - 文字颜色和背景色 */
+ul.w-e-panel-content-color,
+ul.w-e-panel-content-bgColor {
+  background: var(--card-bg) !important;
+}
+
+/* 颜色选择器中的色块边框 - 使用主题色 */
+ul.w-e-panel-content-color li,
+ul.w-e-panel-content-bgColor li {
+  border: 1px solid var(--card-border) !important;
+}
+
+ul.w-e-panel-content-color li:hover,
+ul.w-e-panel-content-bgColor li:hover {
+  border-color: var(--text-primary) !important;
+}
+
+/* 通用颜色选择器色块样式 */
+[class*="w-e-panel-content-color"] li,
+[class*="w-e-panel-content-bgColor"] li,
+[class*="w-e-panel-content"][class*="color"] li {
+  border: 1px solid var(--card-border) !important;
+}
+
+[class*="w-e-panel-content-color"] li:hover,
+[class*="w-e-panel-content-bgColor"] li:hover,
+[class*="w-e-panel-content"][class*="color"] li:hover {
+  border-color: var(--text-primary) !important;
+}
+
+/* 编辑器内容区域的图片和视频样式（全局） */
+.w-e-text-container img,
+.w-e-text-container [data-slate-editor] img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 12px 0 !important;
+  border-radius: 4px !important;
+}
+
+.w-e-text-container video,
+.w-e-text-container [data-slate-editor] video {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 12px 0 !important;
+  border-radius: 4px !important;
+}
+
+.w-e-text-container iframe,
+.w-e-text-container [data-slate-editor] iframe {
+  max-width: 100% !important;
+  display: block !important;
+  margin: 12px 0 !important;
+  border-radius: 4px !important;
+}
+
+/* 确保编辑器内容区域内的内联样式（颜色、加粗等）不被覆盖 - 内联样式优先级最高 */
+
+.w-e-text-container strong,
+.w-e-text-container b,
+.w-e-text-container [data-slate-editor] strong,
+.w-e-text-container [data-slate-editor] b {
+  font-weight: bold !important;
+}
+
+.w-e-text-container em,
+.w-e-text-container i,
+.w-e-text-container [data-slate-editor] em,
+.w-e-text-container [data-slate-editor] i {
+  font-style: italic !important;
+}
+
+.w-e-text-container u,
+.w-e-text-container [data-slate-editor] u {
+  text-decoration: underline !important;
+}
+
+/* 代码块样式 - 深色主题（全局） */
+div[class*="w-e-"] pre,
+.w-e-text-container pre,
+.w-e-text-container [data-slate-editor] pre,
+.w-e-text-container [data-slate-editor] pre > code {
+  background: var(--bg-tertiary) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  padding: 12px 16px !important;
+  margin: 12px 0 !important;
+  overflow-x: auto !important;
+  color: var(--text-primary) !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+div[class*="w-e-"] code,
+.w-e-text-container code {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 0.9em !important;
+}
+
+div[class*="w-e-"] pre code,
+.w-e-text-container pre code {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+/* 底部工具栏（代码块相关弹出层）- 全局样式 */
+div[class*="w-e-bar-bottom"],
+div[class*="w-e-hover-bar"],
+div[class*="w-e-bar"][class*="bar-bottom"],
+div.w-e-bar.w-e-bar-bottom,
+div.w-e-bar.w-e-hover-bar.w-e-bar-bottom,
+div.w-e-bar.w-e-bar-show.w-e-bar-bottom {
+  background: var(--bg-secondary) !important;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+div[class*="w-e-bar-bottom"] button,
+div[class*="w-e-hover-bar"] button,
+div[class*="w-e-bar"][class*="bar-bottom"] button,
+div.w-e-bar.w-e-bar-bottom button,
+div.w-e-bar.w-e-bar-bottom .w-e-bar-item {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+
+div[class*="w-e-bar-bottom"] button:hover,
+div[class*="w-e-hover-bar"] button:hover,
+div[class*="w-e-bar"][class*="bar-bottom"] button:hover,
+div.w-e-bar.w-e-bar-bottom button:hover,
+div.w-e-bar.w-e-bar-bottom .w-e-bar-item:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 覆盖编辑器默认的工具栏变量 - 全局 */
+div[class*="w-e-bar"] {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* 代码块相关的下拉菜单和弹出层 */
+div[class*="w-e-"][class*="code"] [class*="popup"],
+div[class*="w-e-"][class*="code"] [class*="menu"],
+div[class*="w-e-"][class*="code"] [class*="panel"],
+div[class*="w-e-"][class*="code"] [class*="dropdown"] {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  color: var(--text-primary) !important;
 }
 </style>
 

@@ -120,9 +120,9 @@
           </h3>
 
           <!-- 帖子内容/图片（紧凑模式） -->
-          <div v-if="viewMode === 'compact' && (post.content || post.image)" class="post-body">
-            <p v-if="post.content && !post.image" class="post-text">
-              {{ post.content }}
+          <div v-if="viewMode === 'compact' && (post.content_text || post.content_html || post.image)" class="post-body">
+            <p v-if="(post.content_text || post.content_html) && !post.image" class="post-text">
+              {{ post.content_text || (post.content_html ? post.content_html.replace(/<[^>]*>/g, '').substring(0, 200) : '') }}
             </p>
             <div v-if="post.image" class="post-image-container">
               <img 
@@ -151,9 +151,9 @@
           </div>
           
           <!-- 卡片模式下文本内容 -->
-          <div v-if="viewMode === 'card' && post.content && !post.image" class="post-body">
+          <div v-if="viewMode === 'card' && (post.content_text || post.content_html) && !post.image" class="post-body">
             <p class="post-text">
-              {{ post.content }}
+              {{ post.content_text || (post.content_html ? post.content_html.replace(/<[^>]*>/g, '').substring(0, 200) : '') }}
             </p>
           </div>
 

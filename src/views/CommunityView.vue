@@ -47,7 +47,7 @@
               </div>
 
               <h3 class="post-title">
-                {{ post.content }}
+                {{ post.content_text || (post.content_html ? post.content_html.replace(/<[^>]*>/g, '') : '') }}
               </h3>
 
               <div v-if="post.images?.length" class="post-images">
@@ -119,7 +119,7 @@
           <div v-else class="favorites-list">
             <div v-for="item in store.likedPosts" :key="item.id" class="favorite-item">
               <div class="favorite-content">
-                {{ item.content }}
+                {{ item.content_text || (item.content_html ? item.content_html.replace(/<[^>]*>/g, '') : '') }}
               </div>
               <span class="meta-text">{{ item.author }} · {{ item.time }}</span>
             </div>
