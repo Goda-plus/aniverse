@@ -7,6 +7,8 @@ import MallView from '../views/MallView.vue'
 import CrowdView from '../views/CrowdView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import LoginView from '../views/LoginView.vue'
+import PostsView from '../views/PostsView.vue'
+import CreatePostView from '../views/CreatePostView.vue'
 
 const routes = [
   {
@@ -23,6 +25,16 @@ const routes = [
     path: '/browse',
     name: 'browse',
     component: DashboardView
+  },
+  {
+    path: '/all',
+    name: 'all',
+    component: PostsView
+  },
+  {
+    path: '/r/:community',
+    name: 'community-posts',
+    component: PostsView
   },
   {
     path: '/community',
@@ -63,6 +75,16 @@ const routes = [
     path: '/register',
     name: 'register',
     component: LoginView
+  },
+  {
+    path: '/create-post',
+    name: 'create-post',
+    component: CreatePostView
+  },
+  {
+    path: '/r/:community/create-post',
+    name: 'create-post-in-community',
+    component: CreatePostView
   }
 ]
 

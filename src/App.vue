@@ -73,6 +73,10 @@
                     <el-icon><Avatar /></el-icon>
                     <span>编辑头像</span>
                   </div>
+                  <div class="menu-item" @click="handleUserCommand('create-post')">
+                    <el-icon><Plus /></el-icon>
+                    <span>创建帖子</span>
+                  </div>
                   <div class="menu-item" @click="handleUserCommand('drafts')">
                     <el-icon><Document /></el-icon>
                     <span>草稿</span>
@@ -135,78 +139,124 @@
               <div class="logo-divider" />
             </div>
             
-            <div class="navigation-section">
-              <div class="nav-item" :class="{ active: active === '/' }" @click="$router.push('/')">
+            <el-menu
+              :default-active="active"
+              :collapse="!sidebarVisible"
+              :collapse-transition="false"
+              class="sidebar-menu"
+              @select="handleMenuSelect"
+            >
+              <!-- 导航部分 -->
+              <el-menu-item index="/">
                 <el-icon><House /></el-icon>
-                <span>主页</span>
-              </div>
-              <div class="nav-item" :class="{ active: active === '/popular' }" @click="$router.push('/popular')">
+                <template #title>
+                  主页
+                </template>
+              </el-menu-item>
+              <el-menu-item index="/popular">
                 <el-icon><ArrowUp /></el-icon>
-                <span>受欢迎</span>
-              </div>
-              <div class="nav-item" :class="{ active: active === '/browse' }" @click="$router.push('/browse')">
+                <template #title>
+                  受欢迎
+                </template>
+              </el-menu-item>
+              <el-menu-item index="/browse">
                 <el-icon><UserFilled /></el-icon>
-                <span>浏览</span>
-              </div>
-            </div>
+                <template #title>
+                  浏览
+                </template>
+              </el-menu-item>
+              <el-menu-item index="/all">
+                <el-icon><DataBoard /></el-icon>
+                <template #title>
+                  动态
+                </template>
+              </el-menu-item>
+              <el-menu-item index="/create-community">
+                <el-icon><Plus /></el-icon>
+                <template #title>
+                  + 创建社区
+                </template>
+              </el-menu-item>
 
-            <div class="resources-section">
-              <div class="section-header">
-                <span>资源</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><InfoFilled /></el-icon>
-                <span>关于 AniVerse</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Promotion /></el-icon>
-                <span>广告</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Tools /></el-icon>
-                <span>开发者平台</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Star /></el-icon>
-                <span>AniVerse Pro</span>
-                <el-tag size="small" type="danger" effect="plain" class="beta-tag">
-                  测试版
-                </el-tag>
-              </div>
-              <div class="nav-item">
-                <el-icon><QuestionFilled /></el-icon>
-                <span>帮助</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Document /></el-icon>
-                <span>博客</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Briefcase /></el-icon>
-                <span>职业</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Bell /></el-icon>
-                <span>新闻</span>
-              </div>
-            </div>
+              <!-- 资源部分 -->
+              <el-menu-item-group>
+                <template #title>
+                  <span class="section-header-text">资源</span>
+                </template>
+                <el-menu-item index="/about">
+                  <el-icon><InfoFilled /></el-icon>
+                  <template #title>
+                    关于 AniVerse
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/advertise">
+                  <el-icon><Promotion /></el-icon>
+                  <template #title>
+                    广告
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/developer">
+                  <el-icon><Tools /></el-icon>
+                  <template #title>
+                    开发者平台
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/pro" class="pro-menu-item">
+                  <el-icon><Star /></el-icon>
+                  <template #title>
+                    <span class="menu-item-title">AniVerse Pro</span>
+                    <el-tag size="small" type="danger" effect="plain" class="beta-tag">
+                      测试版
+                    </el-tag>
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/help">
+                  <el-icon><QuestionFilled /></el-icon>
+                  <template #title>
+                    帮助
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/blog">
+                  <el-icon><Document /></el-icon>
+                  <template #title>
+                    博客
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/careers">
+                  <el-icon><Briefcase /></el-icon>
+                  <template #title>
+                    职业
+                  </template>
+                </el-menu-item>
+                <el-menu-item index="/news">
+                  <el-icon><Bell /></el-icon>
+                  <template #title>
+                    新闻
+                  </template>
+                </el-menu-item>
+              </el-menu-item-group>
 
-            <div class="communities-section">
-              <div class="section-header">
-                <el-icon><Globe /></el-icon>
-                <span>社区</span>
-              </div>
-              <div class="nav-item">
-                <el-icon><Trophy /></el-icon>
-                <span>AniVerse 最佳</span>
-              </div>
-            </div>
+              <!-- 社区部分 -->
+              <el-menu-item-group>
+                <template #title>
+                  <el-icon><Globe /></el-icon>
+                  <span class="section-header-text">社区</span>
+                </template>
+                <el-menu-item index="/best">
+                  <el-icon><Trophy /></el-icon>
+                  <template #title>
+                    AniVerse 最佳
+                  </template>
+                </el-menu-item>
+              </el-menu-item-group>
 
-            <div class="sidebar-footer">
-              <div class="nav-item">
-                <span>AniVerse 规则</span>
-              </div>
-            </div>
+              <!-- 底部 -->
+              <el-menu-item index="/rules" class="sidebar-footer-item">
+                <template #title>
+                  AniVerse 规则
+                </template>
+              </el-menu-item>
+            </el-menu>
           </div>
         </aside>
 
@@ -227,7 +277,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import { useThemeStore } from '@/stores/theme'
   import { useUserStore } from '@/stores/user'
-  import { ElMessageBox } from 'element-plus'
+  import { ElMessageBox, ElMessage } from 'element-plus'
   import ThemeSettings from '@/components/ThemeSettings.vue'
   import {
     House,
@@ -254,13 +304,15 @@
     Money,
     Moon,
     Sunny,
+    DataBoard,
+    Plus,
   } from '@element-plus/icons-vue'
 
   const route = useRoute()
   const router = useRouter()
   const keyword = ref('')
   const active = computed(() => route.path)
-  const sidebarVisible = ref(true)
+  const sidebarVisible = ref(false)
   const showThemeSettings = ref(false)
   const showUserMenu = ref(false)
   const themeStore = useThemeStore()
@@ -281,6 +333,15 @@
     sidebarVisible.value = !sidebarVisible.value
   }
 
+  const handleMenuSelect = (index) => {
+    if (index === '/create-community') {
+      // TODO: 实现创建社区功能
+      ElMessage.info('创建社区功能开发中')
+      return
+    }
+    router.push(index)
+  }
+
   const goToLogin = () => {
     router.push({
       path: '/login',
@@ -294,6 +355,9 @@
       showUserMenu.value = false
     } else if (command === 'avatar') {
       // TODO: 实现编辑头像功能
+      showUserMenu.value = false
+    } else if (command === 'create-post') {
+      router.push('/create-post')
       showUserMenu.value = false
     } else if (command === 'drafts') {
       // TODO: 实现草稿功能
@@ -718,13 +782,54 @@
   margin: 12px auto 0;
 }
 
-.navigation-section,
-.resources-section,
-.communities-section {
-  margin-bottom: 16px;
+/* Element Plus Menu 样式 */
+.sidebar-menu {
+  border: none;
+  background: transparent;
 }
 
-.section-header {
+:deep(.sidebar-menu .el-menu-item),
+:deep(.sidebar-menu .el-sub-menu__title) {
+  height: 40px;
+  line-height: 40px;
+  color: var(--text-primary);
+  transition: background-color 0.2s, color 0.3s ease;
+  padding: 0 16px !important;
+  margin: 0;
+}
+
+:deep(.sidebar-menu .el-menu-item:hover),
+:deep(.sidebar-menu .el-sub-menu__title:hover) {
+  background: var(--bg-hover);
+}
+
+:deep(.sidebar-menu .el-menu-item.is-active) {
+  background: var(--bg-hover);
+  border-left: 3px solid #ff4500;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item.is-active) {
+  border-left: none;
+  border-radius: 8px;
+}
+
+:deep(.sidebar-menu .el-menu-item .el-icon),
+:deep(.sidebar-menu .el-sub-menu__title .el-icon) {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  margin-right: 12px;
+}
+
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item .el-icon),
+.left-sidebar.collapsed :deep(.sidebar-menu .el-sub-menu__title .el-icon) {
+  margin-right: 0;
+}
+
+/* 菜单组标题 */
+:deep(.sidebar-menu .el-menu-item-group__title) {
   padding: 8px 16px;
   font-size: 10px;
   font-weight: 700;
@@ -735,85 +840,79 @@
   align-items: center;
   gap: 8px;
   transition: color 0.3s ease;
-  justify-content: center;
+  line-height: 1.5;
 }
 
-.left-sidebar.collapsed .section-header {
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item-group__title) {
   padding: 8px 0;
   justify-content: center;
 }
 
-.left-sidebar.collapsed .section-header span {
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item-group__title .section-header-text) {
   display: none;
 }
 
-.left-sidebar.collapsed .section-header .el-icon {
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item-group__title .el-icon) {
   margin: 0;
 }
 
-.nav-item {
+.section-header-text {
+  margin-left: 0;
+}
+
+/* 菜单项标题样式 */
+:deep(.sidebar-menu .el-menu-item span),
+:deep(.sidebar-menu .el-menu-item .el-tag) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item span:not(.beta-tag)) {
+  display: none;
+}
+
+/* Beta 标签 */
+.pro-menu-item :deep(.el-menu-item__title) {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s, color 0.3s ease, padding 0.3s ease;
-  position: relative;
-  justify-content: flex-start;
+  justify-content: space-between;
+  width: 100%;
 }
 
-.left-sidebar.collapsed .nav-item {
-  padding: 8px 0;
-  justify-content: center;
-}
-
-.left-sidebar.collapsed .nav-item span {
-  display: none;
-}
-
-.left-sidebar.collapsed .nav-item .beta-tag {
-  display: none;
-}
-
-.nav-item:hover {
-  background: var(--bg-hover);
-}
-
-.nav-item.active {
-  background: var(--bg-hover);
-  border-left: 3px solid #ff4500;
-  font-weight: 600;
-}
-
-.left-sidebar.collapsed .nav-item.active {
-  border-left: none;
-  border-radius: 8px;
-  background: var(--bg-hover);
-}
-
-.nav-item .el-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+.menu-item-title {
+  flex: 1;
 }
 
 .beta-tag {
-  margin-left: auto;
+  margin-left: 8px;
   font-size: 10px;
   padding: 2px 6px;
+  flex-shrink: 0;
 }
 
-.sidebar-footer {
+.left-sidebar.collapsed :deep(.sidebar-menu .el-menu-item .beta-tag) {
+  display: none;
+}
+
+/* 底部菜单项 */
+.sidebar-footer-item {
   margin-top: 24px;
-  padding-top: 16px;
   border-top: 1px solid var(--border-color);
-  transition: border-color 0.3s ease;
+  padding-top: 16px !important;
 }
 
-.left-sidebar.collapsed .sidebar-footer .nav-item {
-  justify-content: center;
+.left-sidebar.collapsed .sidebar-footer-item {
+  border-top: none;
+  padding-top: 0 !important;
+}
+
+/* 菜单项间距 */
+:deep(.sidebar-menu .el-menu-item-group) {
+  margin-bottom: 16px;
+}
+
+:deep(.sidebar-menu .el-menu-item-group:last-child) {
+  margin-bottom: 0;
 }
 
 /* 主内容区域 */
