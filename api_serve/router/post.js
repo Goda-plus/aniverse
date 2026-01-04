@@ -35,6 +35,9 @@ const upload = multer({ storage })
 
 router.post('/upload-image', upload.single('image'), postHandler.uploadImage)
 
+// 帖子视频上传
+router.post('/upload-video', upload.single('video'), postHandler.uploadVideo)
+
 // 删除帖子（只允许作者本人删除）
 router.delete('/delete', postHandler.deletePost)
 

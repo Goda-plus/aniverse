@@ -27,3 +27,12 @@ export const uploadPostImage = (file) => {
   })
 }
 
+// 帖子视频上传
+export const uploadPostVideo = (file) => {
+  const formData = new FormData()
+  formData.append('video', file)
+  return request.post('/api/post/upload-video', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+

@@ -3,11 +3,22 @@ const { conMysql } = require('../db/index')
 // 创建帖子（支持独立发布或发布到板块）
 exports.createPost = async (req, res, next) => {
   try {
-    const { title, content, image_url, subreddit_id } = req.body
+    const { title, content_html, content_text, image_url, subreddit_id, subreddit } = req.body
     const user_id = req.user.id
 
-    // 合理化处理 subreddit_id
-    const subId = subreddit_id === null || subreddit_id === '' ? null : subreddit_id
+    let subId = null
+
+    // 处理 subreddit_id 或 subreddit 名称
+    if (subreddit_id) {
+      subId = subreddit_id === null || subreddit_id === '' ? null : subreddit_id
+    } else if (subreddit) {
+      // 如果传入的是 subreddit 名称，查找对应的 id
+      const subCheck = await conMysql('SELECT id FROM subreddits WHERE name = ?', [subreddit])
+      if (subCheck.length === 0) {
+        return res.cc(false, '所属板块不存在', 400)
+      }
+      subId = subCheck[0].id
+    }
 
     // 如果指定板块，验证其是否存在
     if (subId) {
@@ -18,14 +29,15 @@ exports.createPost = async (req, res, next) => {
     }
 
     const sql = `
-      INSERT INTO posts (user_id, subreddit_id, title, content, image_url)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO posts (user_id, subreddit_id, title, content_html, content_text, image_url)
+      VALUES (?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(sql, [
       user_id,
       subId,
       title,
-      content || null,
+      content_html,
+      content_text || null,
       image_url || null
     ])
 
@@ -33,14 +45,14 @@ exports.createPost = async (req, res, next) => {
       return res.cc(false, '帖子创建失败', 500)
     }
 
-    res.cc(true, '帖子发布成功', 201)
+    res.cc(true, '帖子发布成功', 200)
   } catch (err) {
     next(err)
   }
 }
 
 // 查询帖子列表（支持：全部独立帖 or 某板块）
-// ✅ 修改 getPostsBySubreddit 接口，加分页逻辑
+// 修改 getPostsBySubreddit 接口，加分页逻辑
 
 
 exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
@@ -54,7 +66,8 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
       SELECT 
         posts.id AS post_id,
         posts.title,
-        posts.content,
+        posts.content_html,
+        posts.content_text,
         posts.image_url,
         posts.created_at,
         posts.updated_at,
@@ -113,7 +126,8 @@ exports.getAllPostsWithUserAndStats = async (req, res) => {
     SELECT 
       posts.id AS post_id,
       posts.title,
-      posts.content,
+      posts.content_html,
+      posts.content_text,
       posts.image_url,
       posts.created_at,
       posts.updated_at,
@@ -163,7 +177,8 @@ exports.getUserPostDetail = async (req, res, next) => {
       SELECT 
         p.id AS post_id,
         p.title,
-        p.content,
+        p.content_html,
+        p.content_text,
         p.image_url,
         p.created_at,
         p.updated_at,
@@ -221,7 +236,7 @@ exports.getGuestPostDetail = async (req, res, next) => {
     // 获取帖子及作者信息
     const postSql = `
       SELECT 
-        p.id AS post_id, p.title, p.content, p.image_url, p.created_at, p.updated_at,
+        p.id AS post_id, p.title, p.content_html, p.content_text, p.image_url, p.created_at, p.updated_at,
         u.id AS user_id, u.username, u.avatar_url
       FROM posts p
       JOIN users u ON p.user_id = u.id
@@ -260,6 +275,21 @@ exports.uploadImage = (req, res) => {
     return res.cc(false, '没有上传文件', 400)
   }
   // 返回图片的访问URL
+  const url = `http://localhost:3000/uploads/${req.file.filename}`
+  res.cc(true, '上传成功', 200, { url })
+}
+
+// 上传视频
+exports.uploadVideo = (req, res) => {
+  if (!req.file) {
+    return res.cc(false, '没有上传文件', 400)
+  }
+  // 验证文件类型
+  const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo']
+  if (!allowedTypes.includes(req.file.mimetype)) {
+    return res.cc(false, '不支持的视频格式', 400)
+  }
+  // 返回视频的访问URL
   const url = `http://localhost:3000/uploads/${req.file.filename}`
   res.cc(true, '上传成功', 200, { url })
 }
