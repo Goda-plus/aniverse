@@ -1,90 +1,80 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import DashboardView from '../views/DashboardView.vue'
-import CommunityView from '../views/CommunityView.vue'
-import ScenesView from '../views/ScenesView.vue'
-import MatchView from '../views/MatchView.vue'
-import MallView from '../views/MallView.vue'
-import CrowdView from '../views/CrowdView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import LoginView from '../views/LoginView.vue'
-import PostsView from '../views/PostsView.vue'
-import CreatePostView from '../views/CreatePostView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'dashboard',
-    component: DashboardView
+    component: () => import('../views/DashboardView.vue')
   },
   {
     path: '/popular',
     name: 'popular',
-    component: DashboardView
+    component: () => import('../views/DashboardView.vue')
   },
   {
     path: '/browse',
     name: 'browse',
-    component: DashboardView
+    component: () => import('../views/DashboardView.vue')
   },
   {
     path: '/all',
     name: 'all',
-    component: PostsView
+    component: () => import('../views/PostsView.vue')
   },
   {
     path: '/r/:community',
     name: 'community-posts',
-    component: PostsView
+    component: () => import('../views/PostsView.vue')
   },
   {
     path: '/community',
     name: 'community',
-    component: CommunityView
+    component: () => import('../views/CommunityView.vue')
   },
   {
     path: '/scenes',
     name: 'scenes',
-    component: ScenesView
+    component: () => import('../views/ScenesView.vue')
   },
   {
     path: '/match',
     name: 'match',
-    component: MatchView
+    component: () => import('../views/MatchView.vue')
   },
   {
     path: '/mall',
     name: 'mall',
-    component: MallView
+    component: () => import('../views/MallView.vue')
   },
   {
     path: '/crowd',
     name: 'crowd',
-    component: CrowdView
+    component: () => import('../views/CrowdView.vue')
   },
   {
     path: '/profile',
     name: 'profile',
-    component: ProfileView
+    component: () => import('../views/ProfileView.vue')
   },
   {
     path: '/login',
     name: 'login',
-    component: LoginView
+    component: () => import('../views/LoginView.vue')
   },
   {
     path: '/register',
     name: 'register',
-    component: LoginView
+    component: () => import('../views/LoginView.vue')
   },
   {
     path: '/create-post',
     name: 'create-post',
-    component: CreatePostView
+    component: () => import('../views/CreatePostView.vue')
   },
   {
     path: '/r/:community/create-post',
     name: 'create-post-in-community',
-    component: CreatePostView
+    component: () => import('../views/CreatePostView.vue')
   }
 ]
 
