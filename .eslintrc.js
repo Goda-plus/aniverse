@@ -19,7 +19,7 @@ module.exports = {
   rules: {
     'quotes': ['error', 'single', { avoidEscape: true }],
     'semi': ['error', 'never'],
-    'no-unused-vars': ['error', { args: 'none', vars: 'all', caughtErrors: 'none' }],
+    'no-unused-vars': 'off',
     'space-before-function-paren': ['error', {
       anonymous: 'always',
       named: 'always',

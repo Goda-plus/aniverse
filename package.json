@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@escook/express-joi": "^1.1.1",
+    "@wangeditor/editor": "^5.1.23",
+    "@wangeditor/editor-for-vue": "^5.1.12",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "core-js": "^3.8.3",
