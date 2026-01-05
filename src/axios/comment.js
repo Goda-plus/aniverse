@@ -9,6 +9,9 @@ export const createComment = (data) => request.post('/api/comment/create', data)
 // 获取顶级评论
 export const getTopLevelComments = (data) => request.get('/api/comment/top', { params: data })
 
+// 获取评论树（一次获取20条顶级评论及其所有子孙评论）
+export const getCommentTree = (data) => request.get('/api/comment/tree', { params: data })
+
 // 根据父评论ID获取回复
 export const getRepliesByParentId = (data) => request.get('/api/comment/child', { params: data })
 

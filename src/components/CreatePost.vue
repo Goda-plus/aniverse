@@ -51,6 +51,7 @@
         <label class="form-label">内容</label>
         <div class="editor-wrapper">
           <Toolbar
+            v-if="editorRef"
             :editor="editorRef"
             :default-config="toolbarConfig"
             class="editor-toolbar"
@@ -99,6 +100,9 @@
     title: '',
     content: ''
   })
+
+  // 存储上传的图片 URL（数组）
+  const imageUrl = ref([])
 
   // 编辑器实例
   const editorRef = shallowRef(null)
@@ -153,22 +157,32 @@
             const res = await uploadPostImage(file)
             
             // 处理响应 - 根据实际后端返回格式调整
-            // 如果后端返回格式为 { status: 0, data: { url: 'xxx' } }
-            if (res && res.status === 0 && res.data && res.data.url) {
+            let imageUrlValue = ''
+            // 如果后端返回格式为 { success: true, code: 200, data: { url: 'xxx' } }
+            if (res && res.success && res.code === 200 && res.data && res.data.url) {
+              imageUrlValue = res.data.url
               // 插入图片到编辑器
               insertFn(res.data.url, res.data.alt || '', res.data.href || '')
-            } 
+            }
             // 如果后端直接返回 { url: 'xxx' }
             else if (res && res.url) {
+              imageUrlValue = res.url
               insertFn(res.url, res.alt || '', res.href || '')
             }
             // 如果后端返回 { data: { url: 'xxx' } }
             else if (res && res.data && res.data.url) {
+              imageUrlValue = res.data.url
               insertFn(res.data.url, res.data.alt || '', res.data.href || '')
             }
             else {
               console.error('上传响应格式不正确:', res)
               ElMessage.error('上传失败：服务器响应格式错误')
+              return
+            }
+
+            // 收集上传的图片 URL（存储到数组中）
+            if (imageUrlValue) {
+              imageUrl.value.push(imageUrlValue)
             }
           } catch (error) {
             console.error('图片上传失败:', error)
@@ -201,22 +215,38 @@
             const res = await uploadPostVideo(file)
             
             // 处理响应 - 根据实际后端返回格式调整
+            let videoUrlValue = ''
+            // 如果后端返回格式为 { success: true, code: 200, data: { url: 'xxx' } }
+            if (res && res.success && res.code === 200 && res.data && res.data.url) {
+              videoUrlValue = res.data.url
+              // 插入视频到编辑器
+              insertFn(res.data.url, res.data.poster || '', res.data.width || '', res.data.height || '')
+            }
             // 如果后端返回格式为 { status: 0, data: { url: 'xxx' } }
-            if (res && res.status === 0 && res.data && res.data.url) {
+            else if (res && res.status === 0 && res.data && res.data.url) {
+              videoUrlValue = res.data.url
               // 插入视频到编辑器
               insertFn(res.data.url, res.data.poster || '', res.data.width || '', res.data.height || '')
             } 
             // 如果后端直接返回 { url: 'xxx' }
             else if (res && res.url) {
+              videoUrlValue = res.url
               insertFn(res.url, res.poster || '', res.width || '', res.height || '')
             }
             // 如果后端返回 { data: { url: 'xxx' } }
             else if (res && res.data && res.data.url) {
+              videoUrlValue = res.data.url
               insertFn(res.data.url, res.data.poster || '', res.data.width || '', res.data.height || '')
             }
             else {
               console.error('上传响应格式不正确:', res)
               ElMessage.error('上传失败：服务器响应格式错误')
+              return
+            }
+
+            // 收集上传的视频 URL（存储到 imageUrl 数组中）
+            if (videoUrlValue) {
+              imageUrl.value.push(videoUrlValue)
             }
           } catch (error) {
             console.error('视频上传失败:', error)
@@ -238,6 +268,16 @@
 
   // 初始化编辑器
   const handleEditorCreated = (editor) => {
+    // 确保组件仍然挂载
+    if (!isMounted.value) {
+      // 如果组件已卸载，立即销毁编辑器
+      try {
+        editor.destroy()
+      } catch (error) {
+        console.warn('创建编辑器后立即销毁时出错:', error)
+      }
+      return
+    }
     editorRef.value = editor
   }
 
@@ -358,6 +398,7 @@
         title: formData.title,
         content_html: finalEditorContent,
         content_text: finalTextContent,
+        image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
       }
 
       const res = await createPost(postData)
@@ -367,6 +408,7 @@
       formData.subreddit = ''
       formData.title = ''
       formData.content = ''
+      imageUrl.value = [] // 重置图片 URL 数组
       
       // 发出成功事件，父组件会处理导航
       // 注意：发出事件后，组件可能会立即卸载，所以不再执行清空编辑器的操作
@@ -429,13 +471,21 @@
     const editor = editorRef.value
     if (editor != null) {
       try {
+        // 先检查编辑器是否已经被销毁
+        if (editor.isDestroyed) {
+          editorRef.value = null
+          return
+        }
+        // 销毁编辑器
         editor.destroy()
       } catch (error) {
         // 忽略销毁时的错误
         console.warn('销毁编辑器时出错:', error)
+      } finally {
+        // 确保清空引用
+        editorRef.value = null
       }
     }
-    editorRef.value = null
   })
 </script>
 

@@ -75,6 +75,11 @@ const routes = [
     path: '/r/:community/create-post',
     name: 'create-post-in-community',
     component: () => import('../views/CreatePostView.vue')
+  },
+  {
+    path: '/post/:id',
+    name: 'post-detail',
+    component: () => import('../views/PostDetailView.vue')
   }
 ]
 

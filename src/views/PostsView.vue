@@ -41,8 +41,14 @@
           </div>
         </div>
 
+        <!-- 加载状态 -->
+        <div v-if="loading" class="loading-container">
+          <el-skeleton :rows="3" animated />
+        </div>
+
         <!-- 帖子列表 -->
         <PostList 
+          v-else
           :posts="posts" 
           :show-recommendation="showRecommendation"
           @vote="handleVote"
@@ -53,6 +59,17 @@
           @report="handleReport"
           @click="handlePostClick"
         />
+
+        <!-- 加载更多状态 -->
+        <div v-if="loadingMore" class="loading-more">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>加载中...</span>
+        </div>
+
+        <!-- 没有更多数据提示 -->
+        <div v-if="!hasMore && posts.length > 0 && !loading" class="no-more">
+          没有更多帖子了
+        </div>
       </div>
     </template>
 
@@ -153,12 +170,13 @@
 </template>
 
 <script setup>
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, onUnmounted, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import PostList from '@/components/PostList.vue'
-  import { ChatLineRound } from '@element-plus/icons-vue'
+  import { ChatLineRound, Loading } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
+  import { getAllPostsWithUser, getPostsBySubreddit } from '@/axios/post'
 
   const route = useRoute()
   const router = useRouter()
@@ -167,90 +185,14 @@
   const posts = ref([])
   const showRecommendation = ref(true)
   const popularCommunities = ref([])
-
-  // 模拟数据
-  const mockPosts = [
-    {
-      id: 1,
-      subreddit: 'halo',
-      author: 'gamer123',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=gamer123',
-      title: 'My halo themed phone!',
-      content: '',
-      image: 'https://i2.hdslb.com/bfs/archive/2c5d66eec8112044f31319e5c7ad78e9200255b8.jpg@672w_378h_1c_!web-home-common-cover.avif',
-      imageCount: 3,
-      score: 5084,
-      commentCount: 75,
-      rewardCount: 2,
-      userVote: 0,
-      createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
-      recommended: false
-    },
-    {
-      id: 2,
-      subreddit: 'malegrooming',
-      author: 'styleguy',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=styleguy',
-      title: 'Clean shaven, stache only, or short beard?',
-      content: '',
-      image: 'https://via.placeholder.com/600x400?text=Grooming',
-      imageCount: 1,
-      score: 234,
-      commentCount: 42,
-      rewardCount: 0,
-      userVote: 0,
-      createdAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
-      recommended: true
-    },
-    {
-      id: 3,
-      subreddit: 'Onlyteenagersallowed',
-      author: 'user456',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user456',
-      title: 'Just curious how old do I look??',
-      content: '',
-      image: 'https://via.placeholder.com/600x400?text=Question',
-      imageCount: 5,
-      score: 507,
-      commentCount: 647,
-      rewardCount: 0,
-      userVote: 0,
-      createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000,
-      recommended: false
-    },
-    {
-      id: 4,
-      subreddit: 'DailyMix',
-      author: 'puzzlemaster',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=puzzlemaster',
-      title: 'Think you can find 4 hidden groups of 4 related words? Puzzle by u/NoPrint2868?',
-      content: '',
-      image: 'https://via.placeholder.com/600x400?text=Puzzle',
-      imageCount: 0,
-      score: 27,
-      commentCount: 35,
-      rewardCount: 0,
-      userVote: 0,
-      createdAt: Date.now() - 8 * 60 * 60 * 1000,
-      recommended: true
-    },
-    {
-      id: 5,
-      subreddit: 'anime',
-      author: 'animefan',
-      authorAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=animefan',
-      title: 'What\'s your favorite anime of 2024?',
-      content: 'I\'ve been watching a lot of anime this year and I\'m curious what everyone else thinks. Share your top picks!',
-      image: null,
-      imageCount: 0,
-      score: 1234,
-      commentCount: 256,
-      rewardCount: 5,
-      userVote: 0,
-      createdAt: Date.now() - 2 * 60 * 60 * 1000,
-      recommended: false
-    }
-  ]
+  
+  // 分页相关
+  const currentPage = ref(1)
+  const pageSize = ref(20)
+  const loading = ref(false)
+  const hasMore = ref(true)
+  const loadingMore = ref(false)
+  let scrollTimer = null
 
   const mockPopularCommunities = [
     {
@@ -273,9 +215,125 @@
     }
   ]
 
+  // 转换 API 数据格式为组件需要的格式
+  const transformPostData = (apiPost) => {
+    // 解析 image_url（可能是 JSON 字符串）
+    let imageUrl = null
+    let imageCount = 0
+    if (apiPost.image_url) {
+      try {
+        const imageUrls = typeof apiPost.image_url === 'string' 
+          ? JSON.parse(apiPost.image_url) 
+          : apiPost.image_url
+        if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+          imageUrl = imageUrls[0]
+          imageCount = imageUrls.length
+        }
+      } catch (e) {
+        // 如果不是 JSON，直接使用
+        imageUrl = apiPost.image_url
+        imageCount = 1
+      }
+    }
+
+    return {
+      id: apiPost.post_id,
+      subreddit: 'nextfuckinglevel', // 可以根据实际情况设置
+      author: apiPost.username,
+      authorAvatar: apiPost.avatar_url,
+      title: apiPost.title,
+      content: apiPost.content_text,
+      content_html: apiPost.content_html,
+      image: imageUrl,
+      imageCount: imageCount,
+      score: apiPost.net_votes || (apiPost.upvotes - apiPost.downvotes) || 0,
+      commentCount: apiPost.comment_count || 0,
+      rewardCount: 0,
+      userVote: 0, // 需要根据实际投票状态设置
+      createdAt: new Date(apiPost.created_at).getTime(),
+      recommended: false
+    }
+  }
+
+  // 加载帖子数据
+  const loadPosts = async (page = 1, append = false) => {
+    if (loading.value || loadingMore.value) return
+    if (!append && !hasMore.value) return
+
+    try {
+      if (append) {
+        loadingMore.value = true
+      } else {
+        loading.value = true
+      }
+
+      const communityName = route.params.community
+      let response
+
+      if (communityName && communityName !== 'all') {
+        // 加载特定社区的帖子（需要先获取 subreddit_id）
+        // 这里暂时使用全部帖子接口，后续可以根据需要添加社区ID查询
+        response = await getAllPostsWithUser({
+          page,
+          pageSize: pageSize.value
+        })
+      } else {
+        // 加载全部帖子
+        response = await getAllPostsWithUser({
+          page,
+          pageSize: pageSize.value
+        })
+      }
+
+      if (response.success && Array.isArray(response.data)) {
+        const transformedPosts = response.data.map(transformPostData)
+        
+        if (append) {
+          posts.value = [...posts.value, ...transformedPosts]
+        } else {
+          posts.value = transformedPosts
+        }
+
+        // 判断是否还有更多数据
+        hasMore.value = transformedPosts.length === pageSize.value
+        currentPage.value = page
+      } else {
+        ElMessage.error(response.message || '加载帖子失败')
+        hasMore.value = false
+      }
+    } catch (error) {
+      console.error('加载帖子失败:', error)
+      ElMessage.error(error.response?.data?.message || '加载帖子失败，请稍后重试')
+      hasMore.value = false
+    } finally {
+      loading.value = false
+      loadingMore.value = false
+    }
+  }
+
+  // 滚动加载处理（使用节流优化性能）
+  const handleScroll = () => {
+    if (scrollTimer) {
+      clearTimeout(scrollTimer)
+    }
+    
+    scrollTimer = setTimeout(() => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+      const windowHeight = window.innerHeight
+      const documentHeight = document.documentElement.scrollHeight
+
+      // 当滚动到距离底部 300px 时加载更多
+      if (documentHeight - scrollTop - windowHeight < 300) {
+        if (hasMore.value && !loadingMore.value && !loading.value) {
+          loadPosts(currentPage.value + 1, true)
+        }
+      }
+    }, 100)
+  }
+
   onMounted(() => {
-    // 加载帖子数据
-    posts.value = mockPosts
+    // 初始加载帖子数据
+    loadPosts(1, false)
 
     // 加载热门社区
     popularCommunities.value = mockPopularCommunities
@@ -285,7 +343,40 @@
     if (communityName && communityName !== 'all') {
       loadCommunityInfo(communityName)
     }
+
+    // 添加滚动监听
+    window.addEventListener('scroll', handleScroll)
   })
+
+  onUnmounted(() => {
+    // 移除滚动监听
+    window.removeEventListener('scroll', handleScroll)
+    // 清理定时器
+    if (scrollTimer) {
+      clearTimeout(scrollTimer)
+    }
+  })
+
+  // 监听路由变化，重新加载数据
+  watch(
+    () => route.params.community,
+    (newCommunity, oldCommunity) => {
+      if (newCommunity !== oldCommunity) {
+        // 重置状态
+        currentPage.value = 1
+        hasMore.value = true
+        posts.value = []
+        // 重新加载数据
+        loadPosts(1, false)
+        // 如果路由中有社区参数，加载社区信息
+        if (newCommunity && newCommunity !== 'all') {
+          loadCommunityInfo(newCommunity)
+        } else {
+          communityInfo.value = null
+        }
+      }
+    }
+  )
 
   const loadCommunityInfo = (name) => {
     // 模拟加载社区信息
@@ -320,7 +411,11 @@
   }
 
   const handleComment = (post) => {
-    router.push(`/post/${post.id}`)
+    // 保存当前路由作为来源，以便返回时能正确导航
+    router.push({
+      path: `/post/${post.id}`,
+      query: { from: route.path }
+    })
   }
 
   const handleShare = (post) => {
@@ -344,7 +439,11 @@
   }
 
   const handlePostClick = (post) => {
-    router.push(`/post/${post.id}`)
+    // 保存当前路由作为来源，以便返回时能正确导航
+    router.push({
+      path: `/post/${post.id}`,
+      query: { from: route.path }
+    })
   }
 
   const handleJoin = () => {
@@ -701,6 +800,32 @@
   font-size: 12px;
   color: var(--text-secondary);
   transition: color 0.3s ease;
+}
+
+/* 加载状态 */
+.loading-container {
+  padding: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.no-more {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 /* 响应式设计 */

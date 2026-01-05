@@ -10,7 +10,7 @@ export const getPostsBySubreddit = (data) => request.get('/api/post/list', { par
 export const getGuestPostDetail = (data) => request.get('/api/post/GuestPostDetail', { params: data })
 
 // 获取帖子详情
-export const getPostDetail = (data) => request.get('api/post/getUserPostDetail', { params: data })
+export const getPostDetail = (data) => request.get('/api/post/getUserPostDetail', { params: data })
 
 // 创建帖子
 export const createPost = (data) => request.post('/api/post/create', data)

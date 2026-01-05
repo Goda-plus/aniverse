@@ -153,8 +153,8 @@ exports.getAllPostsWithUserAndStats = async (req, res) => {
     // 计算净点赞数
     const postsWithNetVotes = result.map(post => ({
       ...post,
-      net_votes: post.upvotes - post.downvotes
-    }))
+      net_votes: Number(post.upvotes - post.downvotes) || 0
+    })) 
     
     res.cc(true, '获取帖子成功', 200, postsWithNetVotes)
   } catch (err) {

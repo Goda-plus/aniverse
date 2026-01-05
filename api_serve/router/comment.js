@@ -10,8 +10,11 @@ router.post('/create', expressJoi(create_comment_schema), commentHandler.createC
 // 获取指定帖子的评论列表
 router.get('/list', commentHandler.getCommentsByPostId)
 
-//获取分页的“顶级评论”列表（父评论）
+//获取分页的"顶级评论"列表（父评论）
 router.get('/top',commentHandler.getTopLevelComments)
+
+//获取评论树（一次获取20条顶级评论及其所有子孙评论）
+router.get('/tree',commentHandler.getCommentTree)
 
 //获取指定父评论的子评论列表
 router.get('/child',commentHandler.getRepliesByParentId)
