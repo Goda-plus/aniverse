@@ -228,6 +228,7 @@
     View,
     Warning
   } from '@element-plus/icons-vue'
+  import { addBrowse } from '@/axios/browse'
 
   const props = defineProps({
     posts: {
@@ -298,7 +299,17 @@
     emit('report', post)
   }
 
-  const handlePostClick = (post) => {
+  const handlePostClick = async (post) => {
+    // 添加浏览记录
+    try {
+      await addBrowse({
+        target_type: 'post',
+        target_id: post.id
+      })
+    } catch (error) {
+      console.error('添加浏览记录失败:', error)
+      // 不阻止用户操作，即使记录失败也继续跳转
+    }
     emit('click', post)
   }
 

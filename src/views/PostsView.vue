@@ -62,7 +62,9 @@
 
         <!-- 加载更多状态 -->
         <div v-if="loadingMore" class="loading-more">
-          <el-icon class="is-loading"><Loading /></el-icon>
+          <el-icon class="is-loading">
+            <Loading />
+          </el-icon>
           <span>加载中...</span>
         </div>
 
@@ -133,37 +135,11 @@
           </div>
         </div>
 
-        <!-- 热门社区 -->
-        <div class="sidebar-card">
-          <div class="sidebar-header">
-            <h3 class="sidebar-title">
-              热门社区
-            </h3>
-          </div>
-          <div class="popular-communities">
-            <div 
-              v-for="community in popularCommunities" 
-              :key="community.id"
-              class="popular-community-item"
-              @click="goToCommunity(community)"
-            >
-              <div class="popular-community-icon">
-                <img v-if="community.avatar" :src="community.avatar" :alt="community.name">
-                <el-icon v-else>
-                  <ChatLineRound />
-                </el-icon>
-              </div>
-              <div class="popular-community-info">
-                <div class="popular-community-name">
-                  r/{{ community.name }}
-                </div>
-                <div class="popular-community-members">
-                  {{ formatMemberCount(community.members) }} 位成员
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- 最近浏览 -->
+        <RecentBrowsed 
+          ref="recentBrowsedRef"
+          @post-click="handlePostClick"
+        />
       </div>
     </template>
   </MainContentLayout>
@@ -177,6 +153,7 @@
   import { ChatLineRound, Loading } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import { getAllPostsWithUser, getPostsBySubreddit } from '@/axios/post'
+  import RecentBrowsed from '@/components/RecentBrowsed.vue'
 
   const route = useRoute()
   const router = useRouter()
@@ -184,7 +161,7 @@
   const communityInfo = ref(null)
   const posts = ref([])
   const showRecommendation = ref(true)
-  const popularCommunities = ref([])
+  const recentBrowsedRef = ref(null)
   
   // 分页相关
   const currentPage = ref(1)
@@ -193,27 +170,6 @@
   const hasMore = ref(true)
   const loadingMore = ref(false)
   let scrollTimer = null
-
-  const mockPopularCommunities = [
-    {
-      id: 1,
-      name: '社区动态',
-      members: 7117328,
-      avatar: null
-    },
-    {
-      id: 2,
-      name: '名场面',
-      members: 5598208,
-      avatar: null
-    },
-    {
-      id: 3,
-      name: '周边商城',
-      members: 5511765,
-      avatar: null
-    }
-  ]
 
   // 转换 API 数据格式为组件需要的格式
   const transformPostData = (apiPost) => {
@@ -335,9 +291,6 @@
     // 初始加载帖子数据
     loadPosts(1, false)
 
-    // 加载热门社区
-    popularCommunities.value = mockPopularCommunities
-
     // 如果路由中有社区参数，加载社区信息
     const communityName = route.params.community
     if (communityName && communityName !== 'all') {
@@ -375,6 +328,21 @@
           communityInfo.value = null
         }
       }
+    }
+  )
+
+  // 监听路由路径变化，当返回页面时刷新最近浏览
+  let previousPath = route.path
+  watch(
+    () => route.path,
+    (newPath) => {
+      // 如果从帖子详情页返回，刷新最近浏览
+      if (previousPath && previousPath.startsWith('/post/') && !newPath.startsWith('/post/')) {
+        if (recentBrowsedRef.value) {
+          recentBrowsedRef.value.loadRecentBrowsedPosts()
+        }
+      }
+      previousPath = newPath
     }
   )
 
@@ -460,9 +428,6 @@
     }
   }
 
-  const goToCommunity = (community) => {
-    router.push(`/r/${community.name}`)
-  }
 
   const formatMemberCount = (count) => {
     if (count >= 1000000) {
@@ -480,6 +445,7 @@
       day: 'numeric'
     })
   }
+
 </script>
 
 <style scoped>
@@ -742,65 +708,6 @@
   transition: color 0.3s ease;
 }
 
-/* 热门社区 */
-.popular-communities {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.popular-community-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.popular-community-item:hover {
-  background: var(--bg-hover);
-}
-
-.popular-community-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-primary);
-  font-size: 16px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.popular-community-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.popular-community-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.popular-community-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-  transition: color 0.3s ease;
-}
-
-.popular-community-members {
-  font-size: 12px;
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
-}
 
 /* 加载状态 */
 .loading-container {
