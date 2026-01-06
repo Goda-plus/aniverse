@@ -76,12 +76,14 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
         users.avatar_url,
         users.bio,
         COUNT(DISTINCT comments.id) AS comment_count,
-        COALESCE(SUM(CASE WHEN votes.vote_type = 'up' THEN 1 ELSE 0 END), 0) AS upvotes,
-        COALESCE(SUM(CASE WHEN votes.vote_type = 'down' THEN 1 ELSE 0 END), 0) AS downvotes
+        COUNT(DISTINCT CASE WHEN votes.vote_type = 'up' THEN votes.id END) AS upvotes,
+        COUNT(DISTINCT CASE WHEN votes.vote_type = 'down' THEN votes.id END) AS downvotes
       FROM posts
       JOIN users ON posts.user_id = users.id
       LEFT JOIN comments ON comments.post_id = posts.id
       LEFT JOIN votes ON votes.post_id = posts.id
+			GROUP BY posts.id, users.id
+      ORDER BY posts.created_at DESC
     `
 
     let params = []
@@ -104,7 +106,9 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
     // 计算净点赞数
     const postsWithNetVotes = result.map(post => ({
       ...post,
-      net_votes: post.upvotes - post.downvotes
+      net_votes: Number(post.upvotes - post.downvotes) > 0 
+        ? Number(post.upvotes - post.downvotes) : Number(post.downvotes - post.upvotes) > 0 
+          ? -Number(post.downvotes - post.upvotes) : 0
     }))
 
     res.cc(true, '获取帖子成功', 200, postsWithNetVotes)
@@ -124,36 +128,38 @@ exports.getAllPostsWithUserAndStats = async (req, res) => {
 
   const sql = `
     SELECT 
-      posts.id AS post_id,
-      posts.title,
-      posts.content_html,
-      posts.content_text,
-      posts.image_url,
-      posts.created_at,
-      posts.updated_at,
-      users.id AS user_id,
-      users.username,
-      users.avatar_url,
-      users.bio,
-      COUNT(DISTINCT comments.id) AS comment_count,
-      SUM(CASE WHEN votes.vote_type = 'up' THEN 1 ELSE 0 END) AS upvotes,
-      SUM(CASE WHEN votes.vote_type = 'down' THEN 1 ELSE 0 END) AS downvotes
-    FROM posts
-    JOIN users ON posts.user_id = users.id
-    LEFT JOIN comments ON comments.post_id = posts.id
-    LEFT JOIN votes ON votes.post_id = posts.id
-    GROUP BY posts.id, users.id
-    ORDER BY posts.created_at DESC
+  posts.id AS post_id,
+  posts.title,
+  posts.content_html,
+  posts.content_text,
+  posts.image_url,
+  posts.created_at,
+  posts.updated_at,
+  users.id AS user_id,
+  users.username,
+  users.avatar_url,
+  users.bio,
+  COUNT(DISTINCT comments.id) AS comment_count,
+  COUNT(DISTINCT CASE WHEN votes.vote_type = 'up' THEN votes.id END) AS upvotes,
+  COUNT(DISTINCT CASE WHEN votes.vote_type = 'down' THEN votes.id END) AS downvotes
+FROM posts
+JOIN users ON posts.user_id = users.id
+LEFT JOIN comments ON comments.post_id = posts.id
+LEFT JOIN votes ON votes.post_id = posts.id
+GROUP BY posts.id, users.id
+ORDER BY posts.created_at DESC
     LIMIT ? OFFSET ?
   `
 
   try {
     const result = await conMysql(sql, [pageSize, offset])
-    
+    console.log('result', result)
     // 计算净点赞数
     const postsWithNetVotes = result.map(post => ({
       ...post,
-      net_votes: Number(post.upvotes - post.downvotes) || 0
+      net_votes: Number(post.upvotes - post.downvotes) > 0 
+        ? Number(post.upvotes - post.downvotes) : Number(post.downvotes - post.upvotes) > 0 
+          ? -Number(post.downvotes - post.upvotes) : 0
     })) 
     
     res.cc(true, '获取帖子成功', 200, postsWithNetVotes)
@@ -186,8 +192,8 @@ exports.getUserPostDetail = async (req, res, next) => {
         u.username,
         u.avatar_url,
         COUNT(DISTINCT c.id) AS comment_count,
-        SUM(CASE WHEN v.vote_type = 'up' THEN 1 ELSE 0 END) AS upvotes,
-        SUM(CASE WHEN v.vote_type = 'down' THEN 1 ELSE 0 END) AS downvotes
+        COUNT(DISTINCT CASE WHEN v.vote_type = 'up' THEN v.id END) AS upvotes,
+        COUNT(DISTINCT CASE WHEN v.vote_type = 'down' THEN v.id END) AS downvotes
       FROM posts p
       JOIN users u ON p.user_id = u.id
       LEFT JOIN comments c ON c.post_id = p.id

@@ -154,6 +154,7 @@
   import { ElMessage } from 'element-plus'
   import { getAllPostsWithUser, getPostsBySubreddit } from '@/axios/post'
   import RecentBrowsed from '@/components/RecentBrowsed.vue'
+  import { userVote } from '@/axios/vote'
 
   const route = useRoute()
   const router = useRouter()
@@ -361,20 +362,49 @@
     }
   }
 
-  const handleVote = ({ post, direction }) => {
+  const handleVote = async ({ post, direction }) => {
     const postIndex = posts.value.findIndex(p => p.id === post.id)
-    if (postIndex !== -1) {
-      const currentVote = posts.value[postIndex].userVote
-      if (currentVote === direction) {
-        // 取消投票
-        posts.value[postIndex].userVote = 0
-        posts.value[postIndex].score -= direction
+    if (postIndex === -1) return
+
+    const targetPost = posts.value[postIndex]
+    const prevVote = targetPost.userVote
+    const prevScore = targetPost.score
+
+    // 调用后端投票接口
+    try {
+      const vote_type = direction === 1 ? 'up' : 'down'
+      const res = await userVote({
+        post_id: post.id,
+        vote_type
+      })
+      
+      // 本地乐观更新
+      if (prevVote === direction) {
+        // 再次点击同一方向 -> 取消投票
+        targetPost.userVote = 0
+        targetPost.score =Number(res.data.upvotes - res.data.downvotes) > 0 
+          ? Number(res.data.upvotes - res.data.downvotes) : Number(res.data.downvotes - res.data.upvotes) > 0 
+            ? -Number(res.data.downvotes - res.data.upvotes) : 0
       } else {
-        // 改变投票
-        posts.value[postIndex].score -= currentVote
-        posts.value[postIndex].userVote = direction
-        posts.value[postIndex].score += direction
+        // 切换投票方向或首次投票
+        targetPost.score -= prevVote
+        targetPost.userVote = direction
+        targetPost.score =Number(res.data.upvotes - res.data.downvotes) > 0 
+          ? Number(res.data.upvotes - res.data.downvotes) : Number(res.data.downvotes - res.data.upvotes) > 0 
+            ? -Number(res.data.downvotes - res.data.upvotes) : 0
       }
+
+      if (!res.success) {
+        // 接口返回失败，回滚本地状态
+        targetPost.userVote = prevVote
+        targetPost.score = prevScore
+        ElMessage.error(res.message || '投票失败，请稍后重试')
+      }
+    } catch (error) {
+      // 请求异常，回滚本地状态
+      targetPost.userVote = prevVote
+      targetPost.score = prevScore
+      ElMessage.error(error.response?.data?.message || '投票失败，请稍后重试')
     }
   }
 

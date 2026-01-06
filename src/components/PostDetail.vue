@@ -52,7 +52,7 @@
         <el-button 
           text 
           class="vote-button upvote"
-          :class="{ active: post.vote_type === 'up' }"
+          :class="{ active: post.vote_type === 'up' || isVoted === 'up' }"
           @click="handleVote('up')"
         >
           <el-icon><ArrowUp /></el-icon>
@@ -68,7 +68,7 @@
         <el-button 
           text 
           class="vote-button downvote"
-          :class="{ active: post.vote_type === 'down' }"
+          :class="{ active: post.vote_type === 'down' || isVoted === 'down' }"
           @click="handleVote('down')"
         >
           <el-icon><ArrowDown /></el-icon>
@@ -177,13 +177,14 @@
 </template>
 
 <script setup>
-  import { defineProps, defineEmits, ref, defineExpose } from 'vue'
+  import { defineProps, defineEmits, ref, defineExpose ,onMounted} from 'vue'
   import { useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
   import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import CommentList from './CommentList.vue'
   import { createComment } from '@/axios/comment'
+  import { getUserVoteStatus } from '@/axios/vote'
 
   const props = defineProps({
     post: {
@@ -191,7 +192,7 @@
       required: true
     }
   })
-
+  let isVoted = ref(null)
   const emit = defineEmits(['vote', 'comment', 'share', 'back'])
 
   const router = useRouter()
@@ -338,6 +339,13 @@
     }
     return num.toString()
   }
+  onMounted(async () => {
+    const response = await getUserVoteStatus({ post_id: props.post.post_id })
+    if (response.success) {
+      isVoted.value = response.data.vote_type
+      console.log('isVoted', isVoted.value)
+    }
+  })
 </script>
 
 <style scoped>
