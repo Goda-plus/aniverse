@@ -787,11 +787,12 @@
 
 .post-image-container {
   position: relative;
-  margin-top: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-  cursor: pointer;
-  max-height: 512px;
+    margin-top: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    max-height: 100%;
+    width: 20%;
 }
 
 .post-image {

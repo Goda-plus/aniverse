@@ -43,7 +43,7 @@
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import PostDetail from '@/components/PostDetail.vue'
   import { ElMessage } from 'element-plus'
-
+  import { userVote } from '@/axios/vote'
   const route = useRoute()
   const router = useRouter()
   const userStore = useUserStore()
@@ -120,9 +120,46 @@
     }
   }
 
-  const handleVote = async ({ type, post: postData }) => {
-    // TODO: 实现投票功能
-    ElMessage.info('投票功能开发中')
+  const handleVote = async ({ type, postData }) => {
+    const prevVote = post.value.userVote
+    const prevScore = post.value.net_votes
+    // 调用后端投票接口
+    try {
+      const vote_type = type
+      const res = await userVote({
+        post_id: post.value.post_id,
+        vote_type
+      })
+      
+      // 本地乐观更新
+      if (prevVote === type) {
+        // 再次点击同一方向 -> 取消投票
+        post.value.userVote = 0
+        post.value.net_votes =Number(res.data.upvotes - res.data.downvotes) > 0 
+          ? Number(res.data.upvotes - res.data.downvotes) : Number(res.data.downvotes - res.data.upvotes) > 0 
+            ? -Number(res.data.downvotes - res.data.upvotes) : 0
+      } else {
+        // 切换投票方向或首次投票
+        post.value.net_votes -= prevVote
+        post.value.userVote = type
+        post.value.net_votes =Number(res.data.upvotes - res.data.downvotes) > 0 
+          ? Number(res.data.upvotes - res.data.downvotes) : Number(res.data.downvotes - res.data.upvotes) > 0 
+            ? -Number(res.data.downvotes - res.data.upvotes) : 0
+      }
+
+      if (!res.success) {
+        // 接口返回失败，回滚本地状态
+        post.value.userVote = prevVote
+        post.value.net_votes = prevScore
+        ElMessage.error(res.message || '投票失败，请稍后重试')
+      }
+      console.log('post.value', post.value)
+    } catch (error) {
+      // 请求异常，回滚本地状态
+      post.value.userVote = prevVote
+      post.value.net_votes = prevScore
+      ElMessage.error(error.response?.data?.message || '投票失败，请稍后重试')
+    }
   }
 
   const handleComment = (postData) => {

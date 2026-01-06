@@ -207,20 +207,10 @@ exports.getUserPostDetail = async (req, res, next) => {
 
     // 计算净票数
     post.net_votes = post.upvotes - post.downvotes
-
-    // 查询当前用户是否投票过（如果已登录）
-    if (user_id) {
-      const voteSql = `
-        SELECT vote_type FROM votes 
-        WHERE post_id = ? AND user_id = ? 
-        LIMIT 1
-      `
-      const [vote] = await conMysql(voteSql, [post_id, user_id])
-      post.voted = !!vote
-      post.vote_type = vote?.vote_type || null
+    if (post.upvotes || post.downvotes) {
+      post.voted = true
     } else {
       post.voted = false
-      post.vote_type = null
     }
 
     // 不返回评论列表，只返回 post

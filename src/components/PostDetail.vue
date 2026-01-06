@@ -52,7 +52,7 @@
         <el-button 
           text 
           class="vote-button upvote"
-          :class="{ active: post.vote_type === 'up' || isVoted === 'up' }"
+          :class="{ active: isVoted === 'up' || post.userVote === 'up' }"
           @click="handleVote('up')"
         >
           <el-icon><ArrowUp /></el-icon>
@@ -68,7 +68,7 @@
         <el-button 
           text 
           class="vote-button downvote"
-          :class="{ active: post.vote_type === 'down' || isVoted === 'down' }"
+          :class="{ active: isVoted === 'down' || post.userVote === 'down' }"
           @click="handleVote('down')"
         >
           <el-icon><ArrowDown /></el-icon>
@@ -207,12 +207,13 @@
     // 不在这里调用 router.back()，让父组件处理返回逻辑
   }
 
-  const handleVote = (type) => {
+  const handleVote = async (type) => {
     if (!userStore.isLoggedIn) {
       ElMessage.warning('请先登录')
       return
     }
     emit('vote', { type, post: props.post })
+    isVoted.value = false
   }
 
   const handleComment = () => {
@@ -343,7 +344,7 @@
     const response = await getUserVoteStatus({ post_id: props.post.post_id })
     if (response.success) {
       isVoted.value = response.data.vote_type
-      console.log('isVoted', isVoted.value)
+      console.log('isVoted onMounted', isVoted.value)
     }
   })
 </script>
