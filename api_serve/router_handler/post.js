@@ -62,6 +62,7 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
   const offset = (page - 1) * pageSize
 
   try {
+    // 基础查询语句，不带任何 WHERE / GROUP / ORDER / LIMIT
     let sql = `
       SELECT 
         posts.id AS post_id,
@@ -82,17 +83,17 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
       JOIN users ON posts.user_id = users.id
       LEFT JOIN comments ON comments.post_id = posts.id
       LEFT JOIN votes ON votes.post_id = posts.id
-			GROUP BY posts.id, users.id
-      ORDER BY posts.created_at DESC
     `
 
-    let params = []
+    const params = []
 
+    // 如果有 subreddit_id，则按社区筛选
     if (subreddit_id) {
       sql += ' WHERE posts.subreddit_id = ? '
       params.push(subreddit_id)
     }
 
+    // 统一追加分组、排序和分页
     sql += `
       GROUP BY posts.id, users.id
       ORDER BY posts.created_at DESC
@@ -115,7 +116,7 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
 
   } catch (err) {
     console.error(err)
-    res.cc(false, '获取帖子失败', 500, null)
+    res.cc(false, err.message, 500, null)
   }
 }
 

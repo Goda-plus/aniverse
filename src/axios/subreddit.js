@@ -1,7 +1,7 @@
 import request from './api_index'
 
 // 获取所有子版块
-export const getAllSubreddits = () => request.get('/api/subreddit/list')
+export const getAllSubreddits = (data) => request.get('/api/subreddit/list', { params: data })
 
 // 搜索子版块
 export const searchSubreddits = (data) => request.get('/api/subreddit/search', { params: data })

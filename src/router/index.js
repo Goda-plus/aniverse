@@ -14,7 +14,7 @@ const routes = [
   {
     path: '/browse',
     name: 'browse',
-    component: () => import('../views/DashboardView.vue')
+    component: () => import('../views/BrowseCommunitiesView.vue')
   },
   {
     path: '/all',

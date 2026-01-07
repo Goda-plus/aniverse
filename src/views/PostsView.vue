@@ -7,19 +7,22 @@
           <div class="community-banner" :style="{ backgroundImage: `url(${communityInfo.banner})` }">
             <div class="community-info">
               <div class="community-avatar">
-                <img :src="communityInfo.avatar" :alt="communityInfo.name">
+                <img :src="communityInfo.image_url" :alt="communityInfo.name">
               </div>
               <div class="community-details">
                 <h1 class="community-name">
                   r/{{ communityInfo.name }}
                 </h1>
-                <p class="community-description">
-                  {{ communityInfo.description }}
-                </p>
+                <div class="community-description-container">
+                  <p class="community-description">
+                    {{ communityInfo.description }}
+                  </p>
+                </div>
+                
                 <div class="community-stats">
-                  <span>{{ formatMemberCount(communityInfo.members) }} 位成员</span>
+                  <span>{{ (communityInfo.members) }} 位成员</span>
                   <span class="separator">·</span>
-                  <span>{{ formatMemberCount(communityInfo.online) }} 在线</span>
+                  <span>{{ (communityInfo.online) }} 在线</span>
                 </div>
               </div>
               <el-button 
@@ -44,6 +47,14 @@
         <!-- 加载状态 -->
         <div v-if="loading" class="loading-container">
           <el-skeleton :rows="3" animated />
+        </div>
+
+        <!-- 无数据占位 -->
+        <div 
+          v-else-if="!loading && posts.length === 0" 
+          class="empty-container"
+        >
+          暂无帖子
         </div>
 
         <!-- 帖子列表 -->
@@ -81,21 +92,24 @@
         <div v-if="communityInfo" class="sidebar-card">
           <div class="community-sidebar-info">
             <div class="community-sidebar-avatar">
-              <img :src="communityInfo.avatar" :alt="communityInfo.name">
+              <img :src="communityInfo.image_url" :alt="communityInfo.name">
             </div>
             <h2 class="community-sidebar-name">
               r/{{ communityInfo.name }}
             </h2>
-            <p class="community-sidebar-description">
-              {{ communityInfo.description }}
-            </p>
+            <div class="community-sidebar-description-container">
+              <p class="community-sidebar-description">
+                {{ communityInfo.description }}
+              </p>
+            </div>
+            
             <div class="community-sidebar-stats">
               <div class="stat-item">
-                <span class="stat-value">{{ formatMemberCount(communityInfo.members) }}</span>
+                <span class="stat-value">{{ (communityInfo.members) }}</span>
                 <span class="stat-label">成员</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{{ formatMemberCount(communityInfo.online) }}</span>
+                <span class="stat-value">{{ (communityInfo.online) }}</span>
                 <span class="stat-label">在线</span>
               </div>
             </div>
@@ -155,6 +169,7 @@
   import { getAllPostsWithUser, getPostsBySubreddit } from '@/axios/post'
   import RecentBrowsed from '@/components/RecentBrowsed.vue'
   import { userVote } from '@/axios/vote'
+  import { getSubredditDetail } from '@/axios/subreddit'
 
   const route = useRoute()
   const router = useRouter()
@@ -225,12 +240,13 @@
       }
 
       const communityName = route.params.community
+      const subredditId = route.query.subredditId
       let response
 
-      if (communityName && communityName !== 'all') {
-        // 加载特定社区的帖子（需要先获取 subreddit_id）
-        // 这里暂时使用全部帖子接口，后续可以根据需要添加社区ID查询
-        response = await getAllPostsWithUser({
+      if (communityName && communityName !== 'all' && subredditId) {
+        // 有 community 参数且带了对应的 subredditId，按社区 ID 获取该社区的帖子列表
+        response = await getPostsBySubreddit({
+          subreddit_id: subredditId,
           page,
           pageSize: pageSize.value
         })
@@ -347,7 +363,7 @@
     }
   )
 
-  const loadCommunityInfo = (name) => {
+  const loadCommunityInfo = async (name) => {
     // 模拟加载社区信息
     communityInfo.value = {
       name: name,
@@ -359,6 +375,16 @@
       banner: 'https://via.placeholder.com/1200x200?text=' + name,
       joined: false,
       createdAt: Date.now() - 365 * 24 * 60 * 60 * 1000
+    }
+    try {
+      const res = await getSubredditDetail({ id: route.query.subredditId })
+      if (res.success) {
+        communityInfo.value = res.data
+      }
+      console.log( 'communityInfo.value', communityInfo.value)
+    } catch (error) {
+      console.error('加载社区信息失败:', error)
+      ElMessage.error(error.response?.data?.message || '加载社区信息失败，请稍后重试')
     }
   }
 
@@ -440,7 +466,7 @@
     // 保存当前路由作为来源，以便返回时能正确导航
     router.push({
       path: `/post/${post.id}`,
-      query: { from: route.path }
+      query: { from: route.fullPath }
     })
   }
 
@@ -546,8 +572,15 @@
 
 .community-description {
   font-size: 14px;
-  margin: 0 0 8px 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 0.3s ease;
 }
 
 .community-stats {
@@ -645,10 +678,21 @@
   transition: color 0.3s ease;
 }
 
+.community-sidebar-description-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .community-sidebar-description {
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  line-height: 1.5;
   margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   transition: color 0.3s ease;
 }
 
@@ -763,6 +807,17 @@
   padding: 20px;
   color: var(--text-secondary);
   font-size: 14px;
+}
+
+/* 无数据占位 */
+.empty-container {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
 }
 
 /* 响应式设计 */

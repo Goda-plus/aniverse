@@ -268,6 +268,12 @@
 
       <!-- 主题设置 -->
       <ThemeSettings v-model="showThemeSettings" />
+      
+      <!-- 创建社区弹窗 -->
+      <CreateCommunityDialog 
+        v-model="showCreateCommunityDialog"
+        @success="handleCommunityCreated"
+      />
     </template>
   </div>
 </template>
@@ -279,6 +285,7 @@
   import { useUserStore } from '@/stores/user'
   import { ElMessageBox, ElMessage } from 'element-plus'
   import ThemeSettings from '@/components/ThemeSettings.vue'
+  import CreateCommunityDialog from '@/components/CreateCommunityDialog.vue'
   import {
     House,
     ArrowUp,
@@ -315,6 +322,7 @@
   const sidebarVisible = ref(false)
   const showThemeSettings = ref(false)
   const showUserMenu = ref(false)
+  const showCreateCommunityDialog = ref(false)
   const themeStore = useThemeStore()
   const userStore = useUserStore()
   const darkModeEnabled = computed({
@@ -335,11 +343,20 @@
 
   const handleMenuSelect = (index) => {
     if (index === '/create-community') {
-      // TODO: 实现创建社区功能
-      ElMessage.info('创建社区功能开发中')
+      if (!userStore.isLoggedIn) {
+        ElMessage.warning('请先登录')
+        goToLogin()
+        return
+      }
+      showCreateCommunityDialog.value = true
       return
     }
     router.push(index)
+  }
+
+  const handleCommunityCreated = (data) => {
+    // 社区创建成功后的回调
+    console.log('社区创建成功:', data)
   }
 
   const goToLogin = () => {
@@ -923,6 +940,8 @@
   background: transparent;
   min-height: calc(100vh - 48px);
   transition: margin-left 0.3s ease;
+  min-width: calc(100vw - 240px);
+  max-width: calc(100vw - 64px);
 }
 
 .content-area.expanded {

@@ -14,23 +14,32 @@
       <div class="form-item">
         <label class="form-label">选择社区</label>
         <el-select
+          ref="subredditSelectRef"
           v-model="formData.subreddit"
           placeholder="请选择社区"
           filterable
           class="form-select"
           @change="handleSubredditChange"
+          @visible-change="handleSelectVisibleChange"
         >
           <el-option
             v-for="subreddit in subreddits"
             :key="subreddit.id"
             :label="subreddit.name"
-            :value="subreddit.name"
+            :value="subreddit.id"
           >
             <div class="subreddit-option">
+              <el-image
+                style="width: 24px; height: 24px; border-radius: 50%"
+                :src="subreddit.image_url"
+                :fit="contain"
+              />
               <span class="subreddit-name">r/{{ subreddit.name }}</span>
-              <span class="subreddit-members">{{ formatMemberCount(subreddit.members) }} 位成员</span>
             </div>
           </el-option>
+          <div v-if="loadingSubreddits">
+            <el-icon><Loading />加载中</el-icon>
+          </div>
         </el-select>
       </div>
 
@@ -87,7 +96,7 @@
   import { Close } from '@element-plus/icons-vue'
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
-  import { getAllSubreddits, createPost, uploadPostImage, uploadPostVideo } from '@/axios/api'
+  import { getAllSubreddits, createPost, uploadPostImage, uploadPostVideo,searchSubreddits } from '@/axios/api'
 
   const router = useRouter()
   const route = useRoute()
@@ -100,9 +109,13 @@
     title: '',
     content: ''
   })
-
+  
   // 存储上传的图片 URL（数组）
   const imageUrl = ref([])
+  // 下拉选择相关
+  const subredditSelectRef = ref(null)
+  const dropdownWrapEl = ref(null)
+  const loadingSubreddits = ref(false)
 
   // 编辑器实例
   const editorRef = shallowRef(null)
@@ -114,6 +127,9 @@
   const isMounted = ref(true)
   // 存储定时器ID，用于清理
   const timers = ref([])
+  const page = ref(1)
+  const pageSize = ref(20)
+  const hasMore = ref(true)
 
   // 工具栏配置
   const toolbarConfig = reactive({
@@ -339,13 +355,66 @@
 
   // 获取社区列表
   const loadSubreddits = async () => {
+    if (loadingSubreddits.value || !hasMore.value) {
+      return
+    }
+    loadingSubreddits.value = true
     try {
-      const res = await getAllSubreddits()
-      if (res.status === 0) {
-        subreddits.value = res.data || []
+      const res = await getAllSubreddits({ page: page.value, pageSize: pageSize.value })
+      subreddits.value.push(...res.data.list)
+      hasMore.value = res.data.hasMore
+      if (hasMore.value) {
+        page.value++
+      }else{
+        hasMore.value = false
+        page.value = 1
       }
     } catch (error) {
       console.error('获取社区列表失败:', error)
+    } finally {
+      loadingSubreddits.value = false
+    }
+  }
+
+  // 下拉滚动加载
+  const handleDropdownScroll = (event) => {
+    const target = event?.target
+    if (!target || loadingSubreddits.value || !hasMore.value) {
+      return
+    }
+    const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+    if (distanceToBottom <= 80) {
+      loadSubreddits()
+    }
+  }
+
+  const bindDropdownScroll = () => {
+    nextTick(() => {
+      const dropdownEl =
+        subredditSelectRef.value?.popperRef?.contentRef?.querySelector('.el-select-dropdown__wrap') ||
+        document.querySelector('.el-select-dropdown__wrap')
+      if (dropdownEl && dropdownEl !== dropdownWrapEl.value) {
+        if (dropdownWrapEl.value) {
+          dropdownWrapEl.value.removeEventListener('scroll', handleDropdownScroll)
+        }
+        dropdownWrapEl.value = dropdownEl
+        dropdownWrapEl.value.addEventListener('scroll', handleDropdownScroll)
+      }
+    })
+  }
+
+  const unbindDropdownScroll = () => {
+    if (dropdownWrapEl.value) {
+      dropdownWrapEl.value.removeEventListener('scroll', handleDropdownScroll)
+      dropdownWrapEl.value = null
+    }
+  }
+
+  const handleSelectVisibleChange = (visible) => {
+    if (visible) {
+      bindDropdownScroll()
+    } else {
+      unbindDropdownScroll()
     }
   }
 
@@ -394,7 +463,7 @@
       
       // 创建帖子
       const postData = {
-        subreddit: formData.subreddit,
+        subreddit_id: formData.subreddit,
         title: formData.title,
         content_html: finalEditorContent,
         content_text: finalTextContent,
@@ -458,6 +527,7 @@
   // 组件卸载前清理资源
   onBeforeUnmount(() => {
     isMounted.value = false
+    unbindDropdownScroll()
     
     // 清理所有定时器
     timers.value.forEach(timerId => {
@@ -541,7 +611,7 @@
 
 .subreddit-option {
   display: flex;
-  justify-content: space-between;
+  gap: 16px;
   align-items: center;
   width: 100%;
 }

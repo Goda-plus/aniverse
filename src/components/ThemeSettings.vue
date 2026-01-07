@@ -73,7 +73,7 @@
                 <div class="option-control">
                   <el-slider
                     v-model="opacityValue"
-                    :min="themeStore.mode === 'light' ? 0 : 30"
+                    :min="0"
                     :max="100"
                     :step="1"
                     show-input

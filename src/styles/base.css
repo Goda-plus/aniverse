@@ -320,7 +320,7 @@ body {
   margin: 0;
   font-family: 'Inter', 'M PLUS Rounded 1c', 'PingFang SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* 背景色固定为深色，不再随主题切换改变 */
-  /* background: #030303; */
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-weight: 400;
   transition: color 0.3s ease;
@@ -450,6 +450,7 @@ a {
 /* 统一滚动条，做一点“赛博”感 */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {

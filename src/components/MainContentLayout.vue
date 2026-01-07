@@ -7,7 +7,7 @@
       </div>
 
       <!-- 右侧栏 -->
-      <aside class="right-sidebar">
+      <aside class="right-sidebar" :class="{ 'hidden': !sidebar }">
         <slot name="sidebar" />
       </aside>
     </div>
@@ -15,6 +15,13 @@
 </template>
 
 <script setup>
+  import { defineProps } from 'vue'
+  const props = defineProps({
+    sidebar: {
+      type: Boolean,
+      default: true
+    }
+  })
 </script>
 
 <style scoped>
@@ -38,6 +45,10 @@
 .right-sidebar {
   width: 312px;
   flex-shrink: 0;
+}
+
+.right-sidebar.hidden {
+  display: none;
 }
 
 /* 响应式设计 */
