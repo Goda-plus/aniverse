@@ -63,6 +63,10 @@ app.use(
         /^\/api\/user\/login$/,
         /^\/api\/user\/register$/,
         /^\/api\/category\/list$/,
+        /^\/api\/genre\/list$/,
+        /^\/api\/genre\/subreddits$/,
+        /^\/api\/genre\/recommended$/,
+        /^\/api\/genre\/popular$/,
         /^\/api\/subreddit\/list$/,
         /^\/api\/subreddit\/search$/,
         /^\/api\/subreddit\/detail$/,
@@ -95,6 +99,10 @@ app.use('/my', userInfoRouter)
 //导入分类
 const categoryRouter = require('./router/category')
 app.use('/api/category', categoryRouter)
+
+//导入分类（genres）
+const genreRouter = require('./router/genre')
+app.use('/api/genre', genreRouter)
 
 //导入板块模块
 const subredditRouter = require('./router/subreddit')
