@@ -38,11 +38,13 @@
       {{ post.title }}
     </h1>
 
-    <!-- 帖子内容区域 - 使用 v-html 渲染 content_html -->
+    <!-- 帖子内容区域 - 使用 wangeditor 只读编辑器渲染 content_html -->
     <div class="post-content-wrapper">
-      <div 
-        class="post-content-html" 
-        v-html="post.content_html"
+      <Editor
+        v-model="postContentHtml"
+        :default-config="editorConfig"
+        style="height: auto; overflow-y: hidden;"
+        @on-created="handleEditorCreated"
       />
     </div>
 
@@ -177,12 +179,14 @@
 </template>
 
 <script setup>
-  import { defineProps, defineEmits, ref, defineExpose ,onMounted} from 'vue'
+  import { defineProps, defineEmits, ref, defineExpose, onMounted, onBeforeUnmount, shallowRef, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
   import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import CommentList from './CommentList.vue'
+  import '@wangeditor/editor/dist/css/style.css'
+  import { Editor } from '@wangeditor/editor-for-vue'
   import { createComment } from '@/axios/comment'
   import { getUserVoteStatus } from '@/axios/vote'
 
@@ -201,6 +205,33 @@
   const commentContent = ref('')
   const submitting = ref(false)
   const replyingTo = ref(null)
+
+  // wangeditor 相关
+  const editorRef = shallowRef(null)
+  const postContentHtml = ref('')
+  
+  // 编辑器配置（只读模式）
+  const editorConfig = {
+    placeholder: '',
+    readOnly: true,
+    autoFocus: false
+  }
+
+  // 初始化编辑器
+  const handleEditorCreated = (editor) => {
+    editorRef.value = editor
+    // 设置编辑器内容
+    if (props.post?.content_html) {
+      editor.setHtml(props.post.content_html)
+    }
+  }
+
+  // 监听 post.content_html 变化
+  watch(() => props.post?.content_html, (newHtml) => {
+    if (newHtml && editorRef.value) {
+      editorRef.value.setHtml(newHtml)
+    }
+  }, { immediate: true })
 
   const handleBack = () => {
     emit('back')
@@ -341,10 +372,33 @@
     return num.toString()
   }
   onMounted(async () => {
+    // 初始化编辑器内容
+    if (props.post?.content_html) {
+      postContentHtml.value = props.post.content_html
+    }
+    
     const response = await getUserVoteStatus({ post_id: props.post.post_id })
     if (response.success) {
       isVoted.value = response.data.vote_type
       console.log('isVoted onMounted', isVoted.value)
+    }
+  })
+
+  // 组件卸载前清理编辑器
+  onBeforeUnmount(() => {
+    const editor = editorRef.value
+    if (editor != null) {
+      try {
+        if (editor.isDestroyed) {
+          editorRef.value = null
+          return
+        }
+        editor.destroy()
+      } catch (error) {
+        console.warn('销毁编辑器时出错:', error)
+      } finally {
+        editorRef.value = null
+      }
     }
   })
 </script>
@@ -454,15 +508,23 @@
   margin-bottom: 16px;
 }
 
-.post-content-html {
+/* wangeditor 只读编辑器样式 */
+.post-content-wrapper :deep(.w-e-text-container) {
+  background: transparent !important;
   color: var(--text-primary, #d7dadc);
   line-height: 1.6;
   word-wrap: break-word;
   transition: color 0.3s ease;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.post-content-wrapper :deep(.w-e-text-container) {
+  min-height: auto !important;
 }
 
 /* 处理嵌入的视频和图片 */
-.post-content-html :deep(video) {
+.post-content-wrapper :deep(.w-e-text-container video) {
   max-width: 100%;
   height: auto;
   border-radius: 8px;
@@ -470,7 +532,7 @@
   background: #000;
 }
 
-.post-content-html :deep(img) {
+.post-content-wrapper :deep(.w-e-text-container img) {
   max-width: 100%;
   height: auto;
   border-radius: 8px;
@@ -478,11 +540,11 @@
   display: block;
 }
 
-.post-content-html :deep(div[data-w-e-type="video"]) {
+.post-content-wrapper :deep(.w-e-text-container div[data-w-e-type="video"]) {
   margin: 16px 0;
 }
 
-.post-content-html :deep(p) {
+.post-content-wrapper :deep(.w-e-text-container p) {
   margin: 8px 0;
 }
 
