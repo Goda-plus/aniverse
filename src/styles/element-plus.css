@@ -286,3 +286,14 @@
 .theme-dark .el-popper.is-pure.is-light.el-tooltip.el-select__popper {
   border-color: var(--card-border);
 }
+
+.theme-dark .el-input-number .el-input-number__decrease{
+  background: var(--bg-tertiary);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}
+.theme-dark .el-input-number .el-input-number__increase{
+  background: var(--bg-tertiary);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}

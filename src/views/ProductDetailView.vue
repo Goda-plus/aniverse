@@ -65,7 +65,7 @@
               </p>
 
               <!-- 价格和评分 -->
-              <div class="price-section setting-control">
+              <div class="price-section">
                 <div class="price">
                   <span class="current-price">￥{{ product.price }}</span>
                   <span v-if="product.original_price && product.original_price > product.price" class="original-price">
@@ -120,6 +120,7 @@
                   <el-button
                     type="success"
                     size="large"
+                    style="color: #ffffff;"
                     :disabled="product.stock === 0"
                     @click="handleBuyNow"
                   >
@@ -257,15 +258,21 @@
 
   // 立即购买
   const handleBuyNow = async () => {
-    try {
-      await addToCart({
-        product_id: productId.value,
-        quantity: quantity.value
-      })
-      router.push('/mall/cart')
-    } catch (error) {
-      ElMessage.error(error.response?.data?.message || '操作失败')
+    if (product.value.stock === 0) {
+      ElMessage.warning('商品已缺货')
+      return
     }
+    if (quantity.value > product.value.stock) {
+      ElMessage.warning('库存不足')
+      return
+    }
+    // 直接跳转到支付页面
+    router.push({
+      path: `/mall/payment/${productId.value}`,
+      query: {
+        quantity: quantity.value
+      }
+    })
   }
 
   onMounted(() => {
@@ -299,7 +306,7 @@
   gap: 40px;
   margin-bottom: 40px;
   padding: 24px;
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -372,7 +379,7 @@
   font-size: 28px;
   font-weight: 700;
   margin: 0;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .product-description {
@@ -481,7 +488,7 @@
 
 .detail-content {
   padding: 24px;
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border-radius: 8px;
 }
 
