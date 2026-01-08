@@ -177,6 +177,12 @@
                   + 创建社区
                 </template>
               </el-menu-item>
+              <el-menu-item index="/mall">
+                <el-icon><ShoppingCartFull /></el-icon>
+                <template #title>
+                  周边商城
+                </template>
+              </el-menu-item>
 
               <!-- 资源部分 -->
               <el-menu-item-group>
@@ -313,6 +319,7 @@
     Sunny,
     DataBoard,
     Plus,
+    ShoppingCartFull
   } from '@element-plus/icons-vue'
 
   const route = useRoute()

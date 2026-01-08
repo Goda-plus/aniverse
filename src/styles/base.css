@@ -48,120 +48,7 @@
   --setting-opacity: 100%;
 }
 
-/* Element Plus 组件主题适配 */
-.theme-dark .el-card {
-  background-color: var(--card-bg);
-  border-color: var(--card-border);
-  color: var(--text-primary);
-}
-
-.theme-light .el-card {
-  background-color: var(--card-bg);
-  border-color: var(--card-border);
-  color: var(--text-primary);
-}
-
-.theme-dark .el-input__wrapper {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color);
-}
-
-.theme-light .el-input__wrapper {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color);
-}
-
-.theme-dark .el-input__inner {
-  color: var(--text-primary);
-}
-
-.theme-light .el-input__inner {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-button.is-text {
-  color: var(--text-primary);
-}
-
-.theme-light .el-button.is-text {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-drawer {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.theme-light .el-drawer {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.theme-dark .el-dialog {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.theme-light .el-dialog {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.theme-dark .el-dialog__header {
-  color: var(--text-primary);
-  border-bottom-color: var(--border-color);
-}
-
-.theme-light .el-dialog__header {
-  color: var(--text-primary);
-  border-bottom-color: var(--border-color);
-}
-
-.theme-dark .el-drawer__header {
-  color: var(--text-primary);
-  border-bottom-color: var(--border-color);
-}
-
-.theme-light .el-drawer__header {
-  color: var(--text-primary);
-  border-bottom-color: var(--border-color);
-}
-
-.theme-dark .el-tag {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-.theme-light .el-tag {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-.theme-dark .el-timeline-item__timestamp {
-  color: var(--text-secondary);
-}
-
-.theme-light .el-timeline-item__timestamp {
-  color: var(--text-secondary);
-}
-
-.theme-dark .el-timeline-item__content {
-  color: var(--text-primary);
-}
-
-.theme-light .el-timeline-item__content {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-avatar {
-  background-color: var(--bg-tertiary);
-}
-
-.theme-light .el-avatar {
-  background-color: var(--bg-tertiary);
-}
+/* Element Plus 组件主题样式已抽离到 element-plus.css */
 
 /* 确保所有文本元素使用主题颜色 */
 .theme-dark h1,
@@ -182,40 +69,6 @@
   color: var(--text-primary);
 }
 
-/* Element Plus 更多组件适配 */
-.theme-dark .el-link {
-  color: var(--text-primary);
-}
-
-.theme-light .el-link {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-radio__label {
-  color: var(--text-primary);
-}
-
-.theme-light .el-radio__label {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-checkbox__label {
-  color: var(--text-primary);
-}
-
-.theme-light .el-checkbox__label {
-  color: var(--text-primary);
-}
-
-/* 确保按钮文字在浅色主题下可见 */
-.theme-light .el-button--primary {
-  color: #ffffff;
-}
-
-.theme-dark .el-button--primary {
-  color: #ffffff;
-}
-
 /* 确保链接文字可见 */
 .theme-light a {
   color: var(--text-primary);
@@ -234,82 +87,6 @@
 .theme-dark .el-input__inner::placeholder {
   color: var(--text-secondary);
   opacity: 0.6;
-}
-
-/* 确保 Element Plus 组件内部文本可见并统一字体粗细 */
-.theme-light .el-card p,
-.theme-light .el-card span,
-.theme-light .el-card div {
-  color: var(--text-primary);
-  font-weight: 400;
-}
-
-.theme-dark .el-card p,
-.theme-dark .el-card span,
-.theme-dark .el-card div {
-  color: var(--text-primary);
-  font-weight: 400;
-}
-
-/* 统一卡片内文本的字体粗细 */
-.theme-light .el-card__body,
-.theme-light .el-card__body * {
-  font-weight: 400;
-}
-
-.theme-dark .el-card__body,
-.theme-dark .el-card__body * {
-  font-weight: 400;
-}
-
-/* 确保按钮文字字体粗细一致 */
-.theme-light .el-button {
-  font-weight: 400;
-}
-
-.theme-dark .el-button {
-  font-weight: 400;
-}
-
-/* 确保标签文字字体粗细一致 */
-.theme-light .el-tag {
-  font-weight: 400;
-}
-
-.theme-dark .el-tag {
-  font-weight: 400;
-}
-
-/* 确保时间线内容可见 */
-.theme-light .el-timeline-item__wrapper .el-timeline-item__content {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-timeline-item__wrapper .el-timeline-item__content {
-  color: var(--text-primary);
-}
-
-/* 确保表格文字可见 */
-.theme-light .el-table {
-  color: var(--text-primary);
-  background-color: var(--card-bg);
-}
-
-.theme-dark .el-table {
-  color: var(--text-primary);
-  background-color: var(--card-bg);
-}
-
-.theme-light .el-table th,
-.theme-light .el-table td {
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.theme-dark .el-table th,
-.theme-dark .el-table td {
-  color: var(--text-primary);
-  border-color: var(--border-color);
 }
 
 * {
@@ -379,14 +156,6 @@ body::before {
   font-weight: 700;
 }
 
-/* 统一 Element Plus 组件内文本字体粗细 */
-.el-card .el-card__body,
-.el-card .el-card__body p,
-.el-card .el-card__body span:not(.el-tag),
-.el-card .el-card__body div {
-  font-weight: 400;
-}
-
 /* 确保所有文本元素继承主题颜色 */
 .theme-dark,
 .theme-dark * {
@@ -396,23 +165,6 @@ body::before {
 .theme-light,
 .theme-light * {
   color: inherit;
-}
-
-/* Element Plus 卡片内容适配 */
-.theme-light .el-card__body {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-card__body {
-  color: var(--text-primary);
-}
-
-.theme-light .el-card__header {
-  color: var(--text-primary);
-}
-
-.theme-dark .el-card__header {
-  color: var(--text-primary);
 }
 
 a {
@@ -496,20 +248,3 @@ a {
   --setting-bg-rgb: 245, 245, 245;
   border-color: rgba(0, 0, 0, 0.1) !important;
 }
-
-/* Element Plus Dialog 高度覆盖 */
-.theme-settings-dialog.el-dialog-wrapper .el-dialog,
-.theme-settings-dialog .el-dialog {
-  height: 80vh !important;
-  max-height: 80vh !important;
-}
-
-.theme-settings-dialog.el-dialog-wrapper .el-dialog__body,
-.theme-settings-dialog .el-dialog__body {
-  height: calc(80vh - 80px) !important;
-  max-height: calc(80vh - 80px) !important;
-  overflow-y: auto;
-}
-
-
-

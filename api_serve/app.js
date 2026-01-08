@@ -79,6 +79,11 @@ app.use(
         /^\/api\/post\/getUserPostDetail$/ ,
         /^\/api\/subreddit\/sortlist$/,
         /^\/api\/vote\/count$/,
+        // 商城公开接口（商品 & 分类 & 评价）
+        /^\/api\/mall\/products$/,
+        /^\/api\/mall\/categories$/,
+        /^\/api\/mall\/product\/\d+$/,
+        /^\/api\/mall\/reviews$/,
         /^\/uploads(\/.*)?$/
       ]
     })
@@ -135,10 +140,12 @@ app.use('/api/subredditMember',subredditMember)
 const friendRouter   = require('./router/friends')
 const chatRoomRouter = require('./router/chatRoom')
 const chatRouter     = require('./router/chat')
+const mallRouter     = require('./router/mall')
 
 app.use('/api/friends',   friendRouter)
 app.use('/api/chatroom',  chatRoomRouter)
 app.use('/api/chat',      chatRouter)
+app.use('/api/mall',      mallRouter)
 
 
 

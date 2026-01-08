@@ -47,6 +47,31 @@ const routes = [
     component: () => import('../views/MallView.vue')
   },
   {
+    path: '/mall/product/:id',
+    name: 'product-detail',
+    component: () => import('../views/ProductDetailView.vue')
+  },
+  {
+    path: '/mall/cart',
+    name: 'shopping-cart',
+    component: () => import('../views/ShoppingCartView.vue')
+  },
+  {
+    path: '/mall/checkout',
+    name: 'checkout',
+    component: () => import('../views/CheckoutView.vue')
+  },
+  {
+    path: '/mall/orders',
+    name: 'order-list',
+    component: () => import('../views/OrderListView.vue')
+  },
+  {
+    path: '/mall/order/:id',
+    name: 'order-detail',
+    component: () => import('../views/OrderDetailView.vue')
+  },
+  {
     path: '/crowd',
     name: 'crowd',
     component: () => import('../views/CrowdView.vue')
