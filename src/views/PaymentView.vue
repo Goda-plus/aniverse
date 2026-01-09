@@ -71,22 +71,50 @@
                 <h3 class="section-title">
                   收货地址
                 </h3>
-                <div v-if="selectedAddress" class="address-card">
-                  <div class="address-info">
-                    <div class="address-line">
-                      <span class="recipient-name">{{ selectedAddress.recipient_name }}</span>
-                      <span class="recipient-phone">{{ selectedAddress.phone }}</span>
-                      <el-tag v-if="selectedAddress.is_default" type="success" size="small">
-                        默认
-                      </el-tag>
-                    </div>
-                    <div class="address-detail">
-                      {{ selectedAddress.province }} {{ selectedAddress.city }} {{ selectedAddress.district }} {{ selectedAddress.detail_address }}
-                    </div>
-                  </div>
-                  <el-button link type="primary" @click="showAddressDialog = true">
-                    选择其他地址
-                  </el-button>
+                <div v-if="selectedAddress" class="address-descriptions">
+                  <el-descriptions
+                    :column="2"
+                    border
+                    :label-style="{ width: '80px', textAlign: 'center', fontWeight: 'bold',backgroundColor:'var(--table-label-bg)' }"
+                    :content-style="{ padding: '12px',color:'var(--text-primary)' }"
+                    class="descriptions-theme"
+                  >
+                    <template #extra>
+                      <div class="address-actions">
+                        <el-button type="primary" style="color: var(--text-primary);" link @click="showAddressDialog = true">
+                          选择其他地址
+                        </el-button>
+                      </div>
+                    </template> 
+                    <el-descriptions-item label="收货人">
+                      <div class="address-item">
+                        <span class="recipient-name">{{ selectedAddress.recipient_name }}</span>
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="手机号">
+                      <div class="address-item">
+                        {{ selectedAddress.phone }}
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="地址">
+                      <div class="address-item">
+                        {{ selectedAddress.province }} {{ selectedAddress.city }} {{ selectedAddress.district }}
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="详细地址">
+                      <div class="address-item">
+                        {{ selectedAddress.detail_address }}
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="备注">
+                      <div class="address-item">
+                        <el-tag v-if="selectedAddress.is_default" type="success" size="small" effect="dark">
+                          默认
+                        </el-tag>
+                        <span v-else>无</span>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
                 </div>
                 <div v-else class="no-address">
                   <el-empty description="请选择收货地址">
@@ -463,7 +491,7 @@
 .recipient-name {
   font-size: 16px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .recipient-phone {
@@ -482,7 +510,7 @@
 }
 
 .payment-summary {
-  background: var(--el-bg-color);
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -508,7 +536,7 @@
 }
 
 .summary-row .value {
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
   font-weight: 500;
 }
 

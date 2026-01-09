@@ -28,6 +28,7 @@
                   :src="currentImage || product.cover_image || '/placeholder.png'"
                   :alt="product.name"
                   fit="contain"
+                  style="background: var(--bg-tertiary);"
                   :preview-src-list="imageList"
                   :initial-index="currentImageIndex"
                 >
@@ -320,7 +321,7 @@
 .main-image {
   width: 100%;
   height: 500px;
-  border: 1px solid var(--el-border-color);
+  border: 1px solid var(--bg-tertiary);
   border-radius: 8px;
   overflow: hidden;
   background: var(--el-fill-color-light);
@@ -391,7 +392,7 @@
 
 .price-section {
   padding: 20px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-tertiary);
   border-radius: 8px;
 }
 

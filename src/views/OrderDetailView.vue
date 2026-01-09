@@ -49,7 +49,7 @@
                 <el-button type="primary" @click="handlePay">
                   去支付
                 </el-button>
-                <el-button @click="handleCancel">
+                <el-button style="background-color: var(--bg-tertiary);border-color: var(--bg-tertiary);" @click="handleCancel">
                   取消订单
                 </el-button>
               </template>
@@ -104,18 +104,27 @@
             <h3 class="card-title">
               收货地址
             </h3>
-            <div class="address-info">
-              <div class="address-line">
-                <span class="recipient-name">{{ order.recipient_name }}</span>
-                <span class="recipient-phone">{{ order.phone }}</span>
-              </div>
-              <div class="address-detail">
-                {{ order.province }} {{ order.city }} {{ order.district }} {{ order.detail_address }}
-              </div>
-              <div v-if="order.postal_code" class="postal-code">
-                邮编：{{ order.postal_code }}
-              </div>
-            </div>
+            <el-descriptions
+              :column="2"
+              border
+              class="address-descriptions"
+            >
+              <el-descriptions-item label="收货人">
+                {{ order.recipient_name }}
+              </el-descriptions-item>
+              <el-descriptions-item label="联系电话">
+                {{ order.phone }}
+              </el-descriptions-item>
+              <el-descriptions-item label="收货地址">
+                {{ order.province }} {{ order.city }} {{ order.district }}
+              </el-descriptions-item>
+              <el-descriptions-item label="详细地址">
+                {{ order.detail_address }}
+              </el-descriptions-item>
+              <el-descriptions-item v-if="order.postal_code" label="邮编">
+                {{ order.postal_code }}
+              </el-descriptions-item>
+            </el-descriptions>
           </div>
 
           <!-- 商品列表 -->
@@ -140,14 +149,14 @@
                     {{ item.name }}
                   </div>
                   <div class="item-price">
-                    ￥{{ item.price }}
+                    ￥{{ item.unit_price.toFixed(2) }}
                   </div>
                 </div>
                 <div class="item-quantity">
                   x{{ item.quantity }}
                 </div>
                 <div class="item-total">
-                  ￥{{ (item.price * item.quantity).toFixed(2) }}
+                  ￥{{ item.total_price.toFixed(2) }}
                 </div>
               </div>
             </div>
@@ -241,6 +250,7 @@
       if (response.code === 200) {
         order.value = response.data.order
         orderItems.value = response.data.items || []
+        console.log('orderItems', orderItems.value)
       } else {
         ElMessage.error(response.message || '获取订单详情失败')
       }
@@ -319,7 +329,6 @@
 .order-detail-page {
   padding: 20px 24px;
   min-height: 100vh;
-  background: var(--bg-primary);
   transition: background-color 0.3s ease;
   max-width: 1200px;
   margin: 0 auto;
@@ -343,7 +352,7 @@
 .order-info-card,
 .address-card,
 .items-card {
-  background: var(--el-bg-color);
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -391,7 +400,7 @@
 .status-label {
   font-size: 24px;
   font-weight: 700;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .status-desc {
@@ -408,7 +417,7 @@
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 20px 0;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .info-grid {
@@ -423,11 +432,11 @@
 }
 
 .info-label {
-  color: var(--el-text-color-regular);
+  color: var(--text-primary);
 }
 
 .info-value {
-  color: var(--el-text-color-primary);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -478,7 +487,8 @@
   gap: 16px;
   align-items: center;
   padding: 16px;
-  background: var(--el-fill-color-light);
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
   border-radius: 8px;
 }
 
@@ -498,7 +508,7 @@
 .item-name {
   font-size: 16px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
   cursor: pointer;
   transition: color 0.3s;
 }
@@ -538,7 +548,7 @@
 
 .total-amount .label {
   font-size: 16px;
-  color: var(--el-text-color-regular);
+  color: var(--text-primary);
 }
 
 .total-amount .amount {

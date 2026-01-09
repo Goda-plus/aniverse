@@ -224,6 +224,57 @@
   border-color: var(--border-color);
 }
 
+/* Descriptions 描述列表主题适配 */
+.theme-light .el-descriptions {
+  background-color: var(--card-bg);
+}
+
+.theme-dark .el-descriptions {
+  background-color: var(--card-bg);
+}
+
+.theme-light .el-descriptions__header {
+  color: var(--text-primary);
+}
+
+.theme-dark .el-descriptions__header {
+  color: var(--text-primary);
+}
+
+.theme-light .el-descriptions__body {
+  background-color: var(--table-bg, var(--card-bg));
+}
+
+.theme-dark .el-descriptions__body {
+  background-color: var(--table-bg, var(--card-bg));
+}
+
+.theme-light .el-descriptions__label.el-descriptions__cell {
+  background-color: var(--table-label-bg, var(--bg-tertiary));
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.theme-dark .el-descriptions__label.el-descriptions__cell {
+  background-color: var(--table-label-bg, var(--bg-tertiary));
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.theme-light .el-descriptions__content.el-descriptions__cell {
+  color: var(--text-primary);
+}
+
+.theme-dark .el-descriptions__content.el-descriptions__cell {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+}
+
+.theme-dark .el-descriptions__body .el-descriptions__table.is-bordered .el-descriptions__cell{
+  border-color: var(--el-text-color-regular);
+  color: var(--text-primary);
+}
+
 /* 统一 Element Plus 组件内文本字体粗细（全局） */
 .el-card .el-card__body,
 .el-card .el-card__body p,
@@ -296,4 +347,18 @@
   background: var(--bg-tertiary);
   border-color: var(--card-border);
   color: var(--text-primary);
+}
+
+.theme-dark .el-pagination.is-background .btn-next,
+.theme-dark .el-pagination.is-background .btn-prev
+{
+  background-color: var(--bg-tertiary);
+}
+
+.theme-dark .el-pagination.is-background .el-pager li{
+  background-color: var(--bg-secondary);
+}
+
+.theme-dark .el-pagination.is-background .el-pager li.is-active {
+  color: var(--el-pagination-hover-color);
 }

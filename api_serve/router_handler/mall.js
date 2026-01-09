@@ -631,10 +631,10 @@ exports.createOrder = async (req, res, next) => {
       // 插入订单项
       const itemSql = `
         INSERT INTO order_items 
-          (order_id, product_id, quantity, price)
-        VALUES (?, ?, ?, ?)
+          (order_id, product_id, quantity, unit_price, total_price)
+        VALUES (?, ?, ?, ?, ?)
       `
-      await conMysql(itemSql, [order_id, item.product_id, item.quantity, item.price])
+      await conMysql(itemSql, [order_id, item.product_id, item.quantity, item.price, item.price * item.quantity])
 
       // 更新商品库存
       await conMysql(

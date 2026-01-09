@@ -18,47 +18,88 @@
         class="address-item"
         :class="{ 'is-default': address.is_default }"
       >
-        <div class="address-content">
-          <div class="address-info">
-            <div class="address-line">
+        <el-descriptions
+          class="address-descriptions descriptions-theme"
+          :column="2"
+          border
+          :label-style="{
+            width: '80px',
+            textAlign: 'center',
+            fontWeight: 'bold',
+            backgroundColor: 'var(--table-label-bg)'
+          }"
+          :content-style="{
+            padding: '12px',
+            color: 'var(--text-primary)'
+          }"
+        >
+          <template #extra>
+            <div class="address-actions">
+              <el-button
+                link
+                type="primary"
+                style="color: var(--text-primary);"
+                @click="handleEdit(address)"
+              >
+                编辑
+              </el-button>
+              <el-button
+                v-if="!address.is_default"
+                link
+                type="primary"
+                @click="handleSetDefault(address.id)"
+              >
+                设为默认
+              </el-button>
+              <el-button
+                link
+                type="danger"
+                @click="handleDelete(address.id)"
+              >
+                删除
+              </el-button>
+            </div>
+          </template>
+
+          <el-descriptions-item label="收货人">
+            <div class="address-item-line">
               <span class="recipient-name">{{ address.recipient_name }}</span>
-              <span class="recipient-phone">{{ address.phone }}</span>
-              <el-tag v-if="address.is_default" type="success" size="small">
+              <el-tag
+                v-if="address.is_default"
+                type="success"
+                size="small"
+                effect="dark"
+              >
                 默认
               </el-tag>
             </div>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="手机号">
+            <span class="recipient-phone">{{ address.phone }}</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="地址">
             <div class="address-detail">
-              {{ address.province }} {{ address.city }} {{ address.district }} {{ address.detail_address }}
+              {{ address.province }} {{ address.city }} {{ address.district }}
             </div>
-            <div v-if="address.postal_code" class="postal-code">
-              邮编：{{ address.postal_code }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="详细地址">
+            <div class="address-detail">
+              {{ address.detail_address }}
             </div>
-          </div>
-          <div class="address-actions">
-            <el-button
-              link
-              type="primary"
-              @click="handleEdit(address)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              v-if="!address.is_default"
-              link
-              type="primary"
-              @click="handleSetDefault(address.id)"
-            >
-              设为默认
-            </el-button>
-            <el-button
-              link
-              type="danger"
-              @click="handleDelete(address.id)"
-            >
-              删除
-            </el-button>
-          </div>
-        </div>
+          </el-descriptions-item>
+
+          <el-descriptions-item
+            v-if="address.postal_code"
+            label="邮编"
+          >
+            <div class="postal-code">
+              {{ address.postal_code }}
+            </div>
+          </el-descriptions-item>
+        </el-descriptions>
       </div>
     </div>
 
@@ -315,7 +356,6 @@
 }
 
 .address-item {
-  background: var(--el-bg-color);
   border: 2px solid var(--el-border-color-light);
   border-radius: 8px;
   padding: 20px;
@@ -324,7 +364,6 @@
 
 .address-item.is-default {
   border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
 }
 
 .address-content {
