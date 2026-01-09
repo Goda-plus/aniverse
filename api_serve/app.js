@@ -75,6 +75,7 @@ app.use(
         /^\/api\/comment\/list$/ ,
         /^\/api\/comment\/top$/ ,
         /^\/api\/comment\/child$/ ,
+        /^\/api\/comment\/tree$/ ,
         /^\/api\/post\/GuestPostDetail$/ ,
         /^\/api\/post\/getUserPostDetail$/ ,
         /^\/api\/subreddit\/sortlist$/,

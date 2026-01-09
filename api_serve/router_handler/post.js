@@ -233,33 +233,39 @@ exports.getGuestPostDetail = async (req, res, next) => {
     // 获取帖子及作者信息
     const postSql = `
       SELECT 
-        p.id AS post_id, p.title, p.content_html, p.content_text, p.image_url, p.created_at, p.updated_at,
-        u.id AS user_id, u.username, u.avatar_url
+        p.id AS post_id,
+        p.title,
+        p.content_html,
+        p.content_text,
+        p.image_url,
+        p.created_at,
+        p.updated_at,
+        u.id AS user_id,
+        u.username,
+        u.avatar_url,
+        COUNT(DISTINCT c.id) AS comment_count,
+        COUNT(DISTINCT CASE WHEN v.vote_type = 'up' THEN v.id END) AS upvotes,
+        COUNT(DISTINCT CASE WHEN v.vote_type = 'down' THEN v.id END) AS downvotes
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      LEFT JOIN comments c ON c.post_id = p.id
+      LEFT JOIN votes v ON v.post_id = p.id
       WHERE p.id = ?
+      GROUP BY p.id, u.id
     `
     const [post] = await conMysql(postSql, [post_id])
     if (!post) return res.cc(false, '帖子不存在', 404)
 
-    // 获取点赞数
-    const voteSql = 'SELECT COUNT(*) AS vote_count FROM votes WHERE post_id = ? AND vote_type = \'up\''
-    const [{ vote_count }] = await conMysql(voteSql, [post_id])
-
-    // 获取评论（带用户信息）
-    const commentSql = `
-      SELECT c.id, c.content, c.created_at, u.username, u.avatar_url
-      FROM comments c
-      JOIN users u ON c.user_id = u.id
-      WHERE c.post_id = ?
-      ORDER BY c.created_at ASC
-    `
-    const comments = await conMysql(commentSql, [post_id])
+    // 计算净票数
+    post.net_votes = post.upvotes - post.downvotes
+    if (post.upvotes || post.downvotes) {
+      post.voted = true
+    } else {
+      post.voted = false
+    }
 
     res.cc(true, '游客获取帖子详情成功', 200, {
       post,
-      vote_count,
-      comments
     })
   } catch (err) {
     next(err)
