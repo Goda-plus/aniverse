@@ -188,7 +188,7 @@
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor } from '@wangeditor/editor-for-vue'
   import { createComment } from '@/axios/comment'
-  import { getUserVoteStatus } from '@/axios/vote'
+  import { getUserVoteStatus, getPostVoteStatus } from '@/axios/vote'
 
   const props = defineProps({
     post: {
@@ -377,10 +377,28 @@
       postContentHtml.value = props.post.content_html
     }
     
-    const response = await getUserVoteStatus({ post_id: props.post.post_id })
-    if (response.success) {
-      isVoted.value = response.data.vote_type
-      console.log('isVoted onMounted', isVoted.value)
+    // 只有登录用户才需要获取投票状态
+    if (userStore.isLoggedIn) {
+      try {
+        const response = await getUserVoteStatus({ post_id: props.post.post_id })
+        if (response.success) {
+          isVoted.value = response.data.vote_type
+          console.log('isVoted onMounted', isVoted.value)
+        }
+      } catch (error) {
+        // 如果获取投票状态失败，不影响页面显示
+        console.warn('获取投票状态失败:', error)
+      }
+    }else{
+      try {
+        const response = await getPostVoteStatus({ post_id: props.post.post_id })
+        if (response.success) {
+          isVoted.value = response.data.vote_type
+        }
+      } catch (error) {
+        // 如果获取投票状态失败，不影响页面显示
+        console.warn('获取投票状态失败:', error)
+      }
     }
   })
 

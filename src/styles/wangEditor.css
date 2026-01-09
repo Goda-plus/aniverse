@@ -262,3 +262,7 @@ div[class*="w-e-"][class*="code"] [class*="dropdown"] {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
   color: var(--text-primary) !important;
 }
+
+.w-e-textarea-video-container{
+  background: none !important;
+}

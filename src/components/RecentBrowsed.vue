@@ -36,7 +36,10 @@
   import { ref, onMounted, defineExpose, defineEmits } from 'vue'
   import { Clock, Loading } from '@element-plus/icons-vue'
   import { browseList } from '@/axios/browse'
+  import { useUserStore } from '@/stores/user'
   import { getPostDetail } from '@/axios/post'
+
+  const userStore = useUserStore()
 
   // 转换 API 数据格式为组件需要的格式
   const transformPostData = (apiPost) => {
@@ -168,7 +171,9 @@
   })
 
   onMounted(() => {
-    loadRecentBrowsedPosts()
+    if (userStore.isLoggedIn) {
+      loadRecentBrowsedPosts()
+    }
   })
 </script>
 
