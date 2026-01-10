@@ -23,16 +23,69 @@ exports.addOrUpdateHistory = async (req, res, next) => {
 exports.getBrowseHistory = async (req, res, next) => {
   try {
     const user_id = req.user.id
-    const { limit = 20 } = req.query
+    const { page = 1, pageSize = 10 } = req.query
+    const offset = (page - 1) * pageSize
 
+    // 获取浏览历史中的帖子（假设 target_type = 'post'）
     const sql = `
-      SELECT * FROM browse_history
-      WHERE user_id = ?
-      ORDER BY last_visited_at DESC
-      LIMIT ?
+      SELECT 
+        p.id AS post_id,
+        p.title,
+        p.content_html,
+        p.content_text,
+        p.image_url,
+        p.created_at,
+        p.updated_at,
+        u.id AS user_id,
+        u.username,
+        u.avatar_url,
+        u.bio,
+        s.name as subreddit_name,
+        bh.last_visited_at,
+        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes,
+        (SELECT vote_type FROM votes v_user WHERE v_user.post_id = p.id AND v_user.user_id = ? LIMIT 1) AS user_vote
+      FROM browse_history bh
+      INNER JOIN posts p ON bh.target_id = p.id AND bh.target_type = 'post'
+      INNER JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
+      WHERE bh.user_id = ?
+      GROUP BY p.id, u.id, s.id, bh.last_visited_at
+      ORDER BY bh.last_visited_at DESC
+      LIMIT ? OFFSET ?
     `
-    const rows = await conMysql(sql, [user_id, Number(limit)])
-    res.cc(true, '获取历史记录成功', 200, rows)
+
+    const countSql = `
+      SELECT COUNT(*) as total 
+      FROM browse_history
+      WHERE user_id = ? AND target_type = 'post'
+    `
+    
+    const [posts, totalResult] = await Promise.all([
+      conMysql(sql, [user_id, user_id, parseInt(pageSize), parseInt(offset)]),
+      conMysql(countSql, [user_id])
+    ])
+
+    // 计算净点赞数和用户投票状态
+    const postsWithNetVotes = posts.map(post => ({
+      ...post,
+      net_votes: Number(post.upvotes - post.downvotes),
+      user_vote: post.user_vote === 'up' ? 1 : post.user_vote === 'down' ? -1 : 0
+    }))
+
+    const total = totalResult[0].total
+    const totalPages = Math.ceil(total / pageSize)
+
+    res.cc(true, '获取历史记录成功', 200, {
+      posts: postsWithNetVotes,
+      pagination: {
+        totalItems: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    })
   } catch (err) {
     next(err)
   }

@@ -140,14 +140,16 @@ exports.getAllPostsWithUserAndStats = async (req, res) => {
   users.username,
   users.avatar_url,
   users.bio,
+  subreddits.name AS subreddit_name,
   COUNT(DISTINCT comments.id) AS comment_count,
   COUNT(DISTINCT CASE WHEN votes.vote_type = 'up' THEN votes.id END) AS upvotes,
   COUNT(DISTINCT CASE WHEN votes.vote_type = 'down' THEN votes.id END) AS downvotes
 FROM posts
 JOIN users ON posts.user_id = users.id
+LEFT JOIN subreddits ON posts.subreddit_id = subreddits.id
 LEFT JOIN comments ON comments.post_id = posts.id
 LEFT JOIN votes ON votes.post_id = posts.id
-GROUP BY posts.id, users.id
+GROUP BY posts.id, users.id, subreddits.id
 ORDER BY posts.created_at DESC
     LIMIT ? OFFSET ?
   `
@@ -192,15 +194,17 @@ exports.getUserPostDetail = async (req, res, next) => {
         u.id AS user_id,
         u.username,
         u.avatar_url,
+        s.name AS subreddit_name,
         COUNT(DISTINCT c.id) AS comment_count,
         COUNT(DISTINCT CASE WHEN v.vote_type = 'up' THEN v.id END) AS upvotes,
         COUNT(DISTINCT CASE WHEN v.vote_type = 'down' THEN v.id END) AS downvotes
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
       LEFT JOIN comments c ON c.post_id = p.id
       LEFT JOIN votes v ON v.post_id = p.id
       WHERE p.id = ?
-      GROUP BY p.id, u.id
+      GROUP BY p.id, u.id, s.id
     `
     const [post] = await conMysql(detailSql, [post_id])
 
@@ -243,15 +247,17 @@ exports.getGuestPostDetail = async (req, res, next) => {
         u.id AS user_id,
         u.username,
         u.avatar_url,
+        s.name AS subreddit_name,
         COUNT(DISTINCT c.id) AS comment_count,
         COUNT(DISTINCT CASE WHEN v.vote_type = 'up' THEN v.id END) AS upvotes,
         COUNT(DISTINCT CASE WHEN v.vote_type = 'down' THEN v.id END) AS downvotes
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
       LEFT JOIN comments c ON c.post_id = p.id
       LEFT JOIN votes v ON v.post_id = p.id
       WHERE p.id = ?
-      GROUP BY p.id, u.id
+      GROUP BY p.id, u.id, s.id
     `
     const [post] = await conMysql(postSql, [post_id])
     if (!post) return res.cc(false, '帖子不存在', 404)
@@ -295,6 +301,258 @@ exports.uploadVideo = (req, res) => {
   // 返回视频的访问URL
   const url = `http://localhost:3000/uploads/${req.file.filename}`
   res.cc(true, '上传成功', 200, { url })
+}
+
+// 获取当前用户的帖子（带分页）
+exports.getCurrentUserPosts = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { page = 1, pageSize = 10 } = req.query
+    const offset = (page - 1) * pageSize
+
+    const sql = `
+       SELECT 
+        p.*,
+        u.username,
+        u.avatar_url,
+        s.name as subreddit_name,
+        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as comment_count,
+        (SELECT COUNT(*) FROM votes pv WHERE pv.post_id = p.id AND pv.vote_type = 'up') as upvotes,
+        (SELECT COUNT(*) FROM votes pv WHERE pv.post_id = p.id AND pv.vote_type = 'down') as downvotes
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
+      WHERE p.user_id = ?
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+
+    const countSql = 'SELECT COUNT(*) as total FROM posts WHERE user_id = ?'
+    
+    const [posts, totalResult] = await Promise.all([
+      conMysql(sql, [user_id, parseInt(pageSize), parseInt(offset)]),
+      conMysql(countSql, [user_id])
+    ])
+
+    const total = totalResult[0].total
+    const totalPages = Math.ceil(total / pageSize)
+
+    res.cc(true, '获取当前用户帖子成功', 200,{
+      posts,
+      pagination: {
+        totalItems: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 获取当前用户点赞过的帖子（带分页）
+exports.getUpvotedPosts = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { page = 1, pageSize = 10 } = req.query
+    const offset = (page - 1) * pageSize
+
+    const sql = `
+      SELECT 
+        p.id AS post_id,
+        p.title,
+        p.content_html,
+        p.content_text,
+        p.image_url,
+        p.created_at,
+        p.updated_at,
+        u.id AS user_id,
+        u.username,
+        u.avatar_url,
+        u.bio,
+        s.name as subreddit_name,
+        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes
+      FROM votes v
+      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
+      WHERE v.user_id = ? AND v.vote_type = 'up'
+      GROUP BY p.id, u.id, s.id
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+
+    const countSql = `
+      SELECT COUNT(DISTINCT v.post_id) as total 
+      FROM votes v
+      WHERE v.user_id = ? AND v.vote_type = 'up'
+    `
+    
+    const [posts, totalResult] = await Promise.all([
+      conMysql(sql, [user_id, parseInt(pageSize), parseInt(offset)]),
+      conMysql(countSql, [user_id])
+    ])
+
+    // 计算净点赞数
+    const postsWithNetVotes = posts.map(post => ({
+      ...post,
+      net_votes: Number(post.upvotes - post.downvotes)
+    }))
+
+    const total = totalResult[0].total
+    const totalPages = Math.ceil(total / pageSize)
+
+    res.cc(true, '获取点赞帖子成功', 200, {
+      posts: postsWithNetVotes,
+      pagination: {
+        totalItems: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 获取当前用户点踩过的帖子（带分页）
+exports.getDownvotedPosts = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { page = 1, pageSize = 10 } = req.query
+    const offset = (page - 1) * pageSize
+
+    const sql = `
+      SELECT 
+        p.id AS post_id,
+        p.title,
+        p.content_html,
+        p.content_text,
+        p.image_url,
+        p.created_at,
+        p.updated_at,
+        u.id AS user_id,
+        u.username,
+        u.avatar_url,
+        u.bio,
+        s.name as subreddit_name,
+        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes
+      FROM votes v
+      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
+      WHERE v.user_id = ? AND v.vote_type = 'down'
+      GROUP BY p.id, u.id, s.id
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+
+    const countSql = `
+      SELECT COUNT(DISTINCT v.post_id) as total 
+      FROM votes v
+      WHERE v.user_id = ? AND v.vote_type = 'down'
+    `
+    
+    const [posts, totalResult] = await Promise.all([
+      conMysql(sql, [user_id, parseInt(pageSize), parseInt(offset)]),
+      conMysql(countSql, [user_id])
+    ])
+
+    // 计算净点赞数
+    const postsWithNetVotes = posts.map(post => ({
+      ...post,
+      net_votes: Number(post.upvotes - post.downvotes)
+    }))
+
+    const total = totalResult[0].total
+    const totalPages = Math.ceil(total / pageSize)
+
+    res.cc(true, '获取点踩帖子成功', 200, {
+      posts: postsWithNetVotes,
+      pagination: {
+        totalItems: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 获取当前用户评论过的帖子（带分页）
+exports.getCommentedPosts = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { page = 1, pageSize = 10 } = req.query
+    const offset = (page - 1) * pageSize
+
+    const sql = `
+      SELECT 
+        p.id AS post_id,
+        p.title,
+        p.content_html,
+        p.content_text,
+        p.image_url,
+        p.created_at,
+        p.updated_at,
+        u.id AS user_id,
+        u.username,
+        u.avatar_url,
+        u.bio,
+        s.name as subreddit_name,
+        (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes
+      FROM comments c
+      INNER JOIN posts p ON c.post_id = p.id
+      INNER JOIN users u ON p.user_id = u.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
+      WHERE c.user_id = ?
+      GROUP BY p.id, u.id, s.id
+      ORDER BY p.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+
+    const countSql = `
+      SELECT COUNT(DISTINCT c.post_id) as total 
+      FROM comments c
+      WHERE c.user_id = ?
+    `
+    
+    const [posts, totalResult] = await Promise.all([
+      conMysql(sql, [user_id, parseInt(pageSize), parseInt(offset)]),
+      conMysql(countSql, [user_id])
+    ])
+
+    // 计算净点赞数
+    const postsWithNetVotes = posts.map(post => ({
+      ...post,
+      net_votes: Number(post.upvotes - post.downvotes)
+    }))
+
+    const total = totalResult[0].total
+    const totalPages = Math.ceil(total / pageSize)
+
+    res.cc(true, '获取评论帖子成功', 200, {
+      posts: postsWithNetVotes,
+      pagination: {
+        totalItems: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
 }
 
 // 删除帖子

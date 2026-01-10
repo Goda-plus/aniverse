@@ -145,7 +145,9 @@ export const useUserStore = defineStore('user', () => {
     register,
     logout,
     setRemember,
-    init
+    init,
+    setToken,
+    setUser
   }
 })
 

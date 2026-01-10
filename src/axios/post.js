@@ -12,6 +12,18 @@ export const getGuestPostDetail = (data) => request.get('/api/post/GuestPostDeta
 // 获取帖子详情
 export const getPostDetail = (data) => request.get('/api/post/getUserPostDetail', { params: data })
 
+// 获取当前用户的帖子（带分页）
+export const getCurrentUserPosts = (data) => request.get('/api/post/me',{params:data})
+
+// 获取当前用户已点赞的帖子（带分页）
+export const getUserUpvotedPosts = (data) => request.get('/api/post/upvoted',{params:data})
+
+// 获取当前用户已点踩的帖子（带分页）
+export const getUserDownvotedPosts = (data) => request.get('/api/post/downvoted',{params:data})
+
+// 获取当前用户评论过的帖子（带分页）
+export const getUserCommentedPosts = (data) => request.get('/api/post/commented',{params:data})
+
 // 创建帖子
 export const createPost = (data) => request.post('/api/post/create', data)
 
@@ -35,4 +47,6 @@ export const uploadPostVideo = (file) => {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
+
+
 

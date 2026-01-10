@@ -84,7 +84,45 @@ const routes = [
   {
     path: '/profile',
     name: 'profile',
-    component: () => import('../views/ProfileView.vue')
+    component: () => import('../views/ProfileView.vue'),
+    redirect: '/profile/posts',
+    children: [
+      {
+        path: 'overview',
+        name: 'profile-overview',
+        component: () => import('../views/profile/OverviewTab.vue')
+      },
+      {
+        path: 'posts',
+        name: 'profile-posts',
+        component: () => import('../views/profile/PostsTab.vue')
+      },
+      {
+        path: 'comments',
+        name: 'profile-comments',
+        component: () => import('../views/profile/CommentsTab.vue')
+      },
+      {
+        path: 'saved',
+        name: 'profile-saved',
+        component: () => import('../views/profile/SavedTab.vue')
+      },
+      {
+        path: 'history',
+        name: 'profile-history',
+        component: () => import('../views/profile/HistoryTab.vue')
+      },
+      {
+        path: 'upvoted',
+        name: 'profile-upvoted',
+        component: () => import('../views/profile/UpvotedTab.vue')
+      },
+      {
+        path: 'downvoted',
+        name: 'profile-downvoted',
+        component: () => import('../views/profile/DownvotedTab.vue')
+      }
+    ]
   },
   {
     path: '/login',

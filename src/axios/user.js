@@ -12,6 +12,12 @@ export const userRegiest = (data) => request.post('/api/user/register', data)
 // 更新用户信息
 export const updateUserInfo = (data) => request.post('/my/userinfo', data)
 
-// 单独更新用户头像
-export const updateUserAvatar = (data) => request.post('/my/update-avatar', data)
+// 单独更新用户头像（支持FormData文件上传）
+export const updateUserAvatar = (data) => {
+  return request.post('/my/update-avatar', data, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
 

@@ -16,6 +16,12 @@ router.get('/GuestPostDetail',postHandler.getGuestPostDetail)
 
 router.get('/getUserPostDetail',postHandler.getUserPostDetail)
 
+router.get('/upvoted', postHandler.getUpvotedPosts)
+
+router.get('/downvoted', postHandler.getDownvotedPosts)
+
+router.get('/commented', postHandler.getCommentedPosts)
+
 //帖子图片上传
 const multer = require('multer')
 const path = require('path')
@@ -37,6 +43,9 @@ router.post('/upload-image', upload.single('image'), postHandler.uploadImage)
 
 // 帖子视频上传
 router.post('/upload-video', upload.single('video'), postHandler.uploadVideo)
+
+// 获取当前用户的帖子（带分页）
+router.get('/me', postHandler.getCurrentUserPosts)
 
 // 删除帖子（只允许作者本人删除）
 router.delete('/delete', postHandler.deletePost)
