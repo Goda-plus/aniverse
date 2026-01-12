@@ -6,88 +6,40 @@
         <!-- 用户头像和基本信息 -->
         <div class="profile-header">
           <div class="profile-avatar-wrapper">
-            <el-avatar :size="80" :src="avatar" class="profile-avatar" />
+            <el-avatar :size="80" :src="avatar" class="profile-avatar" @click="showAvatarEditor = true" />
+            <div class="avatar-edit-overlay" @click="showAvatarEditor = true">
+              <el-icon class="edit-icon">
+                <Edit />
+              </el-icon>
+            </div>
           </div>
           <div class="profile-info">
             <div class="username">
-              {{ store.user.name }}
+              {{ userStore.username }}
             </div>
             <div class="user-handle">
-              u/{{ store.user.name }}
+              u/{{ userStore.username }}
             </div>
           </div>
         </div>
 
         <!-- 标签导航 -->
-        <div class="profile-tabs">
-          <div 
-            v-for="tab in tabs" 
+        <el-tabs 
+          v-model="activeTab" 
+          class="profile-tabs"
+          @tab-change="handleTabChange"
+        >
+          <el-tab-pane
+            v-for="tab in tabs"
             :key="tab.key"
-            :class="['tab-item', { active: activeTab === tab.key }]"
-            @click="activeTab = tab.key"
-          >
-            {{ tab.label }}
-          </div>
-        </div>
+            :label="tab.label"
+            :name="tab.key"
+          />
+        </el-tabs>
 
         <!-- 内容区域 -->
         <div class="content-area">
-          <div v-if="activeTab === 'posts'" class="posts-section">
-            <div class="section-header">
-              <el-icon class="eye-icon">
-                <View />
-              </el-icon>
-              <span>显示所有帖子</span>
-              <el-icon class="arrow-icon">
-                <ArrowRight />
-              </el-icon>
-            </div>
-            <div class="create-post-btn">
-              <el-button type="primary" :icon="Plus">
-                创建帖子
-              </el-button>
-            </div>
-            <div class="empty-state">
-              <div class="empty-icon">
-                📝
-              </div>
-              <div class="empty-title">
-                你还没有任何帖子
-              </div>
-              <div class="empty-description">
-                在社区中发帖后，帖子将显示在此处。如果你想隐藏帖子，请更新设置。
-              </div>
-              <el-button type="primary" class="update-settings-btn">
-                更新设置
-              </el-button>
-            </div>
-          </div>
-
-          <div v-else-if="activeTab === 'overview'" class="overview-section">
-            <div class="empty-state">
-              <div class="empty-icon">
-                📊
-              </div>
-              <div class="empty-title">
-                概述
-              </div>
-              <div class="empty-description">
-                这里将显示你的活动概览
-              </div>
-            </div>
-          </div>
-
-          <div v-else class="empty-state">
-            <div class="empty-icon">
-              📋
-            </div>
-            <div class="empty-title">
-              {{ tabs.find(t => t.key === activeTab)?.label }}
-            </div>
-            <div class="empty-description">
-              暂无内容
-            </div>
-          </div>
+          <router-view />
         </div>
       </div>
 
@@ -99,7 +51,7 @@
             <div class="profile-banner" />
             <div class="profile-card-content">
               <div class="card-username">
-                {{ store.user.name }}
+                {{ userStore.username }}
               </div>
               <el-button size="small" class="share-btn">
                 <el-icon>
@@ -196,28 +148,70 @@
         </div>
       </div>
     </div>
+
+    <!-- 头像编辑组件 -->
+    <AvatarEditor v-model="showAvatarEditor" @success="handleAvatarUpdate" />
   </div>
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  import { useDataStore } from '@/stores/data'
-  import { View, ArrowRight, Plus, Share } from '@element-plus/icons-vue'
+  import { computed, ref } from 'vue'
+  import { useRouter, useRoute } from 'vue-router'
+  import { Share, Edit } from '@element-plus/icons-vue'
+  import { useUserStore } from '@/stores/user'
+  import AvatarEditor from '@/components/AvatarEditor.vue'
 
-  const store = useDataStore()
-  const avatar = 'https://i.pravatar.cc/120?img=7'
-  const activeTab = ref('posts')
+  const router = useRouter()
+  const route = useRoute()
+  const userStore = useUserStore()
+  // 处理头像URL，确保相对路径转换为完整URL
+  const avatar = computed(() => {
+    const avatarUrl = userStore.avatar || 'https://i.pravatar.cc/120?img=7'
+    // 如果是相对路径（以/uploads/开头），转换为完整URL
+    if (avatarUrl && avatarUrl.startsWith('/uploads/')) {
+      return `http://localhost:3000${avatarUrl}`
+    }
+    return avatarUrl
+  })
+  
+  const showAvatarEditor = ref(false)
+  // 头像更新成功后的处理
+  const handleAvatarUpdate = (avatarUrl) => {
+    // 头像已通过store更新，这里可以做一些额外处理
+    console.log('头像更新成功:', avatarUrl)
+  }
 
   const tabs = [
-    { key: 'overview', label: '概述' },
-    { key: 'posts', label: '帖子' },
-    { key: 'comments', label: '评论' },
-    { key: 'saved', label: '已保存' },
-    { key: 'history', label: '历史记录' },
-    { key: 'hidden', label: '已隐藏' },
-    { key: 'upvoted', label: '已点赞' },
-    { key: 'downvoted', label: '已点踩' }
+    { key: 'overview', label: '概述', route: 'profile-overview' },
+    { key: 'posts', label: '帖子', route: 'profile-posts' },
+    { key: 'comments', label: '评论', route: 'profile-comments' },
+    { key: 'saved', label: '已保存', route: 'profile-saved' },
+    { key: 'history', label: '历史记录', route: 'profile-history' },
+    { key: 'upvoted', label: '已点赞', route: 'profile-upvoted' },
+    { key: 'downvoted', label: '已点踩', route: 'profile-downvoted' }
   ]
+
+  // 根据当前路由确定激活的标签
+  const activeTab = computed({
+    get: () => {
+      const routeName = route.name
+      const tab = tabs.find(t => t.route === routeName)
+      return tab ? tab.key : 'posts'
+    },
+    set: (value) => {
+      const tab = tabs.find(t => t.key === value)
+      if (tab) {
+        router.push({ name: tab.route })
+      }
+    }
+  })
+
+  const handleTabChange = (tabKey) => {
+    const tab = tabs.find(t => t.key === tabKey)
+    if (tab) {
+      router.push({ name: tab.route })
+    }
+  }
 
   const achievements = [
     { icon: '🎉', name: '本地社区新人' },
@@ -251,6 +245,9 @@
   background: var(--card-bg);
   border-radius: 4px;
   overflow: hidden;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--card-border);
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
@@ -267,11 +264,43 @@
 
 .profile-avatar-wrapper {
   position: relative;
+  cursor: pointer;
+  display: inline-block;
 }
 
 .profile-avatar {
   border: 3px solid var(--card-bg);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: opacity 0.3s ease;
+}
+
+.profile-avatar-wrapper:hover .profile-avatar {
+  opacity: 0.8;
+}
+
+.avatar-edit-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  cursor: pointer;
+}
+
+.profile-avatar-wrapper:hover .avatar-edit-overlay {
+  opacity: 1;
+}
+
+.edit-icon {
+  color: white;
+  font-size: 24px;
 }
 
 .theme-dark .profile-avatar {
@@ -298,54 +327,75 @@
 
 /* 标签导航 - Reddit 风格 */
 .profile-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0 10px;
   background: var(--card-bg);
-  overflow-x: auto;
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
-.tab-item {
+/* Element Plus Tabs 样式定制 */
+:deep(.el-tabs__header) {
+  margin: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--card-bg);
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+:deep(.el-tabs__nav-wrap) {
+  overflow-x: auto;
+}
+
+:deep(.el-tabs__nav) {
+  border: none;
+}
+
+:deep(.el-tabs__item) {
   padding: 12px 16px;
   font-size: 14px;
   color: var(--text-secondary);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  transition: all 0.2s ease;
   font-weight: 500;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
 }
 
-.tab-item:hover {
+:deep(.el-tabs__item:hover) {
   color: var(--text-primary);
   background: var(--bg-hover);
-  transition: color 0.3s ease, background-color 0.3s ease;
 }
 
-.tab-item.active {
+:deep(.el-tabs__item.is-active) {
   color: var(--text-primary);
   font-weight: 600;
 }
 
 /* Reddit 蓝色链接 - 深色模式下使用浅蓝色 */
-.theme-light .tab-item.active {
+.theme-light :deep(.el-tabs__item.is-active) {
   border-bottom-color: #0079d3;
 }
 
-.theme-dark .tab-item.active {
+.theme-dark :deep(.el-tabs__item.is-active) {
   border-bottom-color: #4fbcff;
+}
+
+:deep(.el-tabs__active-bar) {
+  display: none;
 }
 
 /* 内容区域 */
 .content-area {
   background: var(--card-bg);
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 20px;
   transition: background-color 0.3s ease;
 }
 
 .posts-section {
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .section-header {
@@ -637,7 +687,7 @@
     width: 100%;
   }
 
-  .profile-tabs {
+  .profile-tabs :deep(.el-tabs__nav-wrap) {
     overflow-x: auto;
   }
 }

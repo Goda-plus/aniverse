@@ -89,11 +89,10 @@ exports.updateAvatar = async (req, res, next) => {
   try {
     const userId = req.user.id
     let avatar_url = null
-
     // 如果上传了文件，使用文件路径
     if (req.file) {
       // 文件已通过multer中间件处理，保存在uploads目录
-      avatar_url = `/uploads/${req.file.filename}`
+      avatar_url = `http://localhost:3000/uploads/${req.file.filename}`
     } else if (req.body && req.body.avatar_url) {
       // 如果没有文件，使用body中的avatar_url（兼容旧接口）
       avatar_url = req.body.avatar_url

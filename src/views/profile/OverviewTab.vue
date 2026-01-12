@@ -1,0 +1,52 @@
+<template>
+  <div class="overview-section">
+    <div class="empty-state">
+      <div class="empty-icon">
+        📊
+      </div>
+      <div class="empty-title">
+        概述
+      </div>
+      <div class="empty-description">
+        这里将显示你的活动概览
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+</script>
+
+<style scoped>
+.overview-section {
+  width: 100%;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  transition: color 0.3s ease;
+}
+
+.empty-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+  transition: color 0.3s ease;
+}
+</style>
+

@@ -20,6 +20,10 @@
         @click="handlePostClick(post)"
       >
         <div class="recent-browsed-content">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <el-avatar size="small" :src="post.authorAvatar" class="recent-browsed-author-avatar" />
+            <span class="recent-browsed-author-name">u/{{ post.author }}</span>
+          </div>
           <div class="recent-browsed-title">
             {{ post.title }}
           </div>
@@ -35,9 +39,8 @@
 <script setup>
   import { ref, onMounted, defineExpose, defineEmits } from 'vue'
   import { Clock, Loading } from '@element-plus/icons-vue'
-  import { browseList } from '@/axios/browse'
+  import { getBrowseHistory } from '@/axios/browse'
   import { useUserStore } from '@/stores/user'
-  import { getPostDetail } from '@/axios/post'
 
   const userStore = useUserStore()
 
@@ -75,7 +78,7 @@
       score: apiPost.net_votes || (apiPost.upvotes - apiPost.downvotes) || 0,
       commentCount: apiPost.comment_count || 0,
       rewardCount: 0,
-      userVote: 0,
+      userVote: apiPost.user_vote !== undefined ? apiPost.user_vote : 0,
       createdAt: new Date(apiPost.created_at).getTime(),
       recommended: false
     }
@@ -88,51 +91,14 @@
   const loadRecentBrowsedPosts = async () => {
     try {
       loading.value = true
-      const response = await browseList({ limit: 10 })
+      const response = await getBrowseHistory({ pageSize: 10, page: 1 })
       
-      if (response.success && Array.isArray(response.data)) {
-        // 只获取帖子类型的浏览记录
-        const postHistory = response.data.filter(item => item.target_type === 'post')
-        
-        if (postHistory.length === 0) {
-          recentBrowsedPosts.value = []
-          return
-        }
-
-        // 获取每个帖子的详细信息
-        const postDetails = await Promise.all(
-          postHistory.map(async (historyItem) => {
-            try {
-              const postResponse = await getPostDetail({ post_id: historyItem.target_id })
-              if (postResponse.success) {
-                // 处理返回的数据结构
-                let postData = null
-                if (postResponse.data?.post) {
-                  postData = postResponse.data.post
-                } else if (postResponse.data && !postResponse.data.comments) {
-                  // 如果 data 直接是 post 对象
-                  postData = postResponse.data
-                } else if (postResponse.data) {
-                  postData = postResponse.data
-                }
-                
-                if (postData) {
-                  return {
-                    ...transformPostData(postData),
-                    lastVisitedAt: historyItem.last_visited_at
-                  }
-                }
-              }
-              return null
-            } catch (error) {
-              console.error('获取帖子详情失败:', error)
-              return null
-            }
-          })
-        )
-
-        // 过滤掉获取失败的帖子
-        recentBrowsedPosts.value = postDetails.filter(post => post !== null)
+      if (response.success && response.data && Array.isArray(response.data.posts)) {
+        // 后端已经返回了完整的帖子信息，直接转换即可
+        recentBrowsedPosts.value = response.data.posts.map(post => ({
+          ...transformPostData(post),
+          lastVisitedAt: post.last_visited_at
+        }))
       } else {
         recentBrowsedPosts.value = []
       }

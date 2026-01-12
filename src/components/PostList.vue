@@ -105,10 +105,10 @@
               </div>
             </div>
             <div class="post-header-text">
-              <span class="post-subreddit">r/{{ post.subreddit }}</span>
-              <span class="post-separator">·</span>
               <span class="post-author">u/{{ post.author }}</span>
               <span class="post-separator">·</span>
+              <span v-if="post.subreddit" class="post-subreddit">r/{{ post.subreddit }}</span>
+              <span v-if="post.subreddit" class="post-separator">·</span>
               <span class="post-time">{{ formatTime(post.createdAt) }}</span>
               <span v-if="post.recommended" class="post-recommended">为你推荐</span>
             </div>

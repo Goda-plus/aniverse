@@ -23,11 +23,16 @@
             </div>
           </div>
           <div class="author-details">
-            <span class="subreddit-name">r/nextfuckinglevel</span>
-            <span class="separator">·</span>
-            <span class="post-time">{{ formatTime(post.created_at) }}</span>
-            <span class="separator">·</span>
             <span class="author-name">u/{{ post.username }}</span>
+            <span class="separator">·</span>
+            <span v-if="post.subreddit_name" class="subreddit-name">r/{{ post.subreddit_name }}</span>
+            <span v-if="post.subreddit_name" class="separator">·</span>
+            <span class="post-time">{{ formatTime(post.created_at) }}</span>
+          </div>
+          <div v-if="userStore.isLoggedIn && post.user_id === userStore.user.id" class="post-more-btn">
+            <el-button text class="menu-btn">
+              <el-icon><MoreFilled /></el-icon>
+            </el-button>
           </div>
         </div>
       </div>
@@ -182,7 +187,7 @@
   import { defineProps, defineEmits, ref, defineExpose, onMounted, onBeforeUnmount, shallowRef, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
-  import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close } from '@element-plus/icons-vue'
+  import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close ,MoreFilled} from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import CommentList from './CommentList.vue'
   import '@wangeditor/editor/dist/css/style.css'
@@ -776,6 +781,17 @@
 .comment-login-prompt:hover {
   border-color: var(--text-primary, #d7dadc);
   background: var(--bg-hover, #343536);
+}
+
+.post-more-btn {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--text-primary);
+ 
 }
 
 /* 响应式设计 */

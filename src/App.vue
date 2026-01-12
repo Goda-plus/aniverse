@@ -115,9 +115,9 @@
                 </div>
               </transition>
             </div>
-            <el-button text class="menu-btn">
+            <!-- <el-button text class="menu-btn">
               <el-icon><MoreFilled /></el-icon>
-            </el-button>
+            </el-button> -->
           </div>
         </div>
       </header>
@@ -282,6 +282,7 @@
       />
     </template>
   </div>
+  <AvatarEditor v-model="showAvatarEditor" />
 </template>
 
 <script setup>
@@ -292,6 +293,7 @@
   import { ElMessageBox, ElMessage } from 'element-plus'
   import ThemeSettings from '@/components/ThemeSettings.vue'
   import CreateCommunityDialog from '@/components/CreateCommunityDialog.vue'
+  import AvatarEditor from '@/components/AvatarEditor.vue'
   import {
     House,
     ArrowUp,
@@ -338,7 +340,7 @@
       themeStore.setMode(val ? 'dark' : 'light')
     }
   })
-
+  const showAvatarEditor = ref(false)
   // 判断是否是认证页面（登录/注册），这些页面不显示导航栏和侧边栏
   const isAuthPage = computed(() => {
     return route.path === '/login' || route.path === '/register'
@@ -378,7 +380,7 @@
       router.push('/profile')
       showUserMenu.value = false
     } else if (command === 'avatar') {
-      // TODO: 实现编辑头像功能
+      showAvatarEditor.value = true
       showUserMenu.value = false
     } else if (command === 'create-post') {
       router.push('/create-post')

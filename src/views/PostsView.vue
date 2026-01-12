@@ -210,7 +210,7 @@
 
     return {
       id: apiPost.post_id,
-      subreddit: 'nextfuckinglevel', // 可以根据实际情况设置
+      subreddit: apiPost.subreddit_name || '', // 可以根据实际情况设置
       author: apiPost.username,
       authorAvatar: apiPost.avatar_url,
       title: apiPost.title,
