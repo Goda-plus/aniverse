@@ -148,6 +148,44 @@ const routes = [
     path: '/post/:id',
     name: 'post-detail',
     component: () => import('../views/PostDetailView.vue')
+  },
+  {
+    path: '/media-library',
+    name: 'media-library',
+    component: () => import('../views/MediaLibraryView.vue')
+  },
+  {
+    path: '/media/:id',
+    name: 'media-detail',
+    component: () => import('../views/MediaDetailView.vue'),
+    redirect: { name: 'media-detail-overview' },
+    children: [
+      {
+        path: 'overview',
+        name: 'media-detail-overview',
+        component: () => import('../views/mediaDetail/OverviewTab.vue')
+      },
+      {
+        path: 'characters',
+        name: 'media-detail-characters',
+        component: () => import('../views/mediaDetail/CharactersTab.vue')
+      },
+      {
+        path: 'staff',
+        name: 'media-detail-staff',
+        component: () => import('../views/mediaDetail/StaffTab.vue')
+      },
+      {
+        path: 'social',
+        name: 'media-detail-social',
+        component: () => import('../views/mediaDetail/SocialTab.vue')
+      },
+      {
+        path: 'stats',
+        name: 'media-detail-stats',
+        component: () => import('../views/mediaDetail/StatsTab.vue')
+      }
+    ]
   }
 ]
 

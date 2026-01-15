@@ -2,10 +2,13 @@ const express = require('express')
 const router = express.Router()
 const expressJoi = require('@escook/express-joi')
 const postHandler = require('../router_handler/post')
-const { create_post_schema } = require('../schema/post')
+const { create_post_schema, update_post_schema } = require('../schema/post')
 
 // 创建帖子（支持独立/板块）
 router.post('/create',  expressJoi(create_post_schema), postHandler.createPost)
+
+// 更新帖子（用于更新草稿或发布草稿）
+router.put('/update', expressJoi(update_post_schema), postHandler.updatePost)
 
 // 获取帖子列表（可带 subreddit_id 参数）
 router.get('/list', postHandler.getPostsBySubredditWithUserAndStats)
@@ -46,6 +49,9 @@ router.post('/upload-video', upload.single('video'), postHandler.uploadVideo)
 
 // 获取当前用户的帖子（带分页）
 router.get('/me', postHandler.getCurrentUserPosts)
+
+// 获取当前用户的草稿列表（带分页）
+router.get('/drafts', postHandler.getDrafts)
 
 // 删除帖子（只允许作者本人删除）
 router.delete('/delete', postHandler.deletePost)

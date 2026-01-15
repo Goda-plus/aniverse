@@ -1,102 +1,108 @@
 <template>
-  <div class="create-post">
-    <div class="create-post-header">
-      <h2 class="create-post-title">
-        创建帖子
-      </h2>
-      <el-button text @click="handleCancel">
-        <el-icon><Close /></el-icon>
-      </el-button>
-    </div>
+  <div class="create-post-wrapper">
+    <div class="create-post">
+      <div class="create-post-header">
+        <h2 class="create-post-title">
+          创建帖子
+        </h2>
+        <el-button text @click="handleCancel">
+          <el-icon><Close /></el-icon>
+        </el-button>
+      </div>
 
-    <div class="create-post-form">
-      <!-- 选择社区 -->
-      <div class="form-item">
-        <label class="form-label">选择社区</label>
-        <el-select
-          ref="subredditSelectRef"
-          v-model="formData.subreddit"
-          placeholder="请选择社区"
-          filterable
-          class="form-select"
-          @change="handleSubredditChange"
-          @visible-change="handleSelectVisibleChange"
-        >
-          <el-option
-            v-for="subreddit in subreddits"
-            :key="subreddit.id"
-            :label="subreddit.name"
-            :value="subreddit.id"
+      <div class="create-post-form">
+        <!-- 选择社区 -->
+        <div class="form-item">
+          <label class="form-label">选择社区</label>
+          <el-select
+            ref="subredditSelectRef"
+            v-model="formData.subreddit"
+            placeholder="请选择社区"
+            filterable
+            class="form-select"
+            @change="handleSubredditChange"
+            @visible-change="handleSelectVisibleChange"
           >
-            <div class="subreddit-option">
-              <el-image
-                style="width: 24px; height: 24px; border-radius: 50%"
-                :src="subreddit.image_url"
-                :fit="contain"
-              />
-              <span class="subreddit-name">r/{{ subreddit.name }}</span>
+            <el-option
+              v-for="subreddit in subreddits"
+              :key="subreddit.id"
+              :label="subreddit.name"
+              :value="subreddit.id"
+            >
+              <div class="subreddit-option">
+                <el-image
+                  style="width: 24px; height: 24px; border-radius: 50%"
+                  :src="subreddit.image_url"
+                  :fit="contain"
+                />
+                <span class="subreddit-name">r/{{ subreddit.name }}</span>
+              </div>
+            </el-option>
+            <div v-if="loadingSubreddits">
+              <el-icon><Loading />加载中</el-icon>
             </div>
-          </el-option>
-          <div v-if="loadingSubreddits">
-            <el-icon><Loading />加载中</el-icon>
-          </div>
-        </el-select>
-      </div>
+          </el-select>
+        </div>
 
-      <!-- 帖子标题 -->
-      <div class="form-item">
-        <label class="form-label">标题</label>
-        <el-input
-          v-model="formData.title"
-          placeholder="请输入帖子标题"
-          maxlength="200"
-          show-word-limit
-          class="form-input"
-        />
-      </div>
-
-      <!-- 富文本编辑器 -->
-      <div class="form-item">
-        <label class="form-label">内容</label>
-        <div class="editor-wrapper">
-          <Toolbar
-            v-if="editorRef"
-            :editor="editorRef"
-            :default-config="toolbarConfig"
-            class="editor-toolbar"
-          />
-          <Editor
-            :key="editorKey"
-            v-model="formData.content"
-            :default-config="editorConfig"
-            style="height: 400px; overflow-y: hidden;"
-            @on-created="handleEditorCreated"
-            @on-change="handleEditorChange"
+        <!-- 帖子标题 -->
+        <div class="form-item">
+          <label class="form-label">标题</label>
+          <el-input
+            v-model="formData.title"
+            placeholder="请输入帖子标题"
+            maxlength="200"
+            show-word-limit
+            class="form-input"
           />
         </div>
-      </div>
 
-      <!-- 操作按钮 -->
-      <div class="form-actions">
-        <el-button @click="handleCancel">
-          取消
-        </el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          发布
-        </el-button>
+        <!-- 富文本编辑器 -->
+        <div class="form-item">
+          <label class="form-label">内容</label>
+          <div class="editor-wrapper">
+            <Toolbar
+              v-if="editorRef"
+              :editor="editorRef"
+              :default-config="toolbarConfig"
+              class="editor-toolbar"
+            />
+            <Editor
+              :key="editorKey"
+              v-model="formData.content"
+              :default-config="editorConfig"
+              style="height: 400px; overflow-y: hidden;"
+              @on-created="handleEditorCreated"
+              @on-change="handleEditorChange"
+            />
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="form-actions">
+          <el-button @click="handleCancel">
+            取消
+          </el-button>
+          <el-button :loading="submitting" @click="handleSaveDraft">
+            保存草稿
+          </el-button>
+          <el-button type="primary" :loading="submitting" @click="handleSubmit">
+            发布
+          </el-button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-  import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, defineEmits, nextTick } from 'vue'
+  import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, defineEmits, defineExpose, nextTick } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Close } from '@element-plus/icons-vue'
+  import { Close, Loading } from '@element-plus/icons-vue'
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
-  import { getAllSubreddits, createPost, uploadPostImage, uploadPostVideo,searchSubreddits } from '@/axios/api'
+  import { getAllSubreddits, uploadPostImage, uploadPostVideo, searchSubreddits } from '@/axios/api'
+  import { createPost, updatePost } from '@/axios/post'
 
   const router = useRouter()
   const route = useRoute()
@@ -433,14 +439,9 @@
     return count.toString()
   }
 
-  // 提交表单
+  // 提交表单（发布）
   const handleSubmit = async () => {
     // 验证表单
-    // if (!formData.subreddit) {
-    //   ElMessage.warning('请选择社区')
-    //   return
-    // }
-
     if (!formData.title || formData.title.trim() === '') {
       ElMessage.warning('请输入帖子标题')
       return
@@ -461,13 +462,14 @@
       const finalEditorContent = getEditorHtml()
       const finalTextContent = getEditorText()
       
-      // 创建帖子
+      // 创建帖子（发布）
       const postData = {
-        subreddit_id: formData.subreddit,
+        subreddit_id: formData.subreddit || null,
         title: formData.title,
         content_html: finalEditorContent,
         content_text: finalTextContent,
         image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
+        is_draft: 0  // 0表示已发布
       }
 
       const res = await createPost(postData)
@@ -480,15 +482,44 @@
       imageUrl.value = [] // 重置图片 URL 数组
       
       // 发出成功事件，父组件会处理导航
-      // 注意：发出事件后，组件可能会立即卸载，所以不再执行清空编辑器的操作
       emit('success', res.data)
-      
-      // 导航逻辑由父组件 CreatePostView 的 handleSuccess 处理
-      // 这里不再执行 router.back()，避免与父组件的导航冲突
-      // 也不再清空编辑器，因为组件即将卸载，清空操作会导致访问已销毁的编辑器实例
     } catch (error) {
       console.error('发布帖子失败:', error)
-      ElMessage.error('发布失败，请重试')
+      ElMessage.error(error.response?.data?.message || '发布失败，请重试')
+    } finally {
+      submitting.value = false
+    }
+  }
+
+  // 保存草稿
+  const handleSaveDraft = async () => {
+    // 草稿可以没有标题和内容
+    submitting.value = true
+
+    try {
+      // 获取编辑器内容
+      const finalEditorContent = getEditorHtml()
+      const finalTextContent = getEditorText()
+      
+      // 创建草稿
+      const postData = {
+        subreddit_id: formData.subreddit || null,
+        title: formData.title || '无标题',
+        content_html: finalEditorContent || '<p></p>',
+        content_text: finalTextContent || '',
+        image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
+        is_draft: 1  // 1表示草稿
+      }
+
+      const res = await createPost(postData)
+      ElMessage.success('草稿保存成功')
+      
+      // 保存草稿后，不清空表单，用户可以继续编辑
+      // 发出成功事件，父组件可以处理导航和刷新草稿列表
+      emit('success', res.data)
+    } catch (error) {
+      console.error('保存草稿失败:', error)
+      ElMessage.error(error.response?.data?.message || '保存草稿失败，请重试')
     } finally {
       submitting.value = false
     }
@@ -512,6 +543,65 @@
       // 导航逻辑由父组件 CreatePostView 的 handleCancel 处理
     }
   }
+
+  // 加载草稿到编辑器（处理来自 DraftSidebar 的事件）
+  const handleLoadDraft = async (draft) => {
+    // 填充表单数据
+    formData.subreddit = draft.subreddit_id || ''
+    formData.title = draft.title || ''
+    
+    // 如果有图片URL，解析并添加到imageUrl数组
+    if (draft.image_url) {
+      try {
+        const imageUrls = JSON.parse(draft.image_url)
+        if (Array.isArray(imageUrls)) {
+          imageUrl.value = imageUrls
+        }
+      } catch (e) {
+        console.warn('解析图片URL失败:', e)
+      }
+    }
+    
+    // 等待编辑器创建完成
+    let retries = 0
+    const maxRetries = 10
+    const waitForEditor = () => {
+      return new Promise((resolve) => {
+        const checkEditor = () => {
+          const editor = getEditorInstance()
+          if (editor) {
+            resolve(editor)
+          } else if (retries < maxRetries) {
+            retries++
+            setTimeout(checkEditor, 100)
+          } else {
+            resolve(null)
+          }
+        }
+        checkEditor()
+      })
+    }
+    
+    const editor = await waitForEditor()
+    if (editor) {
+      try {
+        isClearingEditor.value = true
+        editor.setHtml(draft.content_html || '<p></p>')
+        formData.content = draft.content_html || ''
+        isClearingEditor.value = false
+        ElMessage.success('草稿已加载')
+      } catch (error) {
+        console.error('加载草稿失败:', error)
+        ElMessage.error('加载草稿失败')
+        isClearingEditor.value = false
+      }
+    } else {
+      // 如果编辑器还没创建，先设置formData.content，编辑器创建后会自动加载
+      formData.content = draft.content_html || ''
+      ElMessage.warning('编辑器正在初始化，请稍候...')
+    }
+  }
+
 
   // 组件挂载
   onMounted(() => {
@@ -557,9 +647,27 @@
       }
     }
   })
+
+  // 暴露方法供父组件调用
+  defineExpose({
+    loadDraft: handleLoadDraft
+  })
 </script>
 
 <style scoped>
+.create-post-wrapper {
+  margin: 0 auto;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* 响应式设计 */
+@media (max-width: 960px) {
+  .create-post-wrapper {
+    padding: 0;
+  }
+}
+
 .create-post {
   background: var(--card-bg);
   border: 1px solid var(--card-border);

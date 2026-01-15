@@ -31,3 +31,19 @@ export * from './chat'
 
 // 子版块成员相关接口
 export * from './subredditMember'
+
+// 次元库相关接口
+// 媒体相关接口
+export * from './media'
+
+// 标签相关接口
+export * from './tags'
+
+// 角色相关接口
+export * from './characters'
+
+// 声优相关接口
+export * from './voiceActors'
+
+// 媒体类型相关接口
+export * from './mediaGenres'

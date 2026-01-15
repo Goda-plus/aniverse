@@ -27,6 +27,12 @@ export const getUserCommentedPosts = (data) => request.get('/api/post/commented'
 // 创建帖子
 export const createPost = (data) => request.post('/api/post/create', data)
 
+// 更新帖子（用于更新草稿或发布草稿）
+export const updatePost = (data) => request.put('/api/post/update', data)
+
+// 获取当前用户的草稿列表（带分页）
+export const getDrafts = (data) => request.get('/api/post/drafts', { params: data })
+
 // 删除帖子
 export const deletePost = (post_id) => request.delete('/api/post/delete', { data: { post_id } })
 

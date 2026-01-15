@@ -85,6 +85,29 @@ app.use(
         /^\/api\/mall\/categories$/,
         /^\/api\/mall\/product\/\d+$/,
         /^\/api\/mall\/reviews$/,
+        // 次元库公开接口（查询类接口）
+        /^\/api\/media\/list$/,
+        /^\/api\/media\/detail\/\d+$/,
+        /^\/api\/media\/search$/,
+        /^\/api\/media\/\d+\/tags$/,
+        /^\/api\/media\/\d+\/genres$/,
+        /^\/api\/media\/\d+\/characters$/,
+        /^\/api\/media\/\d+\/relations$/,
+        /^\/api\/media\/\d+\/trends$/,
+        /^\/api\/media\/\d+\/rankings$/,
+        /^\/api\/media\/\d+\/synonyms$/,
+        /^\/api\/tags\/list$/,
+        /^\/api\/tags\/detail\/\d+$/,
+        /^\/api\/tags\/\d+\/media$/,
+        /^\/api\/characters\/list$/,
+        /^\/api\/characters\/detail\/\d+$/,
+        /^\/api\/characters\/\d+\/media$/,
+        /^\/api\/voice-actors\/list$/,
+        /^\/api\/voice-actors\/detail\/\d+$/,
+        /^\/api\/voice-actors\/\d+\/characters$/,
+        /^\/api\/media-genres\/list$/,
+        /^\/api\/media-genres\/detail\/\d+$/,
+        /^\/api\/media-genres\/\d+\/media$/,
         /^\/uploads(\/.*)?$/
       ]
     })
@@ -143,10 +166,24 @@ const chatRoomRouter = require('./router/chatRoom')
 const chatRouter     = require('./router/chat')
 const mallRouter     = require('./router/mall')
 
+// 次元库相关路由
+const mediaRouter = require('./router/media')
+const tagsRouter = require('./router/tags')
+const charactersRouter = require('./router/characters')
+const voiceActorsRouter = require('./router/voiceActors')
+const mediaGenresRouter = require('./router/mediaGenres')
+
 app.use('/api/friends',   friendRouter)
 app.use('/api/chatroom',  chatRoomRouter)
 app.use('/api/chat',      chatRouter)
 app.use('/api/mall',      mallRouter)
+
+// 次元库路由
+app.use('/api/media', mediaRouter)
+app.use('/api/tags', tagsRouter)
+app.use('/api/characters', charactersRouter)
+app.use('/api/voice-actors', voiceActorsRouter)
+app.use('/api/media-genres', mediaGenresRouter)
 
 
 

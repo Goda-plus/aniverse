@@ -77,11 +77,11 @@
                     <el-icon><Plus /></el-icon>
                     <span>创建帖子</span>
                   </div>
-                  <div class="menu-item" @click="handleUserCommand('drafts')">
+                  <div class="menu-item" @click="handleUserCommand('create-post')">
                     <el-icon><Document /></el-icon>
                     <span>草稿</span>
                   </div>
-                  <div class="menu-item" @click="handleUserCommand('monetization')">
+                  <!-- <div class="menu-item" @click="handleUserCommand('monetization')">
                     <el-icon><Money /></el-icon>
                     <span>创收</span>
                     <span class="menu-subtitle">在 AniVerse 上赚取现金</span>
@@ -89,7 +89,7 @@
                   <div class="menu-item" @click="handleUserCommand('premium')">
                     <el-icon><Star /></el-icon>
                     <span>Premium</span>
-                  </div>
+                  </div> -->
                   <div class="menu-item menu-item-with-toggle" @click="toggleDarkMode">
                     <el-icon><Moon v-if="!themeStore.isDark" /><Sunny v-else /></el-icon>
                     <span>深色模式</span>
@@ -195,10 +195,10 @@
                     关于 AniVerse
                   </template>
                 </el-menu-item>
-                <el-menu-item index="/advertise">
-                  <el-icon><Promotion /></el-icon>
+                <el-menu-item index="/media-library">
+                  <el-icon><Collection /></el-icon>
                   <template #title>
-                    广告
+                    次元库
                   </template>
                 </el-menu-item>
                 <el-menu-item index="/developer">
@@ -321,7 +321,8 @@
     Sunny,
     DataBoard,
     Plus,
-    ShoppingCartFull
+    ShoppingCartFull,
+    Collection
   } from '@element-plus/icons-vue'
 
   const route = useRoute()
