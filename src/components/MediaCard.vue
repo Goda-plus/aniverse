@@ -9,8 +9,14 @@
     raw-content
   >
     <div class="media-card" @click="handleClick">
-      <div class="media-poster">
-        <img :src="media.cover_image_large || media.cover || media.poster || '/placeholder.jpg'" :alt="mediaTitle">
+      <div class="media-poster" :style="posterStyle">
+        <img
+          :src="media.cover_image_large || media.cover || media.poster || '/placeholder.jpg'"
+          :alt="mediaTitle"
+          :class="{ 'is-loaded': isImageLoaded }"
+          @load="handleImageLoad"
+          @error="handleImageError"
+        >
       </div>
       <div class="media-info">
         <h3 class="media-title" :title="mediaTitle">
@@ -22,7 +28,7 @@
 </template>
 
 <script setup>
-  import { defineProps, computed } from 'vue'
+  import { defineProps, computed, ref } from 'vue'
   import { useRouter } from 'vue-router'
 
   const props = defineProps({
@@ -33,6 +39,15 @@
   })
 
   const router = useRouter()
+
+  const isImageLoaded = ref(false)
+
+  const posterStyle = computed(() => {
+    const color = props.media.cover_image_color
+    return {
+      backgroundColor: color 
+    }
+  })
 
   // 获取标题（优先使用 title_native，否则使用 title）
   const mediaTitle = computed(() => {
@@ -161,6 +176,15 @@
       router.push(`/media/${props.media.id}`)
     }
   }
+
+  const handleImageLoad = () => {
+    isImageLoaded.value = true
+  }
+
+  const handleImageError = () => {
+    // 图片加载失败时保持使用占位背景色
+    isImageLoaded.value = false
+  }
 </script>
 
 <style scoped>
@@ -195,7 +219,12 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.media-poster img.is-loaded {
+  opacity: 1;
 }
 
 .media-card:hover .media-poster img {

@@ -261,37 +261,13 @@
         </div>
 
         <!-- 有筛选时显示：筛选后的媒体列表 -->
-        <div v-else class="section-container">
-          <div class="section-header">
-            <h2 class="section-title">
-              FILTERED RESULTS
-            </h2>
-            <span v-if="filteredPagination.total" class="result-count">
-              {{ filteredPagination.total }} results
-            </span>
-          </div>
-          <div v-if="loadingFiltered" class="media-grid">
-            <el-skeleton
-              v-for="i in 10"
-              :key="i"
-              :rows="0"
-              animated
-            >
-              <template #template>
-                <div class="skeleton-card">
-                  <el-skeleton-item variant="image" style="width: 100%; padding-top: 142.857%;" />
-                  <el-skeleton-item variant="text" style="width: 80%; margin-top: 12px;" />
-                  <el-skeleton-item variant="text" style="width: 60%;" />
-                </div>
-              </template>
-            </el-skeleton>
-          </div>
-          <MediaList
-            v-else
-            :items="filteredMedia"
-            :layout="mediaLayout"
-          />
-        </div>
+        <FilteredResultsSection
+          v-else
+          :items="filteredMedia"
+          :layout="mediaLayout"
+          :loading="loadingFiltered"
+          :pagination="filteredPagination"
+        />
       </div>
     </template>
   </MainContentLayout>
@@ -303,10 +279,10 @@
   import { ElMessage } from 'element-plus'
   import { Search, Filter, ArrowDown } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
-  import MediaCard from '@/components/MediaCard.vue'
   import MediaList from '@/components/MediaList.vue'
   import TopAnimeRanking from '@/components/TopAnimeRanking.vue'
-  import { getMediaList, searchMedia } from '@/axios/media'
+  import FilteredResultsSection from '@/components/FilteredResultsSection.vue'
+  import { getMediaList } from '@/axios/media'
   import { getGenresList } from '@/axios/mediaGenres'
   import { useScrollPagination } from '@/utils/useScrollPagination'
 
