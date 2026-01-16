@@ -69,6 +69,13 @@
         :class="viewMode"
         @click="handlePostClick(post)"
       >
+        <!-- 复选框区域 -->
+        <div v-if="showCheckbox" class="post-checkbox-section" @click.stop>
+          <el-checkbox 
+            :model-value="selectedPostIds.includes(post.id)"
+            @change="handleCheckboxChange(post, $event)"
+          />
+        </div>
         <!-- 投票区域 -->
         <div class="post-vote-section">
           <el-button 
@@ -239,12 +246,20 @@
     showRecommendation: {
       type: Boolean,
       default: false
+    },
+    showCheckbox: {
+      type: Boolean,
+      default: false
+    },
+    selectedPostIds: {
+      type: Array,
+      default: () => []
     }
   })
   const userStore = useUserStore()
 
 
-  const emit = defineEmits(['vote', 'comment', 'reward', 'share', 'save', 'hide', 'report', 'click'])
+  const emit = defineEmits(['vote', 'comment', 'reward', 'share', 'save', 'hide', 'report', 'click', 'select-change'])
 
   const currentSort = ref('最佳')
   const viewMode = ref('compact') // 'compact' 紧凑模式 或 'card' 卡片模式
@@ -321,6 +336,10 @@
   const handleImageClick = (post) => {
     // 可以在这里实现图片预览功能
     console.log('Image clicked:', post)
+  }
+
+  const handleCheckboxChange = (post, checked) => {
+    emit('select-change', { post, checked })
   }
 
   const formatVoteCount = (count) => {
@@ -617,6 +636,17 @@
 
 .card-vote-count.negative {
   color: #7193ff;
+}
+
+/* 复选框区域 */
+.post-checkbox-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  background: var(--bg-secondary);
+  min-width: 40px;
+  transition: background-color 0.3s ease;
 }
 
 /* 投票区域 */

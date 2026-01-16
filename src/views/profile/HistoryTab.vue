@@ -1,5 +1,22 @@
 <template>
   <div class="history-section">
+    <div v-if="posts.length > 0" class="batch-actions">
+      <el-checkbox 
+        v-model="selectAll" 
+        :indeterminate="isIndeterminate"
+        @change="handleSelectAll"
+      >
+        全选
+      </el-checkbox>
+      <el-button 
+        type="danger" 
+        :icon="Delete"
+        :disabled="selectedPostIds.length === 0"
+        @click="handleBatchDelete"
+      >
+        批量删除 ({{ selectedPostIds.length }})
+      </el-button>
+    </div>
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <el-skeleton :rows="3" animated />
@@ -10,6 +27,8 @@
           v-if="posts.length > 0"
           :posts="posts" 
           :show-recommendation="false"
+          :show-checkbox="true"
+          :selected-post-ids="selectedPostIds"
           @vote="handleVote"
           @comment="handleComment"
           @share="handleShare"
@@ -17,6 +36,7 @@
           @hide="handleHide"
           @report="handleReport"
           @click="handlePostClick"
+          @select-change="handleSelectChange"
         />
         <div v-else-if="!loading" class="empty-state">
           <div class="empty-icon">
@@ -50,11 +70,12 @@
 </template>
 
 <script setup>
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, computed } from 'vue'
   import { useRouter } from 'vue-router'
-  import { ElMessage } from 'element-plus'
+  import { Delete } from '@element-plus/icons-vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   import PostList from '@/components/PostList.vue'
-  import { getBrowseHistory } from '@/axios/browse'
+  import { getBrowseHistory, deleteHistoryItem } from '@/axios/browse'
   import { userVote } from '@/axios/vote'
   import { useUserStore } from '@/stores/user'
 
@@ -67,6 +88,8 @@
   const pageSize = ref(20)
   const hasMore = ref(true)
   const total = ref(0)
+  const selectedPostIds = ref([])
+  const selectAll = ref(false)
 
   // 转换 API 数据格式为组件需要的格式
   const transformPostData = (apiPost) => {
@@ -131,10 +154,15 @@
         // 判断是否还有更多数据
         hasMore.value = response.data.pagination?.hasNextPage || false
         total.value = response.data.pagination?.totalItems || response.data.pagination?.total || 0
+        // 重置选中状态
+        selectedPostIds.value = []
+        selectAll.value = false
       } else {
         posts.value = []
         hasMore.value = false
         total.value = 0
+        selectedPostIds.value = []
+        selectAll.value = false
       }
     } catch (error) {
       console.error('加载浏览历史失败:', error)
@@ -237,6 +265,108 @@
     loadBrowseHistory()
   }
 
+  // 处理复选框变化
+  const handleSelectChange = ({ post, checked }) => {
+    if (checked) {
+      if (!selectedPostIds.value.includes(post.id)) {
+        selectedPostIds.value.push(post.id)
+      }
+    } else {
+      const index = selectedPostIds.value.indexOf(post.id)
+      if (index > -1) {
+        selectedPostIds.value.splice(index, 1)
+      }
+    }
+    updateSelectAllState()
+  }
+
+  // 全选/取消全选
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      selectedPostIds.value = posts.value.map(post => post.id)
+    } else {
+      selectedPostIds.value = []
+    }
+    selectAll.value = checked
+  }
+
+  // 更新全选状态
+  const updateSelectAllState = () => {
+    if (posts.value.length === 0) {
+      selectAll.value = false
+      return
+    }
+    const allSelected = posts.value.every(post => selectedPostIds.value.includes(post.id))
+    const someSelected = posts.value.some(post => selectedPostIds.value.includes(post.id))
+    selectAll.value = allSelected
+  }
+
+  // 计算是否处于半选状态
+  const isIndeterminate = computed(() => {
+    if (posts.value.length === 0) return false
+    const selectedCount = selectedPostIds.value.length
+    return selectedCount > 0 && selectedCount < posts.value.length
+  })
+
+  // 批量删除历史记录
+  const handleBatchDelete = async () => {
+    if (selectedPostIds.value.length === 0) {
+      ElMessage.warning('请先选择要删除的历史记录')
+      return
+    }
+
+    try {
+      await ElMessageBox.confirm(
+        `确定要删除选中的 ${selectedPostIds.value.length} 条历史记录吗？此操作不可恢复。`,
+        '确认删除',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+
+      loading.value = true
+      const deletePromises = selectedPostIds.value.map(postId => 
+        deleteHistoryItem({ target_type: 'post', target_id: postId }).catch(error => {
+          console.error(`删除历史记录 ${postId} 失败:`, error)
+          return { success: false, postId, error }
+        })
+      )
+
+      const results = await Promise.all(deletePromises)
+      const successCount = results.filter(r => r.success !== false).length
+      const failCount = results.length - successCount
+
+      // 从列表中移除已删除的历史记录
+      posts.value = posts.value.filter(post => !selectedPostIds.value.includes(post.id))
+      selectedPostIds.value = []
+      selectAll.value = false
+      
+      // 更新总数
+      total.value = Math.max(0, total.value - successCount)
+
+      if (failCount === 0) {
+        ElMessage.success(`成功删除 ${successCount} 条历史记录`)
+      } else {
+        ElMessage.warning(`成功删除 ${successCount} 条历史记录，${failCount} 条删除失败`)
+      }
+
+      // 如果当前页没有数据了，且不是第一页，则跳转到上一页
+      if (posts.value.length === 0 && currentPage.value > 1) {
+        currentPage.value--
+        loadBrowseHistory()
+      }
+    } catch (error) {
+      if (error !== 'cancel') {
+        console.error('批量删除失败:', error)
+        ElMessage.error('删除失败，请稍后重试')
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
   onMounted(() => {
     loadBrowseHistory()
   })
@@ -245,6 +375,14 @@
 <style scoped>
 .history-section {
   width: 100%;
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
 }
 
 .loading-container {
