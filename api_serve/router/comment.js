@@ -22,5 +22,8 @@ router.get('/child',commentHandler.getRepliesByParentId)
 // 删除评论（只允许作者本人删除）
 router.delete('/delete', commentHandler.deleteComment)
 
+// 获取当前用户的评论列表（带分页）
+router.get('/user', commentHandler.getUserComments)
+
 
 module.exports = router

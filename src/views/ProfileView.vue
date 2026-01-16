@@ -1,151 +1,75 @@
 <template>
   <div class="profile-page setting-control">
+    <!-- Banner背景横幅 - 占据40%高度 -->
+    <div class="profile-banner">
+      <div :style="{ backgroundImage: 'url(' + userStore.user.banner + ')' }" class="banner-image" />
+    </div>
+
+    <!-- 主要内容容器 -->
     <div class="profile-container">
-      <!-- 中央内容区 -->
-      <div class="main-content setting-control">
-        <!-- 用户头像和基本信息 -->
-        <div class="profile-header">
-          <div class="profile-avatar-wrapper">
-            <el-avatar :size="80" :src="avatar" class="profile-avatar" @click="showAvatarEditor = true" />
-            <div class="avatar-edit-overlay" @click="showAvatarEditor = true">
-              <el-icon class="edit-icon">
-                <Edit />
-              </el-icon>
-            </div>
-          </div>
-          <div class="profile-info">
-            <div class="username">
-              {{ userStore.username }}
-            </div>
-            <div class="user-handle">
-              u/{{ userStore.username }}
-            </div>
+      <!-- 头像和用户名区域 -->
+      <div class="profile-header-section">
+        <div class="profile-avatar-wrapper">
+          <el-avatar shape="square" :size="120" :src="avatar" class="profile-avatar" @click="showAvatarEditor = true" />
+          <div class="avatar-edit-overlay" @click="showAvatarEditor = true">
+            <el-icon class="edit-icon">
+              <Edit />
+            </el-icon>
           </div>
         </div>
-
-        <!-- 标签导航 -->
-        <el-tabs 
-          v-model="activeTab" 
-          class="profile-tabs"
-          @tab-change="handleTabChange"
-        >
-          <el-tab-pane
-            v-for="tab in tabs"
-            :key="tab.key"
-            :label="tab.label"
-            :name="tab.key"
-          />
-        </el-tabs>
-
-        <!-- 内容区域 -->
-        <div class="content-area">
-          <router-view />
+        <div class="profile-username">
+          {{ userStore.username }}
         </div>
       </div>
 
-      <!-- 右侧边栏 -->
-      <div class="sidebar setting-control">
-        <div class="card sidebar-container">
-          <!-- 用户资料部分 -->
-          <div class="sidebar-section">
-            <div class="profile-banner" />
-            <div class="profile-card-content">
-              <div class="card-username">
-                {{ userStore.username }}
-              </div>
-              <el-button size="small" class="share-btn">
-                <el-icon>
-                  <Share />
-                </el-icon>
-                共享
-              </el-button>
-              <div class="stats">
-                <div class="stat-item">
-                  <span class="stat-value">0</span>
-                  <span class="stat-label">位粉丝</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">1</span>
-                  <span class="stat-label">Karma</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">0</span>
-                  <span class="stat-label">贡献</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">6 个月</span>
-                  <span class="stat-label">资历</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">0</span>
-                  <span class="stat-label">活跃于</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">0</span>
-                  <span class="stat-label">已赚取金币</span>
-                </div>
-              </div>
+      <!-- 标签导航 -->
+      <el-tabs 
+        v-model="activeTab" 
+        class="profile-tabs"
+        @tab-change="handleTabChange"
+      >
+        <el-tab-pane
+          v-for="tab in tabs"
+          :key="tab.key"
+          :label="tab.label"
+          :name="tab.key"
+        />
+      </el-tabs>
+
+      <div class="content-area">
+        <div
+          v-if="activeTab === 'overview'"
+          class="overview-content"
+        >
+          <div class="user-bio-card">
+            <div class="bio-text">
+              {{ userBio }}
+            </div>
+            <div class="bio-decoration">
+              {{ bioDecoration }}
+            </div>
+            <div
+              v-if="hasSpoiler"
+              class="spoiler-link"
+            >
+              <a href="#" @click.prevent="toggleSpoiler">Spoiler, click to view</a>
             </div>
           </div>
-
-          <!-- 分隔线 -->
-          <el-divider />
-
-          <!-- 成就部分 -->
-          <div class="sidebar-section achievements-section">
-            <div class="card-header">
-              <span class="card-title">成就</span>
-              <span class="achievements-count">已解锁 {{ achievements.length }} 个</span>
-            </div>
-            <div class="achievements-list">
-              <div
-                v-for="(achievement, index) in achievements.slice(0, 3)"
+          <div class="activity-history">
+            <h3 class="activity-title">
+              Activity History
+            </h3>
+            <div class="activity-grid">
+              <div 
+                v-for="(day, index) in activityDays" 
                 :key="index"
-                class="achievement-icon"
-              >
-                {{ achievement.icon }}
-              </div>
-            </div>
-            <div class="achievements-text">
-              <div
-                v-for="(achievement, index) in achievements.slice(0, 3)"
-                :key="index"
-                class="achievement-name"
-              >
-                {{ achievement.name }}
-              </div>
-              <div v-if="achievements.length > 3" class="achievement-more">
-                +另外{{ achievements.length - 3 }}个
-              </div>
-            </div>
-            <el-button text class="view-all-btn">
-              全部查看
-            </el-button>
-          </div>
-
-          <!-- 分隔线 -->
-          <el-divider />
-
-          <!-- 设置部分 -->
-          <div class="sidebar-section settings-section">
-            <div class="settings-item">
-              <div class="settings-icon">
-                👤
-              </div>
-              <div class="settings-content">
-                <div class="settings-title">
-                  个人资料
-                </div>
-                <div class="settings-desc">
-                  自定义你的个人资料
-                </div>
-              </div>
-              <el-button size="small" type="primary" class="update-btn">
-                更新
-              </el-button>
+                class="activity-day"
+                :class="{ active: day.active }"
+              />
             </div>
           </div>
         </div>
+        <router-view v-else />
       </div>
     </div>
 
@@ -157,13 +81,14 @@
 <script setup>
   import { computed, ref } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
-  import { Share, Edit } from '@element-plus/icons-vue'
+  import { Edit } from '@element-plus/icons-vue'
   import { useUserStore } from '@/stores/user'
   import AvatarEditor from '@/components/AvatarEditor.vue'
 
   const router = useRouter()
   const route = useRoute()
   const userStore = useUserStore()
+  
   // 处理头像URL，确保相对路径转换为完整URL
   const avatar = computed(() => {
     const avatarUrl = userStore.avatar || 'https://i.pravatar.cc/120?img=7'
@@ -181,6 +106,7 @@
     console.log('头像更新成功:', avatarUrl)
   }
 
+  // 标签导航 - 根据图片中的标签
   const tabs = [
     { key: 'overview', label: '概述', route: 'profile-overview' },
     { key: 'posts', label: '帖子', route: 'profile-posts' },
@@ -188,7 +114,8 @@
     { key: 'saved', label: '已保存', route: 'profile-saved' },
     { key: 'history', label: '历史记录', route: 'profile-history' },
     { key: 'upvoted', label: '已点赞', route: 'profile-upvoted' },
-    { key: 'downvoted', label: '已点踩', route: 'profile-downvoted' }
+    { key: 'downvoted', label: '已点踩', route: 'profile-downvoted' },
+    { key: 'communities', label: '我的社区', route: 'profile-communities' }
   ]
 
   // 根据当前路由确定激活的标签
@@ -196,7 +123,7 @@
     get: () => {
       const routeName = route.name
       const tab = tabs.find(t => t.route === routeName)
-      return tab ? tab.key : 'posts'
+      return tab ? tab.key : 'overview'
     },
     set: (value) => {
       const tab = tabs.find(t => t.key === value)
@@ -213,53 +140,117 @@
     }
   }
 
-  const achievements = [
-    { icon: '🎉', name: '本地社区新人' },
-    { icon: '👋', name: '新成员' },
-    { icon: '🔍', name: '内容发现家' },
-    { icon: '⭐', name: '活跃用户' },
-    { icon: '🏆', name: '社区贡献者' }
-  ]
+  // 用户简介数据
+  const userBio = ref('everythingoes')
+  const bioDecoration = ref('°•.○.o°*')
+  const hasSpoiler = ref(true)
+
+  const toggleSpoiler = () => {
+    // 处理spoiler点击
+    console.log('Toggle spoiler')
+  }
+
+  // 活动历史数据 - 生成365天的活动网格
+  const activityDays = ref(
+    Array.from({ length: 365 }, (_, i) => ({
+      active: Math.random() > 0.7 // 随机生成活动数据
+    }))
+  )
+
+  // Anime统计数据
+  const animeStats = ref({
+    total: 150,
+    daysWatched: 56.7,
+    meanScore: 51.5,
+    progress: 75 // 进度百分比，基于150/200
+  })
+
+  // Manga统计数据
+  const mangaStats = ref({
+    total: 17,
+    chaptersRead: 3641,
+    meanScore: 80.4,
+    progress: 72.8 // 进度百分比，基于3641/5000
+  })
 </script>
 
 <style scoped>
-/* Reddit 风格的个人中心页面 - 支持主题切换 */
+/* AniList风格的个人中心页面 - 深色主题，粉紫色高亮 */
 
 .profile-page {
-  background: var(--bg-secondary);
+  background: #1a1a1b;
   min-height: 100vh;
-  padding: 20px;
-  transition: background-color 0.3s ease;
+  position: relative;
+  padding: 0;
 }
 
+/* Banner背景横幅 - 占据40%页面高度 */
+.profile-banner {
+  position: relative;
+  width: 100%;
+  height: 40vh;
+  min-height: 300px;
+  overflow: hidden;
+}
+
+.banner-image {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, 
+    rgba(255, 182, 193, 0.4) 0%, 
+    rgba(255, 105, 180, 0.3) 25%,
+    rgba(138, 43, 226, 0.2) 50%,
+    rgba(30, 144, 255, 0.3) 75%,
+    rgba(176, 224, 230, 0.2) 100%);
+  background-image: 
+    radial-gradient(ellipse 60% 40% at 20% 20%, rgba(255, 182, 193, 0.6) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 30% at 80% 30%, rgba(255, 105, 180, 0.5) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 25% at 50% 60%, rgba(176, 224, 230, 0.4) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 20% at 70% 80%, rgba(138, 43, 226, 0.3) 0%, transparent 60%);
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-image::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><path d="M50,50 Q100,30 150,50 T250,50" stroke="rgba(255,255,255,0.1)" fill="none" stroke-width="2"/><path d="M30,100 Q100,80 170,100 T310,100" stroke="rgba(255,255,255,0.08)" fill="none" stroke-width="1.5"/></svg>');
+  opacity: 0.2;
+  background-size: 400px 400px;
+  animation: float 20s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-20px) translateX(10px);
+  }
+}
+
+/* 主要内容容器 */
 .profile-container {
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  padding: 0 20px;
+}
+
+/* 头像和用户名区域 */
+.profile-header-section {
   display: flex;
+  align-items: flex-end;
   gap: 20px;
-}
-
-/* 中央内容区 */
-.main-content {
-  flex: 1;
-  background: var(--card-bg);
-  border-radius: 4px;
-  overflow: hidden;
-  max-height: calc(100vh - 40px);
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--card-border);
-  transition: background-color 0.3s ease, border-color 0.3s ease;
-}
-
-.profile-header {
-  background: var(--card-bg);
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  border-bottom: 1px solid var(--border-color);
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  padding-bottom: 20px;
+  margin-top: -60px; /* 让头像部分重叠在banner上 */
+  position: relative;
+  z-index: 10;
 }
 
 .profile-avatar-wrapper {
@@ -269,8 +260,8 @@
 }
 
 .profile-avatar {
-  border: 3px solid var(--card-bg);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 4px solid #1a1a1b;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   transition: opacity 0.3s ease;
 }
 
@@ -303,41 +294,28 @@
   font-size: 24px;
 }
 
-.theme-dark .profile-avatar {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+.profile-username {
+  font-size: 32px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-.profile-info {
-  flex: 1;
-}
-
-.username {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-  transition: color 0.3s ease;
-}
-
-.user-handle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
-}
-
-/* 标签导航 - Reddit 风格 */
+/* 标签导航 */
 .profile-tabs {
-  padding: 0 10px;
-  background: var(--card-bg);
-  transition: background-color 0.3s ease;
+  background: rgba(26, 26, 27, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 8px 8px 0 0;
+  padding: 0 20px;
+  margin-top: 20px;
 }
 
 /* Element Plus Tabs 样式定制 */
 :deep(.el-tabs__header) {
   margin: 0;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--card-bg);
-  transition: border-color 0.3s ease, background-color 0.3s ease;
+  border-bottom: none;
+  background: transparent;
 }
 
 :deep(.el-tabs__nav-wrap) {
@@ -349,38 +327,29 @@
 }
 
 :deep(.el-tabs__item) {
-  padding: 12px 16px;
+  padding: 16px 20px;
   font-size: 14px;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 500;
   transition: all 0.2s ease;
   border-bottom: 2px solid transparent;
 }
 
 :deep(.el-tabs__item:hover) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 :deep(.el-tabs__item.is-active) {
-  color: var(--text-primary);
+  color: #ffffff;
   font-weight: 600;
-}
-
-/* Reddit 蓝色链接 - 深色模式下使用浅蓝色 */
-.theme-light :deep(.el-tabs__item.is-active) {
-  border-bottom-color: #0079d3;
-}
-
-.theme-dark :deep(.el-tabs__item.is-active) {
-  border-bottom-color: #4fbcff;
+  border-bottom-color: #ff69b4;
 }
 
 :deep(.el-tabs__active-bar) {
   display: none;
 }
 
-/* 内容区域 */
+/* 内容区域 - 左右两列布局 */
 .content-area {
   background: var(--card-bg);
   flex: 1;
@@ -390,305 +359,202 @@
   transition: background-color 0.3s ease;
 }
 
-.posts-section {
-  width: 100%;
-  height: 100%;
+/* 左列：用户描述和活动历史 */
+.left-column {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  gap: 20px;
 }
 
-.section-header {
+.overview-content {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  margin-bottom: 16px;
-  cursor: pointer;
-  transition: color 0.3s ease;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.theme-light .section-header {
-  color: #0079d3;
+.user-bio-card {
+  background: #252529;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.theme-dark .section-header {
-  color: #4fbcff;
-}
-
-.section-header:hover {
-  text-decoration: underline;
-}
-
-.eye-icon,
-.arrow-icon {
+.bio-text {
   font-size: 16px;
-}
-
-.create-post-btn {
-  margin-bottom: 24px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.6;
-}
-
-.empty-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
+  color: #ff69b4;
   margin-bottom: 8px;
-  transition: color 0.3s ease;
 }
 
-.empty-description {
+.bio-decoration {
   font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 20px;
-  line-height: 1.5;
-  transition: color 0.3s ease;
+  color: #ff69b4;
+  margin-bottom: 12px;
 }
 
-.update-settings-btn {
+.spoiler-link {
   margin-top: 8px;
 }
 
-/* 右侧边栏 */
-.sidebar {
-  width: 320px;
+.spoiler-link a {
+  color: #ff69b4;
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.2s ease;
 }
 
-.sidebar-container {
-  background: var(--card-bg);
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid var(--card-border);
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+.spoiler-link a:hover {
+  color: #ff1493;
+  text-decoration: underline;
 }
 
-.sidebar-section {
-  position: relative;
+.activity-history {
+  background: #252529;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* 用户资料部分 */
-.sidebar-section:first-child {
-  position: relative;
-}
-
-.profile-banner {
-  height: 100px;
-  position: relative;
-}
-
-.theme-light .profile-banner {
-  background: linear-gradient(135deg, #0079d3 0%, #005ba1 100%);
-}
-
-.theme-dark .profile-banner {
-  background: linear-gradient(135deg, #1a1a1b 0%, #272729 100%);
-}
-
-.profile-banner::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 24px;
-  height: 24px;
-  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>') no-repeat center;
-  background-size: 16px;
-  opacity: 0.6;
-}
-
-.profile-card-content {
-  padding: 16px;
-  padding-top: 8px;
-}
-
-.card-username {
+.activity-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-  transition: color 0.3s ease;
-}
-
-.share-btn {
-  width: 100%;
+  color: #ffffff;
   margin-bottom: 16px;
 }
 
-.stats {
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12px, 1fr));
+  gap: 4px;
+  max-width: 100%;
+}
+
+.activity-day {
+  aspect-ratio: 1;
+  background: #2a2a2e;
+  border-radius: 2px;
+  transition: background-color 0.2s ease;
+}
+
+.activity-day.active {
+  background: #ff69b4;
+}
+
+/* 右列：统计卡片 */
+.right-column {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 20px;
+}
+
+.stats-card {
+  background: #252529;
+  border-radius: 8px;
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .stat-item {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
+  text-align: center;
 }
 
 .stat-value {
-  font-weight: 600;
-  color: var(--text-primary);
-  transition: color 0.3s ease;
+  font-size: 28px;
+  font-weight: 700;
+  color: #ff69b4;
+  margin-bottom: 4px;
+  line-height: 1.2;
 }
 
 .stat-label {
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-/* 成就部分 */
-.achievements-section {
-  padding: 16px;
+.progress-bar-container {
+  margin-top: 20px;
 }
 
-.card-header {
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background: #2a2a2e;
+  border-radius: 5px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff69b4 0%, #ff1493 50%, #ff69b4 100%);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(255, 105, 180, 0.5);
+}
+
+.progress-markers {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.card-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  transition: color 0.3s ease;
-}
-
-.achievements-count {
-  font-size: 12px;
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
-}
-
-.achievements-list {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.achievement-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  transition: background-color 0.3s ease;
-}
-
-.achievements-text {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-  line-height: 1.6;
-  transition: color 0.3s ease;
-}
-
-.achievement-name {
-  margin-bottom: 4px;
-}
-
-.achievement-more {
-  margin-top: 4px;
-}
-
-.view-all-btn {
-  width: 100%;
-  font-size: 14px;
-  transition: color 0.3s ease, background-color 0.3s ease;
-}
-
-.theme-light .view-all-btn {
-  color: #0079d3;
-}
-
-.theme-dark .view-all-btn {
-  color: #4fbcff;
-}
-
-.view-all-btn:hover {
-  background: var(--bg-hover);
-}
-
-/* Element Plus Divider 主题适配 */
-:deep(.el-divider) {
-  margin: 0;
-  border-color: var(--border-color);
-  transition: border-color 0.3s ease;
-}
-
-/* 设置部分 */
-.settings-section {
-  padding: 16px;
-}
-
-.settings-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.settings-icon {
-  font-size: 24px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-  transition: background-color 0.3s ease;
-}
-
-.settings-content {
-  flex: 1;
-}
-
-.settings-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-  transition: color 0.3s ease;
-}
-
-.settings-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
-}
-
-.update-btn {
-  margin-left: auto;
+  margin-top: 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
 }
 
 /* 响应式 */
+@media (max-width: 968px) {
+  .content-area {
+    grid-template-columns: 1fr;
+  }
+
+  .right-column {
+    order: -1;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
-  .profile-container {
+  .profile-banner {
+    height: 30vh;
+    min-height: 200px;
+  }
+
+  .profile-header-section {
+    margin-top: -50px;
     flex-direction: column;
+    align-items: flex-start;
   }
 
-  .sidebar {
-    width: 100%;
+  .profile-username {
+    font-size: 24px;
   }
 
-  .profile-tabs :deep(.el-tabs__nav-wrap) {
-    overflow-x: auto;
+  .profile-tabs {
+    padding: 0 10px;
+  }
+
+  :deep(.el-tabs__item) {
+    padding: 12px 12px;
+    font-size: 12px;
+  }
+
+  .stats-row {
+    gap: 12px;
+  }
+
+  .stat-value {
+    font-size: 24px;
   }
 }
 </style>

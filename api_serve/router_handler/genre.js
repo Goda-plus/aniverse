@@ -16,6 +16,7 @@ exports.getSubredditsByGenre = async (req, res, next) => {
   try {
     const { genre_id, page = 1, pageSize = 20 } = req.query
     const offset = (page - 1) * pageSize
+    const userId = req.user?.id
 
     if (!genre_id) {
       return res.cc(false, '缺少分类ID参数', 400)
@@ -49,8 +50,28 @@ exports.getSubredditsByGenre = async (req, res, next) => {
     const countRes = await conMysql(countSql, [genre_id])
     const total = countRes[0]?.total || 0
 
+    // 批量查询用户是否已加入这些社区
+    let joinedSubredditIds = []
+    if (userId && list.length > 0) {
+      const subredditIds = list.map(item => item.id)
+      const placeholders = subredditIds.map(() => '?').join(',')
+      const checkJoinSql = `
+        SELECT subreddit_id 
+        FROM subreddit_members 
+        WHERE user_id = ? AND subreddit_id IN (${placeholders})
+      `
+      const joinResult = await conMysql(checkJoinSql, [userId, ...subredditIds])
+      joinedSubredditIds = joinResult.map(item => item.subreddit_id)
+    }
+
+    // 为每个社区添加 is_joined 字段
+    const listWithBoolean = list.map(item => ({
+      ...item,
+      is_joined: userId ? joinedSubredditIds.includes(item.id) : false
+    }))
+
     res.cc(true, '获取该分类下社区成功', 200, {
-      list,
+      list: listWithBoolean,
       total,
       page: Number(page),
       pageSize: Number(pageSize),
@@ -87,7 +108,27 @@ exports.getRecommendedSubreddits = async (req, res, next) => {
 
     const list = await conMysql(sql, [Number(limit)])
 
-    res.cc(true, '获取推荐社区成功', 200, list)
+    // 批量查询用户是否已加入这些社区
+    let joinedSubredditIds = []
+    if (userId && list.length > 0) {
+      const subredditIds = list.map(item => item.id)
+      const placeholders = subredditIds.map(() => '?').join(',')
+      const checkJoinSql = `
+        SELECT subreddit_id 
+        FROM subreddit_members 
+        WHERE user_id = ? AND subreddit_id IN (${placeholders})
+      `
+      const joinResult = await conMysql(checkJoinSql, [userId, ...subredditIds])
+      joinedSubredditIds = joinResult.map(item => item.subreddit_id)
+    }
+
+    // 为每个社区添加 is_joined 字段
+    const listWithBoolean = list.map(item => ({
+      ...item,
+      is_joined: userId ? joinedSubredditIds.includes(item.id) : false
+    }))
+
+    res.cc(true, '获取推荐社区成功', 200, listWithBoolean)
   } catch (err) {
     next(err)
   }
@@ -97,6 +138,7 @@ exports.getRecommendedSubreddits = async (req, res, next) => {
 exports.getPopularSubreddits = async (req, res, next) => {
   try {
     const { limit = 6 } = req.query
+    const userId = req.user?.id
 
     // 获取最受欢迎的社区（按成员数排序）
     const sql = `
@@ -118,7 +160,27 @@ exports.getPopularSubreddits = async (req, res, next) => {
 
     const list = await conMysql(sql, [Number(limit)])
 
-    res.cc(true, '获取最受欢迎社区成功', 200, list)
+    // 批量查询用户是否已加入这些社区
+    let joinedSubredditIds = []
+    if (userId && list.length > 0) {
+      const subredditIds = list.map(item => item.id)
+      const placeholders = subredditIds.map(() => '?').join(',')
+      const checkJoinSql = `
+        SELECT subreddit_id 
+        FROM subreddit_members 
+        WHERE user_id = ? AND subreddit_id IN (${placeholders})
+      `
+      const joinResult = await conMysql(checkJoinSql, [userId, ...subredditIds])
+      joinedSubredditIds = joinResult.map(item => item.subreddit_id)
+    }
+
+    // 为每个社区添加 is_joined 字段
+    const listWithBoolean = list.map(item => ({
+      ...item,
+      is_joined: userId ? joinedSubredditIds.includes(item.id) : false
+    }))
+
+    res.cc(true, '获取最受欢迎社区成功', 200, listWithBoolean)
   } catch (err) {
     next(err)
   }

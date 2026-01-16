@@ -121,6 +121,11 @@ const routes = [
         path: 'downvoted',
         name: 'profile-downvoted',
         component: () => import('../views/profile/DownvotedTab.vue')
+      },
+      {
+        path: 'communities',
+        name: 'profile-communities',
+        component: () => import('../views/profile/CommunitiesTab.vue')
       }
     ]
   },
@@ -171,20 +176,11 @@ const routes = [
         component: () => import('../views/mediaDetail/CharactersTab.vue')
       },
       {
-        path: 'staff',
-        name: 'media-detail-staff',
-        component: () => import('../views/mediaDetail/StaffTab.vue')
-      },
-      {
         path: 'social',
         name: 'media-detail-social',
         component: () => import('../views/mediaDetail/SocialTab.vue')
       },
-      {
-        path: 'stats',
-        name: 'media-detail-stats',
-        component: () => import('../views/mediaDetail/StatsTab.vue')
-      }
+      // Staff / Stats tabs removed
     ]
   }
 ]

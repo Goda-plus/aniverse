@@ -11,7 +11,7 @@
       <!-- 步骤指示器 - 左下角圆点组 -->
       <div class="step-dots">
         <div
-          v-for="step in 3"
+          v-for="step in 4"
           :key="step"
           :class="['step-dot', { 'is-active': currentStep === step, 'is-completed': currentStep > step }]"
         />
@@ -29,9 +29,6 @@
             :class="['category-item', { 'is-selected': formData.genre_id === category.id }]"
             @click="selectCategory(category.id)"
           >
-            <div class="category-icon">
-              {{ getCategoryEmoji(category.ch_name || category.name) }}
-            </div>
             <div class="category-name">
               {{ category.ch_name || category.name }}
             </div>
@@ -39,8 +36,58 @@
         </div>
       </div>
 
-      <!-- 步骤2: 选择类型 -->
+      <!-- 步骤2: 选择标签 -->
       <div v-if="currentStep === 2" class="step-content">
+        <div class="step-subtitle">
+          选择标签，帮助用户更好地发现你的社区（可选）
+        </div>
+        <div class="tags-container">
+          <el-input
+            v-model="tagSearchKeyword"
+            placeholder="搜索标签..."
+            class="tag-search-input"
+            clearable
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <div class="tags-grid">
+            <div
+              v-for="tag in filteredTags"
+              :key="tag.id"
+              :class="['tag-item', { 'is-selected': isTagSelected(tag.id) }]"
+              @click="toggleTag(tag.id)"
+            >
+              <div class="tag-name">
+                {{ tag.name }}
+              </div>
+              <div v-if="tag.description" class="tag-description">
+                {{ tag.description }}
+              </div>
+            </div>
+          </div>
+          <div v-if="selectedTags.length > 0" class="selected-tags">
+            <div class="selected-tags-title">
+              已选择的标签：
+            </div>
+            <div class="selected-tags-list">
+              <el-tag
+                v-for="tagId in selectedTags"
+                :key="tagId"
+                class="selected-tag"
+                closable
+                @close="removeTag(tagId)"
+              >
+                {{ getTagName(tagId) }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 步骤3: 选择类型 -->
+      <div v-if="currentStep === 3" class="step-content">
         <div class="step-subtitle">
           这是哪类社区?
         </div>
@@ -51,11 +98,6 @@
             :class="['type-item', { 'is-selected': formData.visibility === type.value }]"
             @click="selectType(type.value)"
           >
-            <div class="type-icon">
-              <el-icon :size="24">
-                <component :is="type.icon" />
-              </el-icon>
-            </div>
             <div class="type-content">
               <div class="type-title">
                 {{ type.label }}
@@ -72,9 +114,6 @@
           <!-- 成人内容开关 -->
           <div class="adult-option">
             <div class="adult-content">
-              <div class="adult-icon">
-                <span class="adult-badge">18</span>
-              </div>
               <div class="adult-text">
                 <div class="adult-title">
                   成人 (18+)
@@ -100,11 +139,50 @@
         </div>
       </div>
 
-      <!-- 步骤3: 填写信息 -->
-      <div v-if="currentStep === 3" class="step-content">
+      <!-- 步骤4: 填写信息 -->
+      <div v-if="currentStep === 4" class="step-content">
         <div class="form-layout">
           <div class="form-left">
             <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
+              <el-form-item label="社区头像" prop="image_url">
+                <div class="avatar-upload-section">
+                  <el-upload
+                    class="avatar-uploader"
+                    :show-file-list="false"
+                    :before-upload="beforeAvatarUpload"
+                    :http-request="handleAvatarUpload"
+                    accept="image/*"
+                  >
+                    <div v-if="avatarPreview || formData.image_url" class="avatar-preview">
+                      <img :src="avatarPreview || formData.image_url" alt="社区头像">
+                      <div class="avatar-overlay">
+                        <el-icon class="avatar-icon">
+                          <Plus />
+                        </el-icon>
+                        <span>更换头像</span>
+                      </div>
+                    </div>
+                    <el-icon v-else class="avatar-uploader-icon" :class="{ 'is-uploading': avatarUploading }">
+                      <Plus v-if="!avatarUploading" />
+                      <Loading v-else />
+                    </el-icon>
+                    <div v-if="!avatarPreview && !formData.image_url" class="avatar-upload-text">
+                      <div class="upload-text-main">
+                        上传头像
+                      </div>
+                      <div class="upload-text-hint">
+                        支持 JPG、PNG 格式，建议尺寸 256x256
+                      </div>
+                    </div>
+                  </el-upload>
+                  <div v-if="avatarPreview || formData.image_url" class="avatar-actions">
+                    <el-button size="small" @click="removeAvatar">
+                      移除头像
+                    </el-button>
+                  </div>
+                </div>
+              </el-form-item>
+              
               <el-form-item label="社区名称" prop="name" required>
                 <el-input
                   v-model="formData.name"
@@ -133,6 +211,16 @@
           <div class="form-right">
             <div class="preview-card">
               <div class="preview-header">
+                <div class="preview-avatar">
+                  <img
+                    v-if="avatarPreview || formData.image_url"
+                    :src="avatarPreview || formData.image_url"
+                    alt="社区头像"
+                  >
+                  <div v-else class="preview-avatar-placeholder">
+                    r/
+                  </div>
+                </div>
                 <div class="preview-icon">
                   r/{{ formData.name || 'communityname' }}
                 </div>
@@ -156,10 +244,10 @@
         <el-button v-if="currentStep > 1" @click="prevStep">
           返回
         </el-button>
-        <el-button v-if="currentStep < 3" type="primary" :disabled="!canNextStep" @click="nextStep">
+        <el-button v-if="currentStep < 4" type="primary" :disabled="!canNextStep" @click="nextStep">
           下一步
         </el-button>
-        <el-button v-if="currentStep === 3" type="primary" :loading="submitting" @click="submitForm">
+        <el-button v-if="currentStep === 4" type="primary" :loading="submitting" @click="submitForm">
           创建社区
         </el-button>
         <el-button @click="handleClose">
@@ -173,9 +261,11 @@
 <script setup>
   import { ref, computed, watch, defineProps, defineEmits } from 'vue'
   import { ElMessage } from 'element-plus'
-  import { Globe, View, Lock } from '@element-plus/icons-vue'
+  import { Search, Plus, Loading } from '@element-plus/icons-vue'
   import { getAllGenres } from '@/axios/genre'
   import { createSubreddit } from '@/axios/subreddit'
+  import { getTagsList } from '@/axios/tags'
+  import { uploadPostImage } from '@/axios/post'
   import { useRouter } from 'vue-router'
 
   const props = defineProps({
@@ -196,6 +286,8 @@
 
   const currentStep = ref(1)
   const categories = ref([])
+  const tags = ref([])
+  const tagSearchKeyword = ref('')
   const submitting = ref(false)
   const formRef = ref(null)
 
@@ -204,26 +296,27 @@
     visibility: 'public',
     is_adult: false,
     name: '',
-    description: ''
+    description: '',
+    tag_ids: [],
+    image_url: null
   })
+  const avatarUploading = ref(false)
+  const avatarPreview = ref(null)
 
   const communityTypes = [
     {
       value: 'public',
       label: '公共',
-      icon: Globe,
       description: '任何人均可在此社区中浏览内容、发帖和评论'
     },
     {
       value: 'restricted',
       label: '受限',
-      icon: View,
       description: '任何人均可浏览内容,但仅获批用户才能贡献内容'
     },
     {
       value: 'private',
       label: '私人',
-      icon: Lock,
       description: '仅获批用户可浏览和贡献内容'
     }
   ]
@@ -238,48 +331,12 @@
     ]
   }
 
-  // 分类表情映射
-  const categoryEmojiMap = {
-    '动漫与角色扮演': '🍣',
-    '互联网文化': '🐒',
-    '技术': '🛠️',
-    '家居与园艺': '🏡',
-    '健康': '❤️',
-    '健康与幸福': '🧘‍♀️',
-    '交通工具': '🚗',
-    '教育与职业': '🧑‍🎓',
-    '科学': '🧪',
-    '可收藏品与其他爱好': '❇️',
-    '灵异': '💀',
-    '流行文化': '✨',
-    '人文与法律': '🏛️',
-    '商业与金融': '💰',
-    '身份与关系': '🌈',
-    '胜地与旅行': '🌐',
-    '时尚与美容': '👗',
-    '食品与饮料': '🍔',
-    '体育': '🏅',
-    '问答与故事': '📝',
-    '新闻与政治': '📰',
-    '艺术': '🎨',
-    '音乐': '🎵',
-    '影视': '📺',
-    '游戏': '🎮',
-    '阅读与写作': '📖',
-    '自然与户外': '🌿',
-    '成人话题': '🔞',
-    '成人内容': '🟥'
-  }
-
-  const getCategoryEmoji = (name) => {
-    return categoryEmojiMap[name] || '📌'
-  }
-
   const getStepTitle = () => {
     const titles = {
       1: '你的社区主题是什么?',
-      2: '这是哪类社区?',
-      3: '向我们介绍你的社区'
+      2: '选择标签',
+      3: '这是哪类社区?',
+      4: '向我们介绍你的社区'
     }
     return titles[currentStep.value] || ''
   }
@@ -289,10 +346,51 @@
       return formData.value.genre_id !== null
     }
     if (currentStep.value === 2) {
+      return true // 标签是可选的，所以总是可以进入下一步
+    }
+    if (currentStep.value === 3) {
       return formData.value.visibility !== null
     }
     return true
   })
+
+  const selectedTags = computed(() => formData.value.tag_ids || [])
+
+  const filteredTags = computed(() => {
+    if (!tagSearchKeyword.value) {
+      return tags.value
+    }
+    const keyword = tagSearchKeyword.value.toLowerCase()
+    return tags.value.filter(tag => 
+      tag.name.toLowerCase().includes(keyword) ||
+      (tag.description && tag.description.toLowerCase().includes(keyword))
+    )
+  })
+
+  const isTagSelected = (tagId) => {
+    return formData.value.tag_ids.includes(tagId)
+  }
+
+  const toggleTag = (tagId) => {
+    const index = formData.value.tag_ids.indexOf(tagId)
+    if (index > -1) {
+      formData.value.tag_ids.splice(index, 1)
+    } else {
+      formData.value.tag_ids.push(tagId)
+    }
+  }
+
+  const removeTag = (tagId) => {
+    const index = formData.value.tag_ids.indexOf(tagId)
+    if (index > -1) {
+      formData.value.tag_ids.splice(index, 1)
+    }
+  }
+
+  const getTagName = (tagId) => {
+    const tag = tags.value.find(t => t.id === tagId)
+    return tag ? tag.name : ''
+  }
 
   const selectCategory = (genreId) => {
     formData.value.genre_id = genreId
@@ -303,7 +401,7 @@
   }
 
   const nextStep = () => {
-    if (currentStep.value < 3) {
+    if (currentStep.value < 4) {
       currentStep.value++
     }
   }
@@ -326,6 +424,18 @@
     }
   }
 
+  const loadTags = async () => {
+    try {
+      const res = await getTagsList({ page: 1, pageSize: 100 })
+      if (res.success) {
+        tags.value = res.data?.list || []
+      }
+    } catch (error) {
+      console.error('加载标签失败:', error)
+      ElMessage.error('加载标签失败')
+    }
+  }
+
   const submitForm = async () => {
     if (!formRef.value) return
   
@@ -339,7 +449,9 @@
         description: formData.value.description.trim() || '',
         category_id: formData.value.genre_id, // API 使用 category_id，但数据来自 genres
         visibility: formData.value.visibility,
-        is_adult: formData.value.is_adult
+        is_adult: formData.value.is_adult,
+        tag_ids: formData.value.tag_ids || [],
+        image_url: formData.value.image_url || null
       }
     
       const res = await createSubreddit(submitData)
@@ -348,8 +460,16 @@
         ElMessage.success('社区创建成功')
         emit('success', res.data)
         handleClose()
-        // 跳转到新创建的社区
-        router.push(`/r/${formData.value.name}`)
+        // 等待接口返回后，使用返回的社区名称跳转
+        const communityName = res.data?.name || formData.value.name
+        if (communityName) {
+          router.push({
+            path: `/r/${communityName}`,
+            query: {
+              subredditId: res.data.id
+            }
+          })
+        }
       } else {
         ElMessage.error(res.message || '创建社区失败')
       }
@@ -363,6 +483,56 @@
     }
   }
 
+  const beforeAvatarUpload = (file) => {
+    const isImage = file.type.startsWith('image/')
+    const isLt5M = file.size / 1024 / 1024 < 5
+
+    if (!isImage) {
+      ElMessage.error('只能上传图片文件!')
+      return false
+    }
+    if (!isLt5M) {
+      ElMessage.error('图片大小不能超过 5MB!')
+      return false
+    }
+    return true
+  }
+
+  const handleAvatarUpload = async (options) => {
+    const file = options.file
+    avatarUploading.value = true
+    
+    try {
+      // 创建预览
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        avatarPreview.value = e.target.result
+      }
+      reader.readAsDataURL(file)
+      
+      // 上传图片
+      const res = await uploadPostImage(file)
+      if (res.success) {
+        formData.value.image_url = res.data.url
+        ElMessage.success('头像上传成功')
+      } else {
+        ElMessage.error(res.message || '头像上传失败')
+        avatarPreview.value = null
+      }
+    } catch (error) {
+      console.error('上传头像失败:', error)
+      ElMessage.error(error.message || '头像上传失败')
+      avatarPreview.value = null
+    } finally {
+      avatarUploading.value = false
+    }
+  }
+
+  const removeAvatar = () => {
+    formData.value.image_url = null
+    avatarPreview.value = null
+  }
+
   const handleClose = () => {
     dialogVisible.value = false
     // 重置表单
@@ -372,17 +542,22 @@
       visibility: 'public',
       is_adult: false,
       name: '',
-      description: ''
+      description: '',
+      tag_ids: [],
+      image_url: null
     }
+    tagSearchKeyword.value = ''
+    avatarPreview.value = null
     if (formRef.value) {
       formRef.value.clearValidate()
     }
   }
 
-  // 监听弹窗打开，加载分类
+  // 监听弹窗打开，加载分类和标签
   watch(dialogVisible, (val) => {
     if (val) {
       loadCategories()
+      loadTags()
     }
   })
 </script>
@@ -542,15 +717,118 @@
   z-index: 1;
 }
 
-.category-icon {
-  display: none; /* 只保留文字按钮，隐藏图标 */
-}
-
 .category-name {
   font-size: 13px;
   color: var(--text-primary);
   text-align: center;
   line-height: 1.4;
+}
+
+/* 标签选择 */
+.tags-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tag-search-input {
+  margin-bottom: 8px;
+}
+
+.tags-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-tertiary) transparent;
+}
+
+.tags-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tags-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tags-grid::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 4px;
+}
+
+.tag-item {
+  padding: 12px 16px;
+  border: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--card-bg);
+}
+
+.tag-item:hover {
+  border-color: var(--primary, #0079d3);
+  background: var(--bg-hover, rgba(0, 121, 211, 0.05));
+}
+
+.tag-item.is-selected {
+  border-color: var(--primary, #0079d3);
+  background: var(--primary-light, rgba(0, 121, 211, 0.1));
+}
+
+.tag-item.is-selected::after {
+  content: '✓';
+  float: right;
+  color: var(--primary, #0079d3);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.tag-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.tag-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.selected-tags {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.selected-tags-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.selected-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-tag {
+  background: var(--primary-light, rgba(0, 121, 211, 0.1));
+  border-color: var(--primary, #0079d3);
+  color: var(--primary, #0079d3);
 }
 
 /* 社区类型 */
@@ -580,10 +858,6 @@
 .type-item.is-selected {
   border-color: var(--primary, #0079d3);
   background: var(--primary-light, rgba(0, 121, 211, 0.1));
-}
-
-.type-icon {
-  display: none; /* 隐藏类型图标，只留按钮内容 */
 }
 
 .type-content {
@@ -622,23 +896,6 @@
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.adult-icon {
-  display: none; /* 隐藏成人标记的图标，只留文字与开关 */
-}
-
-.adult-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
 }
 
 .adult-text {
@@ -686,6 +943,119 @@
   margin-top: 4px;
 }
 
+/* 头像上传 */
+.avatar-upload-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.avatar-uploader {
+  width: 120px;
+  height: 120px;
+  border: 2px dashed var(--card-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-uploader:hover {
+  border-color: var(--primary, #0079d3);
+  background: var(--bg-hover, rgba(0, 121, 211, 0.05));
+}
+
+.avatar-uploader-icon {
+  font-size: 32px;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
+
+.avatar-uploader-icon.is-uploading {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.avatar-upload-text {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  padding: 0 8px;
+}
+
+.upload-text-main {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.upload-text-hint {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1.2;
+}
+
+.avatar-preview {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  color: white;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.avatar-uploader:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-icon {
+  font-size: 24px;
+}
+
+.avatar-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .form-right {
   flex-shrink: 0;
 }
@@ -701,6 +1071,39 @@
 
 .preview-header {
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--primary-light, rgba(0, 121, 211, 0.1));
 }
 
 .preview-icon {

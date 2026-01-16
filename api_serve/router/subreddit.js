@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-
+const optionalAuth = require('../middleware/optionalAuth')
 
 // 控制器
 const subredditHandler = require('../router_handler/subreddit')
@@ -24,9 +24,12 @@ router.get('/search', subredditHandler.searchSubredditsByName)
 router.get('/sortlist', subredditHandler.getSubredditsByCategory)
 
 // 获取板块详情
-router.get('/detail', subredditHandler.getSubredditDetail)
+router.get('/detail', optionalAuth, subredditHandler.getSubredditDetail)
 
 //获得用户创建的板块
 router.get('/getCreateSu',subredditHandler.getMySubreddits)
+
+// 解散/删除板块
+router.delete('/:id', subredditHandler.deleteSubreddit)
 
 module.exports = router

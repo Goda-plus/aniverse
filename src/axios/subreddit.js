@@ -18,3 +18,9 @@ export const createSubreddit = (data) => request.post('/api/subreddit/create', d
 // 获取我创建的子版块
 export const getMySubreddits = (data) => request.get('/api/subreddit/getCreateSu', data)
 
+// 更新子版块
+export const updateSubreddit = (id, data) => request.put(`/api/subreddit/${id}`, data)
+
+// 删除子版块
+export const deleteSubreddit = (id) => request.delete(`/api/subreddit/${id}`)
+

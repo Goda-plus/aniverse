@@ -788,6 +788,12 @@
   line-height: 1.6;
   margin: 0;
   transition: color 0.3s ease;
+  /* 文本截断样式 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .post-image-container {

@@ -36,7 +36,7 @@
 </template>
 
 <script setup>
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, nextTick, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
   import { getGuestPostDetail, getPostDetail } from '@/axios/post'
@@ -56,6 +56,47 @@
   onMounted(() => {
     loadPostDetail()
   })
+
+  // 监听post变化，处理滚动到评论区域
+  watch(() => post.value, async (newPost) => {
+    if (newPost && route.query.scrollToComment === 'true') {
+      // 等待DOM更新和评论列表加载
+      await nextTick()
+      setTimeout(() => {
+        scrollToComments()
+      }, 500) // 给评论列表一些时间加载
+    }
+  }, { immediate: true })
+
+  // 滚动到评论区域
+  const scrollToComments = () => {
+    const commentListElement = document.querySelector('.comment-list')
+    if (commentListElement) {
+      commentListElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      })
+      
+      // 如果有特定的评论ID，尝试高亮它
+      const commentId = route.query.commentId
+      if (commentId) {
+        setTimeout(() => {
+          const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`)
+          if (commentElement) {
+            commentElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            })
+            // 添加高亮效果
+            commentElement.classList.add('highlight-comment')
+            setTimeout(() => {
+              commentElement.classList.remove('highlight-comment')
+            }, 2000)
+          }
+        }, 300)
+      }
+    }
+  }
 
   const loadPostDetail = async () => {
     const postId = route.params.id || route.query.post_id
@@ -202,6 +243,24 @@
   /* 侧边栏样式 */
   display: flex;
   flex-direction: column;
+}
+
+/* 高亮评论的样式 */
+:deep(.highlight-comment) {
+  background-color: rgba(255, 255, 0, 0.1) !important;
+  border-radius: 4px;
+  padding: 4px;
+  margin: -4px;
+  animation: highlight-fade 2s ease-out;
+}
+
+@keyframes highlight-fade {
+  0% {
+    background-color: rgba(255, 255, 0, 0.3);
+  }
+  100% {
+    background-color: rgba(255, 255, 0, 0);
+  }
 }
 </style>
 

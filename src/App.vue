@@ -204,7 +204,7 @@
                 <el-menu-item index="/developer">
                   <el-icon><Tools /></el-icon>
                   <template #title>
-                    开发者平台
+                    管理社区
                   </template>
                 </el-menu-item>
                 <el-menu-item index="/pro" class="pro-menu-item">

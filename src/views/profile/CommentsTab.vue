@@ -1,23 +1,52 @@
 <template>
-  <div class="posts-section">
+  <div class="comments-section">
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <el-skeleton :rows="3" animated />
     </div>
-    <div class="posts-container">
-      <div class="posts-list-container">  
-        <PostList 
-          v-if="posts.length > 0"
-          :posts="posts" 
-          :show-recommendation="false"
-          @vote="handleVote"
-          @comment="handleComment"
-          @share="handleShare"
-          @save="handleSave"
-          @hide="handleHide"
-          @report="handleReport"
-          @click="handlePostClick"
-        />
+    <div class="comments-container">
+      <div class="comments-list-container">  
+        <div v-if="comments.length > 0" class="comments-list">
+          <div 
+            v-for="comment in comments" 
+            :key="comment.id" 
+            class="comment-item-wrapper"
+            @click="handleCommentClick(comment)"
+          >
+            <!-- 评论内容 -->
+            <div class="comment-content">
+              <div class="comment-header">
+                <div class="comment-author">
+                  <div class="author-avatar">
+                    <div class="avatar-placeholder">
+                      {{ userStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}
+                    </div>
+                  </div>
+                  <span class="author-name">u/{{ userStore.user?.username }}</span>
+                  <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
+                </div>
+              </div>
+              <div class="comment-body">
+                <p class="comment-text">{{ comment.content }}</p>
+              </div>
+            </div>
+            
+            <!-- 所属帖子信息 -->
+            <div class="post-info">
+              <div class="post-header-info">
+                <span class="post-label">在帖子中：</span>
+                <span class="post-title">{{ comment.post_title }}</span>
+              </div>
+              <div class="post-meta">
+                <span v-if="comment.subreddit_name" class="subreddit-name">r/{{ comment.subreddit_name }}</span>
+                <span v-if="comment.subreddit_name" class="separator">·</span>
+                <span class="post-author">u/{{ comment.post_author }}</span>
+                <span class="separator">·</span>
+                <span class="comment-count">{{ comment.post_comment_count }} 条评论</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div v-else-if="!loading" class="empty-state">
           <div class="empty-icon">
             💬
@@ -31,7 +60,7 @@
         </div>
       </div>
      
-      <div v-if="posts.length > 0" class="pagination-container">
+      <div v-if="comments.length > 0" class="pagination-container">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -53,174 +82,79 @@
   import { ref, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import PostList from '@/components/PostList.vue'
-  import { getUserCommentedPosts } from '@/axios/post'
-  import { userVote } from '@/axios/vote'
+  import { getUserComments } from '@/axios/comment'
   import { useUserStore } from '@/stores/user'
 
   const router = useRouter()
   const userStore = useUserStore()
 
-  const posts = ref([])
+  const comments = ref([])
   const loading = ref(false)
   const currentPage = ref(1)
   const pageSize = ref(20)
-  const hasMore = ref(true)
   const total = ref(0)
 
-  // 转换 API 数据格式为组件需要的格式
-  const transformPostData = (apiPost) => {
-    // 解析 image_url（可能是 JSON 字符串）
-    let imageUrl = null
-    let imageCount = 0
-    if (apiPost.image_url) {
-      try {
-        const imageUrls = typeof apiPost.image_url === 'string' 
-          ? JSON.parse(apiPost.image_url) 
-          : apiPost.image_url
-        if (Array.isArray(imageUrls) && imageUrls.length > 0) {
-          imageUrl = imageUrls[0]
-          imageCount = imageUrls.length
-        }
-      } catch (e) {
-        // 如果不是 JSON，直接使用
-        imageUrl = apiPost.image_url
-        imageCount = 1
-      }
-    }
-
-    return {
-      id: apiPost.id || apiPost.post_id,
-      subreddit: apiPost.subreddit_name || 'nextfuckinglevel',
-      author: apiPost.username,
-      authorAvatar: apiPost.avatar_url,
-      title: apiPost.title,
-      content_text: apiPost.content_text,
-      content_html: apiPost.content_html,
-      image: imageUrl,
-      imageCount: imageCount,
-      score: apiPost.net_votes || (apiPost.upvotes - apiPost.downvotes) || 0,
-      commentCount: apiPost.comment_count || 0,
-      rewardCount: 0,
-      userVote: apiPost.user_vote || 0,
-      createdAt: new Date(apiPost.created_at).getTime(),
-      recommended: false
-    }
-  }
-
-  // 加载用户评论过的帖子
-  const loadCommentedPosts = async () => {
+  // 加载用户评论
+  const loadUserComments = async () => {
     if (loading.value) return
     if (!userStore.isLoggedIn) {
-      posts.value = []
+      comments.value = []
       return
     }
 
     try {
       loading.value = true
-      const response = await getUserCommentedPosts({
+      const response = await getUserComments({
         page: currentPage.value,
         pageSize: pageSize.value
       })
 
       if (response.success) {
-        // 转换API数据格式为组件需要的格式
-        const transformedPosts = response.data.posts.map(transformPostData)
-        posts.value = transformedPosts
-        // 判断是否还有更多数据
-        hasMore.value = response.data.pagination.hasNextPage
-        total.value = response.data.pagination.totalItems || response.data.pagination.total || 0
+        comments.value = response.data.comments
+        total.value = response.data.pagination.totalItems || 0
       } else {
-        posts.value = []
-        hasMore.value = false
+        comments.value = []
         total.value = 0
       }
     } catch (error) {
-      console.error('加载评论帖子失败:', error)
-      ElMessage.error(error.response?.data?.message || '加载帖子失败，请稍后重试')
-      posts.value = []
+      console.error('加载评论失败:', error)
+      ElMessage.error(error.response?.data?.message || '加载评论失败，请稍后重试')
+      comments.value = []
     } finally {
       loading.value = false
     }
   }
 
-  // 处理投票
-  const handleVote = async ({ post, direction }) => {
-    const postIndex = posts.value.findIndex(p => p.id === post.id)
-    if (postIndex === -1) return
-
-    const targetPost = posts.value[postIndex]
-    const prevVote = targetPost.userVote
-    const prevScore = targetPost.score
-
-    try {
-      const vote_type = direction === 1 ? 'up' : 'down'
-      const res = await userVote({
-        post_id: post.id,
-        vote_type
-      })
-      
-      if (res.success) {
-        // 更新投票状态和分数
-        if (prevVote === direction) {
-          targetPost.userVote = 0
-        } else {
-          targetPost.userVote = direction
-        }
-        targetPost.score = Number(res.data.upvotes - res.data.downvotes) > 0 
-          ? Number(res.data.upvotes - res.data.downvotes) 
-          : Number(res.data.downvotes - res.data.upvotes) > 0 
-            ? -Number(res.data.downvotes - res.data.upvotes) 
-            : 0
-      } else {
-        ElMessage.error(res.message || '投票失败，请稍后重试')
-      }
-    } catch (error) {
-      // 回滚状态
-      targetPost.userVote = prevVote
-      targetPost.score = prevScore
-      ElMessage.error(error.response?.data?.message || '投票失败，请稍后重试')
-    }
-  }
-
-  // 处理评论
-  const handleComment = (post) => {
+  // 处理评论点击 - 跳转到帖子页面的评论区域
+  const handleCommentClick = (comment) => {
     router.push({
-      path: `/post/${post.id}`,
-      query: { from: '/profile/comments' }
+      path: `/post/${comment.post_id}`,
+      query: { 
+        commentId: comment.id,
+        scrollToComment: 'true'
+      }
     })
   }
 
-  // 处理分享
-  const handleShare = (post) => {
-    ElMessage.success('分享功能开发中')
-  }
+  // 格式化时间
+  const formatTime = (timeString) => {
+    if (!timeString) return ''
+    const date = new Date(timeString)
+    const now = new Date()
+    const diff = now - date
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
 
-  // 处理保存
-  const handleSave = (post) => {
-    ElMessage.success('保存功能开发中')
-  }
-
-  // 处理隐藏
-  const handleHide = (post) => {
-    const index = posts.value.findIndex(p => p.id === post.id)
-    if (index !== -1) {
-      posts.value.splice(index, 1)
-      total.value = Math.max(0, total.value - 1)
-      ElMessage.success('已隐藏')
-    }
-  }
-
-  // 处理举报
-  const handleReport = (post) => {
-    ElMessage.success('举报功能开发中')
-  }
-
-  // 处理帖子点击
-  const handlePostClick = (post) => {
-    router.push({
-      path: `/post/${post.id}`,
-      query: { from: '/profile/comments' }
+    if (minutes < 1) return '刚刚'
+    if (minutes < 60) return `${minutes}分钟前`
+    if (hours < 24) return `${hours}小时前`
+    if (days < 7) return `${days}天前`
+  
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     })
   }
 
@@ -228,22 +162,22 @@
   const handleSizeChange = (newSize) => {
     pageSize.value = newSize
     currentPage.value = 1
-    loadCommentedPosts()
+    loadUserComments()
   }
 
   // 处理当前页变化
   const handleCurrentChange = (newPage) => {
     currentPage.value = newPage
-    loadCommentedPosts()
+    loadUserComments()
   }
 
   onMounted(() => {
-    loadCommentedPosts()
+    loadUserComments()
   })
 </script>
 
 <style scoped>
-.posts-section {
+.comments-section {
   width: 100%;
 }
 
@@ -278,7 +212,7 @@
   transition: color 0.3s ease;
 }
 
-.posts-container {
+.comments-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -292,10 +226,154 @@
   justify-content: center;
 }
 
-.posts-list-container {
+.comments-list-container {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-</style>
 
+.comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comment-item-wrapper {
+  background: var(--bg-secondary, #1a1a1b);
+  border: 1px solid var(--card-border, #343536);
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.comment-item-wrapper:hover {
+  border-color: var(--text-primary, #d7dadc);
+  background: var(--bg-hover, #272729);
+}
+
+.comment-content {
+  margin-bottom: 12px;
+}
+
+.comment-header {
+  margin-bottom: 8px;
+}
+
+.comment-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.author-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-tertiary, #272729);
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary, #272729);
+  color: var(--text-primary, #d7dadc);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.author-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #d7dadc);
+}
+
+.comment-time {
+  font-size: 12px;
+  color: var(--text-secondary, #818384);
+}
+
+.comment-body {
+  margin-left: 32px;
+}
+
+.comment-text {
+  font-size: 14px;
+  color: var(--text-primary, #d7dadc);
+  line-height: 1.5;
+  margin: 0;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.post-info {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border, #343536);
+  margin-left: 32px;
+}
+
+.post-header-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.post-label {
+  font-size: 12px;
+  color: var(--text-secondary, #818384);
+}
+
+.post-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #d7dadc);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #818384);
+}
+
+.subreddit-name {
+  color: var(--text-primary, #d7dadc);
+  font-weight: 500;
+}
+
+.post-author {
+  color: var(--text-secondary, #818384);
+}
+
+.separator {
+  color: var(--text-tertiary, #6c6e70);
+}
+
+.comment-count {
+  color: var(--text-secondary, #818384);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .comment-item-wrapper {
+    padding: 12px;
+  }
+
+  .comment-body,
+  .post-info {
+    margin-left: 0;
+  }
+}
+</style>

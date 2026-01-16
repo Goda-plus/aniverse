@@ -14,19 +14,19 @@
                   r/{{ communityInfo.name }}
                 </h1>
                 <div class="community-description-container">
-                  <p class="community-description">
-                    {{ communityInfo.description }}
-                  </p>
+                  <el-tag v-for="tag in communityInfo.tags" :key="tag" :type="tag.type">
+                    #{{ tag.name }}
+                  </el-tag>
                 </div>
                 
                 <div class="community-stats">
-                  <span>{{ (communityInfo.members) }} 位成员</span>
+                  <span>{{ (communityInfo.member_count) }} 位成员</span>
                   <span class="separator">·</span>
-                  <span>{{ (communityInfo.online) }} 在线</span>
+                  <span>{{ (communityInfo.member_count) }} 在线</span>
                 </div>
               </div>
               <el-button 
-                v-if="!communityInfo.joined"
+                v-if="!communityInfo.is_joined"
                 type="primary" 
                 class="join-button"
                 @click="handleJoin"
@@ -97,24 +97,19 @@
             <h2 class="community-sidebar-name">
               r/{{ communityInfo.name }}
             </h2>
-            <div class="community-sidebar-description-container">
-              <p class="community-sidebar-description">
-                {{ communityInfo.description }}
-              </p>
-            </div>
             
             <div class="community-sidebar-stats">
               <div class="stat-item">
-                <span class="stat-value">{{ (communityInfo.members) }}</span>
+                <span class="stat-value">{{ (communityInfo.member_count) }}</span>
                 <span class="stat-label">成员</span>
               </div>
               <div class="stat-item">
-                <span class="stat-value">{{ (communityInfo.online) }}</span>
+                <span class="stat-value">{{ (communityInfo.member_count) }}</span>
                 <span class="stat-label">在线</span>
               </div>
             </div>
             <el-button 
-              v-if="!communityInfo.joined"
+              v-if="!communityInfo.is_joined"
               type="primary" 
               class="sidebar-join-button"
               @click="handleJoin"
@@ -139,11 +134,24 @@
             </h3>
           </div>
           <div class="about-content">
-            <p>{{ communityInfo.about }}</p>
+            <p 
+              ref="descriptionRef"
+              :class="{ 'description-collapsed': !isDescriptionExpanded && showExpandButton }"
+              class="about-description"
+            >
+              {{ communityInfo.description }}
+            </p>
+            <div 
+              v-if="showExpandButton"
+              class="expand-toggle"
+              @click="isDescriptionExpanded = !isDescriptionExpanded"
+            >
+              <span>{{ isDescriptionExpanded ? '收起' : '展开' }}</span>
+            </div>
             <div class="about-meta">
               <div class="meta-item">
                 <span class="meta-label">创建于</span>
-                <span class="meta-value">{{ formatDate(communityInfo.createdAt) }}</span>
+                <span class="meta-value">{{ formatDate(communityInfo.created_at) }}</span>
               </div>
             </div>
           </div>
@@ -160,7 +168,7 @@
 </template>
 
 <script setup>
-  import { ref, onMounted, onUnmounted, watch } from 'vue'
+  import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import PostList from '@/components/PostList.vue'
@@ -170,6 +178,7 @@
   import RecentBrowsed from '@/components/RecentBrowsed.vue'
   import { userVote } from '@/axios/vote'
   import { getSubredditDetail } from '@/axios/subreddit'
+  import { toggleMember } from '@/axios/subredditMember'
 
   const route = useRoute()
   const router = useRouter()
@@ -178,6 +187,9 @@
   const posts = ref([])
   const showRecommendation = ref(true)
   const recentBrowsedRef = ref(null)
+  const isDescriptionExpanded = ref(false)
+  const descriptionRef = ref(null)
+  const showExpandButton = ref(false)
   
   // 分页相关
   const currentPage = ref(1)
@@ -363,6 +375,38 @@
     }
   )
 
+  // 监听社区信息变化，重新检测描述是否需要展开
+  watch(
+    () => communityInfo.value?.description,
+    async () => {
+      isDescriptionExpanded.value = false
+      await checkDescriptionOverflow()
+    }
+  )
+
+  // 检测描述是否需要展开按钮
+  const checkDescriptionOverflow = async () => {
+    await nextTick()
+    if (descriptionRef.value) {
+      // 临时移除折叠样式，获取完整高度
+      const wasCollapsed = descriptionRef.value.classList.contains('description-collapsed')
+      if (wasCollapsed) {
+        descriptionRef.value.classList.remove('description-collapsed')
+      }
+      
+      const fullHeight = descriptionRef.value.scrollHeight
+      const lineHeight = parseInt(window.getComputedStyle(descriptionRef.value).lineHeight, 10)
+      const maxHeight = lineHeight * 3
+      
+      // 恢复折叠样式
+      if (wasCollapsed) {
+        descriptionRef.value.classList.add('description-collapsed')
+      }
+      
+      showExpandButton.value = fullHeight > maxHeight
+    }
+  }
+
   const loadCommunityInfo = async (name) => {
     // 模拟加载社区信息
     communityInfo.value = {
@@ -373,15 +417,18 @@
       online: 5000,
       avatar: 'https://via.placeholder.com/64?text=' + name,
       banner: 'https://via.placeholder.com/1200x200?text=' + name,
-      joined: false,
+      is_joined: false,
       createdAt: Date.now() - 365 * 24 * 60 * 60 * 1000
     }
     try {
       const res = await getSubredditDetail({ id: route.query.subredditId })
       if (res.success) {
         communityInfo.value = res.data
+        communityInfo.value.tags = JSON.parse(communityInfo.value.tags)
       }
       console.log( 'communityInfo.value', communityInfo.value)
+      // 检测描述是否需要展开
+      await checkDescriptionOverflow()
     } catch (error) {
       console.error('加载社区信息失败:', error)
       ElMessage.error(error.response?.data?.message || '加载社区信息失败，请稍后重试')
@@ -470,18 +517,41 @@
     })
   }
 
-  const handleJoin = () => {
-    if (communityInfo.value) {
-      communityInfo.value.joined = true
-      ElMessage.success('已加入社区')
+  const handleJoin = async () => {
+    if (!communityInfo.value) return
+    
+    const subredditId = route.query.subredditId || communityInfo.value.id
+    if (!subredditId) {
+      ElMessage.error('缺少社区ID')
+      return
+    }
+
+    try {
+      const res = await toggleMember({ subreddit_id: subredditId })
+      
+      if (res.success) {
+        // 更新加入状态
+        communityInfo.value.is_joined = !communityInfo.value.is_joined
+        
+        // 更新成员数量（如果接口返回了）
+        if (res.data && res.data.member_count !== undefined) {
+          communityInfo.value.member_count = res.data.member_count
+          communityInfo.value.members = res.data.member_count
+        }
+        
+        ElMessage.success(res.message || (communityInfo.value.is_joined ? '已加入社区' : '已退出社区'))
+      } else {
+        ElMessage.error(res.message || '操作失败，请稍后重试')
+      }
+    } catch (error) {
+      console.error('加入/退出社区失败:', error)
+      ElMessage.error(error.response?.data?.message || '操作失败，请稍后重试')
     }
   }
 
-  const handleLeave = () => {
-    if (communityInfo.value) {
-      communityInfo.value.joined = false
-      ElMessage.success('已离开社区')
-    }
+  const handleLeave = async () => {
+    // 退出和加入使用同一个接口，直接调用 handleJoin
+    await handleJoin()
   }
 
 
@@ -586,6 +656,7 @@
 .community-stats {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
+  margin-top: 10px;
 }
 
 .separator {
@@ -755,6 +826,43 @@
   color: var(--text-primary);
   line-height: 1.6;
   transition: color 0.3s ease;
+}
+
+.community-description-container {
+  display: flex;
+  gap: 8px;
+}
+
+.about-description {
+  margin: 0;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.description-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expand-toggle {
+  margin-top: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+  user-select: none;
+  transition: color 0.3s ease;
+}
+
+.expand-toggle:hover {
+  color: var(--text-primary);
+}
+
+.expand-toggle span {
+  font-weight: 500;
 }
 
 .about-meta {

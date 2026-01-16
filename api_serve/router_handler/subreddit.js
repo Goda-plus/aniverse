@@ -2,7 +2,7 @@ const { conMysql } = require('../db/index')
 
 exports.createSubreddit = async (req, res, next) => {
   try {
-    const { name, description, category_id, visibility, is_adult } = req.body
+    const { name, description, category_id, visibility, is_adult, tag_ids, image_url } = req.body
     const created_by = req.user.id
 
     // 1. 校验分类是否存在（使用 genres 表）
@@ -26,12 +26,37 @@ exports.createSubreddit = async (req, res, next) => {
     }
 
     // 4. 处理成人标记（转换为布尔类型）
-    const adultFlag = String(is_adult).toLowerCase() === 'true'
+    const adultFlag = is_adult === true || is_adult === 'true' || is_adult === 1
 
-    // 5. 插入板块，使用 genres_id 关联到 genres 表
+    // 5. 验证标签是否存在并获取标签信息（如果提供了 tag_ids）
+    let tagsJson = null
+    if (tag_ids && Array.isArray(tag_ids) && tag_ids.length > 0) {
+      // 去重
+      const uniqueTagIds = [...new Set(tag_ids)]
+      
+      // 验证标签是否存在并获取标签的 id 和 name
+      const placeholders = uniqueTagIds.map(() => '?').join(',')
+      const tagCheckSql = `SELECT id, name FROM tags WHERE id IN (${placeholders})`
+      const existingTags = await conMysql(tagCheckSql, uniqueTagIds)
+      
+      if (existingTags.length !== uniqueTagIds.length) {
+        return res.cc(false, '部分标签不存在', 400)
+      }
+      
+      // 构建包含 id 和 name 的对象数组
+      const tagsData = existingTags.map(tag => ({
+        id: tag.id,
+        name: tag.name
+      }))
+      
+      // 将标签对象数组转换为JSON字符串
+      tagsJson = JSON.stringify(tagsData)
+    }
+
+    // 6. 插入板块，使用 genres_id 关联到 genres 表，tags 存储为 JSON
     const insertSql = `
-      INSERT INTO subreddits (name, description, created_by, genres_id, visibility, is_adult)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO subreddits (name, description, created_by, genres_id, visibility, is_adult, tags, image_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(insertSql, [
       name,
@@ -40,6 +65,8 @@ exports.createSubreddit = async (req, res, next) => {
       category_id,
       visibility,
       adultFlag,
+      tagsJson,
+      image_url || null,
     ])
 
     if (result.affectedRows !== 1) {
@@ -48,7 +75,7 @@ exports.createSubreddit = async (req, res, next) => {
 
     const subredditId = result.insertId
 
-    // 6. 将创建者添加为板块成员（admin）
+    // 7. 将创建者添加为板块成员（admin）
     const memberInsertSql = `
       INSERT INTO subreddit_members (user_id, subreddit_id, role)
       VALUES (?, ?, 'admin')
@@ -59,7 +86,11 @@ exports.createSubreddit = async (req, res, next) => {
       throw new Error('创建者添加为板块成员失败')
     }
 
-    res.cc(true, '板块创建成功', 201)
+    // 返回创建的社区信息
+    res.cc(true, '板块创建成功', 201, { 
+      id: subredditId,
+      name: name
+    })
   } catch (error) {
     next(error)
   }
@@ -74,12 +105,12 @@ exports.getMySubreddits = async (req, res, next) => {
     }
 
     const sql = `
-      SELECT s.id, s.name, s.description, s.created_at,
-             c.name AS category_name,
+      SELECT s.id, s.name, s.description, s.created_at, s.image_url,
+             c.ch_name AS category_name,
              s.visibility,
              s.is_adult
       FROM subreddits s
-      LEFT JOIN categories c ON s.category_id = c.id
+      LEFT JOIN genres c ON s.genres_id = c.id
       WHERE s.created_by = ?
       ORDER BY s.created_at DESC
     `
@@ -149,12 +180,12 @@ exports.getSubredditsByCategory = async (req, res, next) => {
     const listSql = `
       SELECT s.id, s.name, s.description, s.created_at,
              u.username AS created_by,
-             c.name AS category_name,
+             c.ch_name AS category_name,
              u.avatar_url AS category_ava
       FROM subreddits s
       LEFT JOIN users u ON s.created_by = u.id
-      LEFT JOIN categories c ON s.category_id = c.id
-      WHERE s.category_id = ?
+      LEFT JOIN genres c ON s.genres_id = c.id
+      WHERE s.genres_id = ?
       ORDER BY s.created_at DESC
       LIMIT ? OFFSET ?
     `
@@ -162,7 +193,7 @@ exports.getSubredditsByCategory = async (req, res, next) => {
     const countSql = `
       SELECT COUNT(*) AS total
       FROM subreddits
-      WHERE category_id = ?
+      WHERE genres_id = ?
     `
 
     const list = await conMysql(listSql, [category_id, pageSize, offset])
@@ -199,10 +230,10 @@ exports.searchSubredditsByName = async (req, res, next) => {
     const listSql = `
       SELECT s.id, s.name, s.description, s.created_at,
              u.username AS created_by,
-             c.name AS category_name
+             c.ch_name AS category_name
       FROM subreddits s
       LEFT JOIN users u ON s.created_by = u.id
-      LEFT JOIN categories c ON s.category_id = c.id
+      LEFT JOIN genres c ON s.genres_id = c.id
       WHERE s.name LIKE ? OR s.description LIKE ?
       ORDER BY s.created_at DESC
       LIMIT ? OFFSET ?
@@ -240,7 +271,7 @@ exports.searchSubredditsByName = async (req, res, next) => {
 
 exports.getSubredditDetail = async (req, res, next) => {
   const { id } = req.query
-  const {user_id} = req.query
+  const user_id = req.user.id
   try {
     if (!id) {
       return res.cc(false, '缺少社区ID参数', 400)
@@ -250,7 +281,8 @@ exports.getSubredditDetail = async (req, res, next) => {
     const subredditSql = `
       SELECT s.id, s.name, s.description, s.created_at,s.image_url,
              u.username AS created_by,
-             c.ch_name AS genres_name
+             c.ch_name AS genres_name,
+             s.tags AS tags
       FROM subreddits s
       LEFT JOIN users u ON s.created_by = u.id
       LEFT JOIN genres c ON s.genres_id = c.id
@@ -298,6 +330,68 @@ exports.getSubredditDetail = async (req, res, next) => {
   } catch (error) {
     console.error('获取社区详情失败:', error)
     res.cc(false, '获取社区详情失败: ' + error.message, 500)
+  }
+}
+
+// 解散/删除社区
+exports.deleteSubreddit = async (req, res, next) => {
+  try {
+    const subredditId = parseInt(req.params.id)
+    const userId = req.user?.id
+
+    // 1. 验证用户是否登录
+    if (!userId) {
+      return res.cc(false, '用户未登录或身份失效', 401)
+    }
+
+    // 2. 验证社区ID
+    if (!subredditId || isNaN(subredditId)) {
+      return res.cc(false, '无效的社区ID', 400)
+    }
+
+    // 3. 查询社区是否存在，并验证用户是否是创建者
+    const checkSql = 'SELECT id, name, created_by FROM subreddits WHERE id = ?'
+    const subreddit = await conMysql(checkSql, [subredditId])
+
+    if (!subreddit || subreddit.length === 0) {
+      return res.cc(false, '社区不存在', 404)
+    }
+
+    const subredditData = subreddit[0]
+
+    // 4. 验证用户是否是社区创建者
+    if (subredditData.created_by !== userId) {
+      return res.cc(false, '只有社区创建者才能解散社区', 403)
+    }
+
+    // 5. 开始事务处理删除操作
+    // 注意：这里使用顺序删除，如果数据库支持事务，可以使用事务来保证原子性
+    
+    // 5.1 删除社区成员关系
+    const deleteMembersSql = 'DELETE FROM subreddit_members WHERE subreddit_id = ?'
+    await conMysql(deleteMembersSql, [subredditId])
+
+    // 5.2 删除社区相关的帖子（可选：如果不想删除帖子，可以注释掉这部分）
+    // 如果选择保留帖子，可以添加一个标记字段来标记社区已删除
+    const deletePostsSql = 'DELETE FROM posts WHERE subreddit_id = ?'
+    await conMysql(deletePostsSql, [subredditId])
+
+    // 5.3 删除社区本身
+    const deleteSubredditSql = 'DELETE FROM subreddits WHERE id = ?'
+    const deleteResult = await conMysql(deleteSubredditSql, [subredditId])
+
+    if (deleteResult.affectedRows !== 1) {
+      throw new Error('删除社区失败')
+    }
+
+    // 6. 返回成功响应
+    res.cc(true, '社区解散成功', 200, {
+      id: subredditId,
+      name: subredditData.name
+    })
+  } catch (error) {
+    console.error('解散社区失败:', error)
+    next(error)
   }
 }
 

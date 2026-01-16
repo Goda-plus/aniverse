@@ -202,4 +202,62 @@ exports.deleteComment = async (req, res, next) => {
   }
 }
 
+// 获取当前用户的评论列表（带分页）
+exports.getUserComments = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { page = 1, pageSize = 20 } = req.query
+    const offset = (page - 1) * pageSize
+
+    const sql = `
+      SELECT 
+        c.id,
+        c.post_id,
+        c.content,
+        c.parent_comment_id,
+        c.created_at,
+        p.title AS post_title,
+        p.content_text AS post_content_text,
+        u_post.username AS post_author,
+        u_post.avatar_url AS post_author_avatar,
+        s.name AS subreddit_name,
+        (SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS post_comment_count
+      FROM comments c
+      INNER JOIN posts p ON c.post_id = p.id
+      INNER JOIN users u_post ON p.user_id = u_post.id
+      LEFT JOIN subreddits s ON p.subreddit_id = s.id
+      WHERE c.user_id = ? AND (p.is_draft IS NULL OR p.is_draft = 0)
+      ORDER BY c.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+
+    const countSql = `
+      SELECT COUNT(*) as total 
+      FROM comments c
+      INNER JOIN posts p ON c.post_id = p.id
+      WHERE c.user_id = ? AND (p.is_draft IS NULL OR p.is_draft = 0)
+    `
+    
+    const [comments, totalResult] = await Promise.all([
+      conMysql(sql, [user_id, parseInt(pageSize), parseInt(offset)]),
+      conMysql(countSql, [user_id])
+    ])
+
+    const total = totalResult[0].total
+    const totalPages = Math.ceil(total / pageSize)
+
+    res.cc(true, '获取用户评论成功', 200, {
+      comments: comments,
+      pagination: {
+        totalItems: total,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
 

@@ -13,5 +13,11 @@ router.get('/list', memberHandler.getMembersBySubreddit)
 // 加入/退出板块切换
 router.post('/toggle',memberHandler.toggleMember)
 
+// 更新成员角色
+router.put('/role', memberHandler.updateMemberRole)
+
+// 移除成员
+router.delete('/remove', memberHandler.removeMember)
+
 
 module.exports = router

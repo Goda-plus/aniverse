@@ -18,3 +18,6 @@ export const getRepliesByParentId = (data) => request.get('/api/comment/child', 
 // 删除评论
 export const deleteComment = (comment_id) => request.delete('/api/comment/delete', { data: { comment_id } })
 
+// 获取当前用户的评论列表（带分页）
+export const getUserComments = (data) => request.get('/api/comment/user', { params: data })
+

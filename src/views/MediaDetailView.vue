@@ -80,9 +80,7 @@
               <el-tabs v-model="activeTab" @tab-change="handleTabChange">
                 <el-tab-pane label="Overview" name="overview" />
                 <el-tab-pane label="Characters" name="characters" />
-                <el-tab-pane label="Staff" name="staff" />
                 <el-tab-pane label="Social" name="social" />
-                <el-tab-pane label="Stats" name="stats" />
               </el-tabs>
             </div>
 
@@ -122,7 +120,7 @@
 
   provide('mediaDetail', media)
 
-  const TAB_NAMES = ['overview', 'characters', 'staff', 'social', 'stats']
+  const TAB_NAMES = ['overview', 'characters', 'social']
 
   const syncActiveTabFromRoute = () => {
     const seg = String(route.path).split('/').filter(Boolean).pop() || 'overview'

@@ -1,5 +1,5 @@
 <template>
-  <div class="comment-item" :class="{ 'is-collapsed': isCollapsed }">
+  <div class="comment-item" :class="{ 'is-collapsed': isCollapsed, 'highlight-comment': isHighlighted }" :data-comment-id="comment.id">
     <!-- 展开/折叠按钮和连接线 -->
     <div class="comment-line-container">
       <button 
@@ -108,7 +108,8 @@
 </template>
 
 <script setup>
-  import { ref, computed,defineProps, defineEmits } from 'vue'
+  import { ref, computed, onMounted, defineProps, defineEmits } from 'vue'
+  import { useRoute } from 'vue-router'
   import { useUserStore } from '@/stores/user'
   import { Plus, Minus, ChatLineRound, Trophy, Share, Delete } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
@@ -131,7 +132,21 @@
   const emit = defineEmits(['reply', 'delete'])
 
   const userStore = useUserStore()
+  const route = useRoute()
   const isCollapsed = ref(false)
+  const isHighlighted = ref(false)
+
+  // 检查是否是目标评论
+  onMounted(() => {
+    // 如果URL中有commentId参数且匹配当前评论，高亮显示
+    const commentId = route.query.commentId
+    if (commentId && String(commentId) === String(props.comment.id)) {
+      isHighlighted.value = true
+      setTimeout(() => {
+        isHighlighted.value = false
+      }, 2000)
+    }
+  })
 
   // 计算是否有回复
   const hasReplies = computed(() => {
@@ -216,6 +231,24 @@
   display: flex;
   position: relative;
   margin-bottom: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.comment-item.highlight-comment {
+  background-color: rgba(255, 255, 0, 0.1);
+  border-radius: 4px;
+  padding: 4px;
+  margin: -4px;
+  animation: highlight-fade 2s ease-out;
+}
+
+@keyframes highlight-fade {
+  0% {
+    background-color: rgba(255, 255, 0, 0.3);
+  }
+  100% {
+    background-color: rgba(255, 255, 0, 0);
+  }
 }
 
 .comment-line-container {

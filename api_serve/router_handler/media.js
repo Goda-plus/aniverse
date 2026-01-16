@@ -32,6 +32,13 @@ exports.getMediaList = async (req, res, next) => {
       LEFT JOIN media_tags mt ON m.id = mt.media_id
       LEFT JOIN tags t ON mt.tag_id = t.id
       WHERE 1=1
+        AND NOT EXISTS (
+          SELECT 1 
+          FROM media_genres mg_h
+          JOIN genres g_h ON mg_h.genre_id = g_h.id
+          WHERE mg_h.media_id = m.id
+            AND g_h.name = 'Hentai'
+        )
     `
     const params = []
 
@@ -88,6 +95,13 @@ exports.getMediaList = async (req, res, next) => {
       SELECT COUNT(DISTINCT m.id) as total
       FROM media m
       WHERE 1=1
+        AND NOT EXISTS (
+          SELECT 1 
+          FROM media_genres mg_h
+          JOIN genres g_h ON mg_h.genre_id = g_h.id
+          WHERE mg_h.media_id = m.id
+            AND g_h.name = 'Hentai'
+        )
     `
     const countParams = []
     

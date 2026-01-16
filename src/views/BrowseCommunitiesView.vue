@@ -61,10 +61,9 @@
             >
               <div class="community-icon-wrapper">
                 <div class="community-icon">
-                  <el-image
-                    style="width: 48px; height: 48px; border-radius: 50%"
+                  <el-avatar
+                    :size="48"
                     :src="community.image_url"
-                    :fit="contain"
                   />
                 </div>
                 <div class="community-info-wrapper">
@@ -175,10 +174,9 @@
             >
               <div class="community-icon-wrapper">
                 <div class="community-icon">
-                  <el-image
-                    style="width: 48px; height: 48px; border-radius: 50%"
+                  <el-avatar
+                    :size="48"
                     :src="community.image_url"
-                    :fit="contain"
                   />
                 </div>
                 <div class="community-info-wrapper">
@@ -298,10 +296,7 @@
     try {
       const res = await getRecommendedSubreddits({ limit: 6 })
       if (res.success) {
-        recommendedCommunities.value = (res.data || []).map(community => ({
-          ...community,
-          is_joined: false // 这里可以根据实际情况判断是否已加入
-        }))
+        recommendedCommunities.value = res.data || []
       }
     } catch (error) {
       console.error('加载推荐社区失败:', error)
@@ -316,10 +311,7 @@
     try {
       const res = await getRecommendedSubreddits({ limit: recommendedCommunities.value.length + 6 })
       if (res.success) {
-        recommendedCommunities.value = (res.data || []).map(community => ({
-          ...community,
-          is_joined: false
-        }))
+        recommendedCommunities.value = res.data || []
       }
     } catch (error) {
       console.error('加载更多推荐失败:', error)
@@ -332,10 +324,7 @@
     try {
       const res = await getPopularSubreddits({ limit: 6 })
       if (res.success) {
-        popularCommunities.value = (res.data || []).map(community => ({
-          ...community,
-          is_joined: false
-        }))
+        popularCommunities.value = res.data || []
       }
     } catch (error) {
       console.error('加载最受欢迎社区失败:', error)
@@ -368,10 +357,7 @@
     try {
       const res = await getSubredditsByGenre({ genre_id: genreId, page, pageSize: 12 })
       if (res.success) {
-        const communities = (res.data?.list || []).map(community => ({
-          ...community,
-          is_joined: false
-        }))
+        const communities = res.data?.list || []
         if (page === 1) {
           genreCommunities.value = communities
         } else {
@@ -406,6 +392,7 @@
       const res = await toggleMember({ subreddit_id: community.id })
       if (res.success) {
         community.is_joined = !community.is_joined
+        community.member_count = res.data?.member_count || 0
         ElMessage.success(community.is_joined ? '加入成功' : '已退出')
       }
     } catch (error) {
