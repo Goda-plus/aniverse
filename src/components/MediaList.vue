@@ -6,6 +6,9 @@
         v-for="media in items"
         :key="media.id"
         :media="media"
+        :selectable="selectable"
+        :selected="isSelected(media.id)"
+        @select="handleSelect"
       />
     </div>
 
@@ -106,7 +109,7 @@
 </template>
 
 <script setup>
-  import { defineProps } from 'vue'
+  import { defineProps, defineEmits } from 'vue'
   import { useRouter } from 'vue-router'
   import MediaCard from '@/components/MediaCard.vue'
 
@@ -119,10 +122,30 @@
     layout: {
       type: String,
       default: 'grid'
+    },
+    // 是否可选择
+    selectable: {
+      type: Boolean,
+      default: false
+    },
+    // 已选择的媒体ID列表
+    selectedIds: {
+      type: Array,
+      default: () => []
     }
   })
 
+  const emit = defineEmits(['select'])
+
   const router = useRouter()
+
+  const isSelected = (mediaId) => {
+    return props.selectedIds.includes(mediaId)
+  }
+
+  const handleSelect = (media) => {
+    emit('select', media)
+  }
 
   const getTitle = (media) => {
     return media.title_native || media.title || media.title_english || 'Unknown'

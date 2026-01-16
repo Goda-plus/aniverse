@@ -1,5 +1,6 @@
 <template>
   <el-tooltip
+    v-if="!selectable"
     :content="tooltipContent"
     placement="top"
     :show-after="300"
@@ -8,7 +9,10 @@
     popper-class="media-card-tooltip"
     raw-content
   >
-    <div class="media-card" @click="handleClick">
+    <div 
+      :class="['media-card', { 'is-selected': selected, 'is-selectable': selectable }]" 
+      @click="handleClick"
+    >
       <div class="media-poster" :style="posterStyle">
         <img
           :src="media.cover_image_large || media.cover || media.poster || '/placeholder.jpg'"
@@ -17,6 +21,9 @@
           @load="handleImageLoad"
           @error="handleImageError"
         >
+        <div v-if="selectable && selected" class="media-selected-indicator">
+          <el-icon><Check /></el-icon>
+        </div>
       </div>
       <div class="media-info">
         <h3 class="media-title" :title="mediaTitle">
@@ -25,18 +32,52 @@
       </div>
     </div>
   </el-tooltip>
+  <div
+    v-else
+    :class="['media-card', { 'is-selected': selected, 'is-selectable': selectable }]" 
+    @click="handleClick"
+  >
+    <div class="media-poster" :style="posterStyle">
+      <img
+        :src="media.cover_image_large || media.cover || media.poster || '/placeholder.jpg'"
+        :alt="mediaTitle"
+        :class="{ 'is-loaded': isImageLoaded }"
+        @load="handleImageLoad"
+        @error="handleImageError"
+      >
+      <div v-if="selectable && selected" class="media-selected-indicator">
+        <el-icon><Check /></el-icon>
+      </div>
+    </div>
+    <div class="media-info">
+      <h3 class="media-title" :title="mediaTitle">
+        {{ mediaTitle }}
+      </h3>
+    </div>
+  </div>
 </template>
 
 <script setup>
-  import { defineProps, computed, ref } from 'vue'
+  import { defineProps, defineEmits, computed, ref } from 'vue'
   import { useRouter } from 'vue-router'
+  import { Check } from '@element-plus/icons-vue'
 
   const props = defineProps({
     media: {
       type: Object,
       required: true
+    },
+    selectable: {
+      type: Boolean,
+      default: false
+    },
+    selected: {
+      type: Boolean,
+      default: false
     }
   })
+
+  const emit = defineEmits(['select', 'click'])
 
   const router = useRouter()
 
@@ -172,7 +213,10 @@
   })
 
   const handleClick = () => {
-    if (props.media.id) {
+    if (props.selectable) {
+      emit('select', props.media)
+      emit('click', props.media)
+    } else if (props.media.id) {
       router.push(`/media/${props.media.id}`)
     }
   }
@@ -252,6 +296,38 @@
 
 .media-card:hover .media-title {
   color: var(--primary);
+}
+
+/* 选择模式样式 */
+.media-card.is-selectable {
+  position: relative;
+}
+
+.media-card.is-selectable.is-selected {
+  border-color: var(--primary, #0079d3);
+  background: var(--primary-light, rgba(0, 121, 211, 0.1));
+}
+
+.media-selected-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: var(--primary, #0079d3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 121, 211, 0.3);
+}
+
+.media-poster {
+  position: relative;
 }
 </style>
 

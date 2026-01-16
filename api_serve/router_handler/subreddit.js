@@ -2,7 +2,7 @@ const { conMysql } = require('../db/index')
 
 exports.createSubreddit = async (req, res, next) => {
   try {
-    const { name, description, category_id, visibility, is_adult, tag_ids, image_url } = req.body
+    const { name, description, category_id, visibility, is_adult, tag_ids, image_url, media } = req.body
     const created_by = req.user.id
 
     // 1. 校验分类是否存在（使用 genres 表）
@@ -53,10 +53,30 @@ exports.createSubreddit = async (req, res, next) => {
       tagsJson = JSON.stringify(tagsData)
     }
 
-    // 6. 插入板块，使用 genres_id 关联到 genres 表，tags 存储为 JSON
+    // 6. 处理media数据（如果提供了media JSON字符串）
+    let mediaJson = null
+    if (media) {
+      // 验证media是否为有效的JSON字符串
+      try {
+        const mediaData = typeof media === 'string' ? JSON.parse(media) : media
+        if (Array.isArray(mediaData) && mediaData.length > 0) {
+          // 验证media数据格式：只需要有id即可，因为现在存储完整的动漫数据
+          const validMedia = mediaData.filter(item => item && item.id)
+          if (validMedia.length > 0) {
+            // 存储完整的动漫数据到数据库
+            mediaJson = JSON.stringify(validMedia)
+          }
+        }
+      } catch (error) {
+        console.error('解析media数据失败:', error)
+        // 如果解析失败，mediaJson保持为null
+      }
+    }
+
+    // 7. 插入板块，使用 genres_id 关联到 genres 表，tags 和 media 存储为 JSON
     const insertSql = `
-      INSERT INTO subreddits (name, description, created_by, genres_id, visibility, is_adult, tags, image_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO subreddits (name, description, created_by, genres_id, visibility, is_adult, tags, image_url, media)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(insertSql, [
       name,
@@ -67,6 +87,7 @@ exports.createSubreddit = async (req, res, next) => {
       adultFlag,
       tagsJson,
       image_url || null,
+      mediaJson,
     ])
 
     if (result.affectedRows !== 1) {
@@ -75,7 +96,7 @@ exports.createSubreddit = async (req, res, next) => {
 
     const subredditId = result.insertId
 
-    // 7. 将创建者添加为板块成员（admin）
+    // 8. 将创建者添加为板块成员（admin）
     const memberInsertSql = `
       INSERT INTO subreddit_members (user_id, subreddit_id, role)
       VALUES (?, ?, 'admin')
@@ -271,7 +292,7 @@ exports.searchSubredditsByName = async (req, res, next) => {
 
 exports.getSubredditDetail = async (req, res, next) => {
   const { id } = req.query
-  const user_id = req.user.id
+  const user_id = req.user?.id
   try {
     if (!id) {
       return res.cc(false, '缺少社区ID参数', 400)
@@ -282,7 +303,8 @@ exports.getSubredditDetail = async (req, res, next) => {
       SELECT s.id, s.name, s.description, s.created_at,s.image_url,
              u.username AS created_by,
              c.ch_name AS genres_name,
-             s.tags AS tags
+             s.tags AS tags,
+             s.media AS media
       FROM subreddits s
       LEFT JOIN users u ON s.created_by = u.id
       LEFT JOIN genres c ON s.genres_id = c.id
@@ -306,17 +328,20 @@ exports.getSubredditDetail = async (req, res, next) => {
     const memberCountResult = await conMysql(memberCountSql, [id])
     const member_count = memberCountResult[0].member_count
 
-    // 判断当前用户是否已加入该社区（仅当已登录）
+    // 判断当前用户是否已加入该社区，并获取用户角色（仅当已登录）
     let is_joined = false
+    let user_role = null
     if (user_id) {
       const checkJoinSql = `
-        SELECT * FROM subreddit_members
+        SELECT role FROM subreddit_members
         WHERE user_id = ? AND subreddit_id = ?
         LIMIT 1
       `
       const joinResult = await conMysql(checkJoinSql, [user_id, id])
-      is_joined = joinResult.length > 0
-      
+      if (joinResult.length > 0) {
+        is_joined = true
+        user_role = joinResult[0].role
+      }
     }
 
     const detailResult = {
@@ -324,12 +349,139 @@ exports.getSubredditDetail = async (req, res, next) => {
       member_count,
       post_count,
       is_joined,
+      user_role,
     }
 
     res.cc(true, '获取社区详情成功', 200, detailResult)
   } catch (error) {
     console.error('获取社区详情失败:', error)
     res.cc(false, '获取社区详情失败: ' + error.message, 500)
+  }
+}
+
+// 更新社区信息
+exports.updateSubreddit = async (req, res, next) => {
+  try {
+    const subredditId = parseInt(req.params.id)
+    const userId = req.user?.id
+    const { name, description, visibility, is_adult, image_url } = req.body
+
+    // 1. 验证用户是否登录
+    if (!userId) {
+      return res.cc(false, '用户未登录或身份失效', 401)
+    }
+
+    // 2. 验证社区ID
+    if (!subredditId || isNaN(subredditId)) {
+      return res.cc(false, '无效的社区ID', 400)
+    }
+
+    // 3. 查询社区是否存在，并验证用户是否是创建者或管理员
+    const checkSql = 'SELECT id, name, created_by FROM subreddits WHERE id = ?'
+    const subreddit = await conMysql(checkSql, [subredditId])
+
+    if (!subreddit || subreddit.length === 0) {
+      return res.cc(false, '社区不存在', 404)
+    }
+
+    const subredditData = subreddit[0]
+
+    // 4. 验证用户是否是社区创建者或管理员
+    const isCreator = subredditData.created_by === userId
+    
+    // 检查是否是管理员
+    let isAdmin = false
+    if (!isCreator) {
+      const adminCheckSql = `
+        SELECT * FROM subreddit_members 
+        WHERE user_id = ? AND subreddit_id = ? AND role = 'admin'
+      `
+      const adminResult = await conMysql(adminCheckSql, [userId, subredditId])
+      isAdmin = adminResult.length > 0
+    }
+
+    if (!isCreator && !isAdmin) {
+      return res.cc(false, '只有社区创建者或管理员才能更新社区信息', 403)
+    }
+
+    // 5. 如果更新了名称，检查名称是否重复
+    if (name && name !== subredditData.name) {
+      const nameCheckSql = 'SELECT * FROM subreddits WHERE name = ? AND id != ?'
+      const nameExists = await conMysql(nameCheckSql, [name, subredditId])
+      if (nameExists.length > 0) {
+        return res.cc(false, '社区名称已存在', 409)
+      }
+    }
+
+    // 6. 验证板块类型（如果提供了）
+    if (visibility) {
+      const validTypes = ['public', 'restricted', 'private']
+      if (!validTypes.includes(visibility)) {
+        return res.cc(false, '无效的板块类型（public/restricted/private）', 400)
+      }
+    }
+
+    // 7. 处理成人标记（转换为布尔类型）
+    let adultFlag = undefined
+    if (is_adult !== undefined) {
+      adultFlag = is_adult === true || is_adult === 'true' || is_adult === 1
+    }
+
+    // 8. 构建更新SQL，只更新提供的字段
+    const updateFields = []
+    const updateValues = []
+
+    if (name !== undefined) {
+      updateFields.push('name = ?')
+      updateValues.push(name)
+    }
+    if (description !== undefined) {
+      updateFields.push('description = ?')
+      updateValues.push(description || null)
+    }
+    if (visibility !== undefined) {
+      updateFields.push('visibility = ?')
+      updateValues.push(visibility)
+    }
+    if (adultFlag !== undefined) {
+      updateFields.push('is_adult = ?')
+      updateValues.push(adultFlag)
+    }
+    if (image_url !== undefined) {
+      updateFields.push('image_url = ?')
+      updateValues.push(image_url || null)
+    }
+
+    // 如果没有要更新的字段，返回错误
+    if (updateFields.length === 0) {
+      return res.cc(false, '没有提供要更新的字段', 400)
+    }
+
+    // 添加ID到更新值数组
+    updateValues.push(subredditId)
+
+    // 9. 执行更新
+    const updateSql = `UPDATE subreddits SET ${updateFields.join(', ')} WHERE id = ?`
+    const updateResult = await conMysql(updateSql, updateValues)
+
+    if (updateResult.affectedRows !== 1) {
+      throw new Error('更新社区失败')
+    }
+
+    // 10. 返回更新后的社区信息
+    const getUpdatedSql = `
+      SELECT s.id, s.name, s.description, s.created_at, s.image_url,
+             s.visibility, s.is_adult
+      FROM subreddits s
+      WHERE s.id = ?
+    `
+    const updatedResult = await conMysql(getUpdatedSql, [subredditId])
+    const updatedSubreddit = updatedResult[0]
+
+    res.cc(true, '更新社区成功', 200, updatedSubreddit)
+  } catch (error) {
+    console.error('更新社区失败:', error)
+    next(error)
   }
 }
 

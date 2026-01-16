@@ -29,6 +29,9 @@ router.get('/detail', optionalAuth, subredditHandler.getSubredditDetail)
 //获得用户创建的板块
 router.get('/getCreateSu',subredditHandler.getMySubreddits)
 
+// 更新板块
+router.put('/:id', subredditHandler.updateSubreddit)
+
 // 解散/删除板块
 router.delete('/:id', subredditHandler.deleteSubreddit)
 

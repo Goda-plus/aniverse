@@ -3,6 +3,7 @@
     v-model="dialogVisible"
     :title="getStepTitle()"
     width="800px"
+    append-to-body
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     @close="handleClose"
@@ -11,7 +12,7 @@
       <!-- 步骤指示器 - 左下角圆点组 -->
       <div class="step-dots">
         <div
-          v-for="step in 4"
+          v-for="step in 5"
           :key="step"
           :class="['step-dot', { 'is-active': currentStep === step, 'is-completed': currentStep > step }]"
         />
@@ -139,8 +140,63 @@
         </div>
       </div>
 
-      <!-- 步骤4: 填写信息 -->
+      <!-- 步骤4: 关联动漫 -->
       <div v-if="currentStep === 4" class="step-content">
+        <div class="step-subtitle">
+          关联动漫，帮助用户更好地了解你的社区（可选）
+        </div>
+        <div class="media-container">
+          <el-input
+            v-model="mediaSearchKeyword"
+            placeholder="搜索动漫..."
+            class="media-search-input"
+            clearable
+            @input="handleMediaSearch"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <div v-if="mediaLoading" class="media-loading">
+            <el-icon class="is-loading">
+              <Loading />
+            </el-icon>
+            <span>加载中...</span>
+          </div>
+          <div v-else-if="filteredMedia.length === 0" class="media-empty">
+            <div class="media-empty-text">
+              {{ mediaSearchKeyword ? '未找到相关动漫，请尝试其他关键词' : '暂无动漫数据' }}
+            </div>
+          </div>
+          <MediaList
+            v-else
+            :items="filteredMedia"
+            layout="grid"
+            :selectable="true"
+            :selected-ids="selectedMedia"
+            @select="handleMediaSelect"
+          />
+          <div v-if="selectedMedia.length > 0" class="selected-media">
+            <div class="selected-media-title">
+              已选择的动漫：
+            </div>
+            <div class="selected-media-list">
+              <el-tag
+                v-for="mediaId in selectedMedia"
+                :key="mediaId"
+                class="selected-media-tag"
+                closable
+                @close="removeMedia(mediaId)"
+              >
+                {{ getMediaName(mediaId) }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 步骤5: 填写信息 -->
+      <div v-if="currentStep === 5" class="step-content">
         <div class="form-layout">
           <div class="form-left">
             <el-form ref="formRef" :model="formData" :rules="rules" label-width="100px">
@@ -244,10 +300,10 @@
         <el-button v-if="currentStep > 1" @click="prevStep">
           返回
         </el-button>
-        <el-button v-if="currentStep < 4" type="primary" :disabled="!canNextStep" @click="nextStep">
+        <el-button v-if="currentStep < 5" type="primary" :disabled="!canNextStep" @click="nextStep">
           下一步
         </el-button>
-        <el-button v-if="currentStep === 4" type="primary" :loading="submitting" @click="submitForm">
+        <el-button v-if="currentStep === 5" type="primary" :loading="submitting" @click="submitForm">
           创建社区
         </el-button>
         <el-button @click="handleClose">
@@ -266,7 +322,9 @@
   import { createSubreddit } from '@/axios/subreddit'
   import { getTagsList } from '@/axios/tags'
   import { uploadPostImage } from '@/axios/post'
+  import { getMediaList, searchMedia } from '@/axios/media'
   import { useRouter } from 'vue-router'
+  import MediaList from '@/components/MediaList.vue'
 
   const props = defineProps({
     modelValue: {
@@ -288,6 +346,9 @@
   const categories = ref([])
   const tags = ref([])
   const tagSearchKeyword = ref('')
+  const mediaList = ref([])
+  const mediaSearchKeyword = ref('')
+  const mediaLoading = ref(false)
   const submitting = ref(false)
   const formRef = ref(null)
 
@@ -298,6 +359,7 @@
     name: '',
     description: '',
     tag_ids: [],
+    media_ids: [],
     image_url: null
   })
   const avatarUploading = ref(false)
@@ -336,7 +398,8 @@
       1: '你的社区主题是什么?',
       2: '选择标签',
       3: '这是哪类社区?',
-      4: '向我们介绍你的社区'
+      4: '关联动漫',
+      5: '向我们介绍你的社区'
     }
     return titles[currentStep.value] || ''
   }
@@ -351,10 +414,14 @@
     if (currentStep.value === 3) {
       return formData.value.visibility !== null
     }
+    if (currentStep.value === 4) {
+      return true // 动漫是可选的，所以总是可以进入下一步
+    }
     return true
   })
 
   const selectedTags = computed(() => formData.value.tag_ids || [])
+  const selectedMedia = computed(() => formData.value.media_ids || [])
 
   const filteredTags = computed(() => {
     if (!tagSearchKeyword.value) {
@@ -365,6 +432,18 @@
       tag.name.toLowerCase().includes(keyword) ||
       (tag.description && tag.description.toLowerCase().includes(keyword))
     )
+  })
+
+  const filteredMedia = computed(() => {
+    if (!mediaSearchKeyword.value) {
+      return mediaList.value.slice(0, 20) // 默认显示前20个
+    }
+    const keyword = mediaSearchKeyword.value.toLowerCase()
+    return mediaList.value.filter(media => 
+      (media.title && media.title.toLowerCase().includes(keyword)) ||
+      (media.name && media.name.toLowerCase().includes(keyword)) ||
+      (media.description && media.description.toLowerCase().includes(keyword))
+    ).slice(0, 20)
   })
 
   const isTagSelected = (tagId) => {
@@ -392,6 +471,70 @@
     return tag ? tag.name : ''
   }
 
+  const isMediaSelected = (mediaId) => {
+    return formData.value.media_ids.includes(mediaId)
+  }
+
+  const toggleMedia = (mediaId) => {
+    const index = formData.value.media_ids.indexOf(mediaId)
+    if (index > -1) {
+      formData.value.media_ids.splice(index, 1)
+    } else {
+      formData.value.media_ids.push(mediaId)
+    }
+  }
+
+  const handleMediaSelect = (media) => {
+    toggleMedia(media.id)
+  }
+
+  const removeMedia = (mediaId) => {
+    const index = formData.value.media_ids.indexOf(mediaId)
+    if (index > -1) {
+      formData.value.media_ids.splice(index, 1)
+    }
+  }
+
+  const getMediaName = (mediaId) => {
+    const media = mediaList.value.find(m => m.id === mediaId)
+    return media ? (media.title_native || media.title || media.title_english || media.name) : ''
+  }
+
+  let searchTimeout = null
+  const handleMediaSearch = async () => {
+    // 清除之前的定时器
+    if (searchTimeout) {
+      clearTimeout(searchTimeout)
+    }
+    
+    // 如果搜索关键词为空，加载默认列表
+    if (!mediaSearchKeyword.value || mediaSearchKeyword.value.trim() === '') {
+      loadMedia()
+      return
+    }
+    
+    // 如果搜索关键词少于2个字符，不搜索
+    if (mediaSearchKeyword.value.length < 2) {
+      return
+    }
+    
+    // 防抖处理，500ms后执行搜索
+    searchTimeout = setTimeout(async () => {
+      mediaLoading.value = true
+      try {
+        const res = await searchMedia({ keyword: mediaSearchKeyword.value.trim(), page: 1, pageSize: 50 })
+        if (res.success) {
+          mediaList.value = res.data?.list || []
+        }
+      } catch (error) {
+        console.error('搜索动漫失败:', error)
+        ElMessage.error('搜索动漫失败')
+      } finally {
+        mediaLoading.value = false
+      }
+    }, 500)
+  }
+
   const selectCategory = (genreId) => {
     formData.value.genre_id = genreId
   }
@@ -401,7 +544,7 @@
   }
 
   const nextStep = () => {
-    if (currentStep.value < 4) {
+    if (currentStep.value < 5) {
       currentStep.value++
     }
   }
@@ -436,6 +579,17 @@
     }
   }
 
+  const loadMedia = async () => {
+    try {
+      const res = await getMediaList({ page: 1, pageSize: 50 })
+      if (res.success) {
+        mediaList.value = res.data?.list || []
+      }
+    } catch (error) {
+      console.error('加载动漫列表失败:', error)
+    }
+  }
+
   const submitForm = async () => {
     if (!formRef.value) return
   
@@ -443,7 +597,60 @@
       await formRef.value.validate()
     
       submitting.value = true
-    
+      
+      // 处理media数据，构建包含完整动漫数据的对象数组
+      let mediaJson = null
+      if (formData.value.media_ids && formData.value.media_ids.length > 0) {
+        const mediaData = formData.value.media_ids.map(mediaId => {
+          const media = mediaList.value.find(m => m.id === mediaId)
+          if (!media) return null
+          
+          // 构建完整的动漫数据对象，包含所有字段
+          return {
+            id: media.id,
+            title_native: media.title_native || null,
+            title_english: media.title_english || null,
+            description: media.description || null,
+            format: media.format || null,
+            status: media.status || null,
+            source: media.source || null,
+            start_date: media.start_date || null,
+            end_date: media.end_date || null,
+            season: media.season || null,
+            season_year: media.season_year || null,
+            episodes: media.episodes || null,
+            duration: media.duration || null,
+            chapters: media.chapters || null,
+            volumes: media.volumes || null,
+            hashtag: media.hashtag || null,
+            cover_image_extra_large: media.cover_image_extra_large || null,
+            cover_image_large: media.cover_image_large || null,
+            cover_image_medium: media.cover_image_medium || null,
+            cover_image_color: media.cover_image_color || null,
+            banner_image: media.banner_image || null,
+            average_score: media.average_score || null,
+            mean_score: media.mean_score || null,
+            popularity: media.popularity || null,
+            favourites: media.favourites || null,
+            is_boolean: media.is_boolean || 0,
+            country_of_origin: media.country_of_origin || null,
+            created_at: media.created_at || null,
+            updated_at: media.updated_at || null,
+            // genres 和 tags 可能是字符串（逗号分隔）或数组，统一处理为数组
+            genres: Array.isArray(media.genres) 
+              ? media.genres 
+              : (media.genres ? media.genres.split(',').map(g => g.trim()).filter(Boolean) : []),
+            tags: Array.isArray(media.tags) 
+              ? media.tags 
+              : (media.tags ? media.tags.split(',').map(t => t.trim()).filter(Boolean) : [])
+          }
+        }).filter(Boolean)
+        
+        if (mediaData.length > 0) {
+          mediaJson = JSON.stringify(mediaData)
+        }
+      }
+
       const submitData = {
         name: formData.value.name.trim(),
         description: formData.value.description.trim() || '',
@@ -451,6 +658,7 @@
         visibility: formData.value.visibility,
         is_adult: formData.value.is_adult,
         tag_ids: formData.value.tag_ids || [],
+        media: mediaJson,
         image_url: formData.value.image_url || null
       }
     
@@ -544,20 +752,31 @@
       name: '',
       description: '',
       tag_ids: [],
+      media_ids: [],
       image_url: null
     }
     tagSearchKeyword.value = ''
+    mediaSearchKeyword.value = ''
+    mediaList.value = []
     avatarPreview.value = null
     if (formRef.value) {
       formRef.value.clearValidate()
     }
   }
 
-  // 监听弹窗打开，加载分类和标签
+  // 监听弹窗打开，加载分类、标签和动漫列表
   watch(dialogVisible, (val) => {
     if (val) {
       loadCategories()
       loadTags()
+      loadMedia()
+    }
+  })
+
+  // 监听步骤变化，当进入步骤4时加载动漫列表
+  watch(currentStep, (val) => {
+    if (val === 4 && mediaList.value.length === 0) {
+      loadMedia()
     }
   })
 </script>
@@ -829,6 +1048,91 @@
   background: var(--primary-light, rgba(0, 121, 211, 0.1));
   border-color: var(--primary, #0079d3);
   color: var(--primary, #0079d3);
+}
+
+/* 动漫选择 */
+.media-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.media-search-input {
+  margin-bottom: 8px;
+}
+
+.media-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.media-loading .is-loading {
+  animation: rotate 1s linear infinite;
+}
+
+/* MediaList 组件容器样式 */
+.media-container :deep(.media-list) {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-tertiary) transparent;
+}
+
+.media-container :deep(.media-list)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.media-container :deep(.media-list)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.media-container :deep(.media-list)::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 4px;
+}
+
+.selected-media {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.selected-media-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.selected-media-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-media-tag {
+  background: var(--primary-light, rgba(0, 121, 211, 0.1));
+  border-color: var(--primary, #0079d3);
+  color: var(--primary, #0079d3);
+}
+
+.media-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+}
+
+.media-empty-text {
+  font-size: 14px;
+  text-align: center;
 }
 
 /* 社区类型 */
