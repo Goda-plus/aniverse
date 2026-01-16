@@ -37,12 +37,69 @@ exports.toggleFavorite = async (req, res, next) => {
   }
 }
 
+// 检查是否已收藏
+exports.checkFavorite = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { target_type, target_id } = req.query
+    
+    if (!target_type || !target_id) {
+      return res.cc(false, '缺少必要参数', 400)
+    }
+    
+    if (!['post', 'subreddit', 'media'].includes(target_type)) {
+      return res.cc(false, '无效的 target_type 参数', 400)
+    }
+
+    const checkSql = 'SELECT id FROM favorites WHERE user_id = ? AND target_type = ? AND target_id = ?'
+    const [exist] = await conMysql(checkSql, [user_id, target_type, target_id])
+    
+    res.cc(true, '查询成功', 200, { favorited: !!exist })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 批量检查收藏状态
+exports.checkFavoritesBatch = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { target_type, target_ids } = req.body
+    
+    if (!target_type || !Array.isArray(target_ids) || target_ids.length === 0) {
+      return res.cc(false, '缺少必要参数', 400)
+    }
+    
+    if (!['post', 'subreddit', 'media'].includes(target_type)) {
+      return res.cc(false, '无效的 target_type 参数', 400)
+    }
+
+    if (target_ids.length === 0) {
+      return res.cc(true, '查询成功', 200, { favorited_map: {} })
+    }
+
+    const placeholders = target_ids.map(() => '?').join(',')
+    const checkSql = `SELECT target_id FROM favorites WHERE user_id = ? AND target_type = ? AND target_id IN (${placeholders})`
+    const results = await conMysql(checkSql, [user_id, target_type, ...target_ids])
+    
+    const favoritedSet = new Set(results.map(r => r.target_id))
+    const favorited_map = {}
+    target_ids.forEach(id => {
+      favorited_map[id] = favoritedSet.has(id)
+    })
+    
+    res.cc(true, '查询成功', 200, { favorited_map })
+  } catch (err) {
+    next(err)
+  }
+}
+
 // 获取用户收藏的帖子或板块
 exports.getFavorites = async (req, res, next) => {
   try {
     const user_id = req.user.id
     const target_type = req.query.target_type
-    if (!['post', 'subreddit'].includes(target_type)) {
+    if (!['post', 'subreddit', 'media'].includes(target_type)) {
       return res.cc(false, '无效的 target_type 参数', 400)
     }
 
@@ -55,12 +112,20 @@ exports.getFavorites = async (req, res, next) => {
         WHERE f.user_id = ? AND f.target_type = 'post'
         ORDER BY f.created_at DESC
       `
-    } else {
+    } else if (target_type === 'subreddit') {
       sql = `
         SELECT s.*, f.genres, f.tags, f.created_at as favorited_at
         FROM favorites f
         JOIN subreddits s ON f.target_id = s.id
         WHERE f.user_id = ? AND f.target_type = 'subreddit'
+        ORDER BY f.created_at DESC
+      `
+    } else if (target_type === 'media') {
+      sql = `
+        SELECT m.*, f.genres, f.tags, f.created_at as favorited_at
+        FROM favorites f
+        JOIN media m ON f.target_id = m.id
+        WHERE f.user_id = ? AND f.target_type = 'media'
         ORDER BY f.created_at DESC
       `
     }

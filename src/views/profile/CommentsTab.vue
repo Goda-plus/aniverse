@@ -1,5 +1,23 @@
 <template>
   <div class="comments-section">
+    <div v-if="comments.length > 0" class="batch-actions">
+      <el-checkbox 
+        v-model="selectAll" 
+        :indeterminate="isIndeterminate"
+        @change="handleSelectAll"
+      >
+        全选
+      </el-checkbox>
+      <el-button 
+        v-if="selectedCommentIds.length > 0" 
+        type="danger"
+        :icon="Delete"
+        :disabled="selectedCommentIds.length === 0"
+        @click="handleBatchDelete"
+      >
+        批量删除 ({{ selectedCommentIds.length }})
+      </el-button>
+    </div>
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <el-skeleton :rows="3" animated />
@@ -13,6 +31,13 @@
             class="comment-item-wrapper"
             @click="handleCommentClick(comment)"
           >
+            <!-- 复选框 -->
+            <div class="comment-checkbox" @click.stop>
+              <el-checkbox 
+                :model-value="selectedCommentIds.includes(comment.id)"
+                @change="handleCheckboxChange(comment, $event)"
+              />
+            </div>
             <!-- 评论内容 -->
             <div class="comment-content">
               <div class="comment-header">
@@ -27,7 +52,9 @@
                 </div>
               </div>
               <div class="comment-body">
-                <p class="comment-text">{{ comment.content }}</p>
+                <p class="comment-text">
+                  {{ comment.content }}
+                </p>
               </div>
             </div>
             
@@ -79,10 +106,11 @@
 </template>
 
 <script setup>
-  import { ref, onMounted } from 'vue'
+  import { ref, onMounted, computed } from 'vue'
   import { useRouter } from 'vue-router'
-  import { ElMessage } from 'element-plus'
-  import { getUserComments } from '@/axios/comment'
+  import { Delete } from '@element-plus/icons-vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { getUserComments, deleteComment } from '@/axios/comment'
   import { useUserStore } from '@/stores/user'
 
   const router = useRouter()
@@ -93,6 +121,8 @@
   const currentPage = ref(1)
   const pageSize = ref(20)
   const total = ref(0)
+  const selectedCommentIds = ref([])
+  const selectAll = ref(false)
 
   // 加载用户评论
   const loadUserComments = async () => {
@@ -112,9 +142,14 @@
       if (response.success) {
         comments.value = response.data.comments
         total.value = response.data.pagination.totalItems || 0
+        // 重置选中状态
+        selectedCommentIds.value = []
+        selectAll.value = false
       } else {
         comments.value = []
         total.value = 0
+        selectedCommentIds.value = []
+        selectAll.value = false
       }
     } catch (error) {
       console.error('加载评论失败:', error)
@@ -171,6 +206,108 @@
     loadUserComments()
   }
 
+  // 处理复选框变化
+  const handleCheckboxChange = (comment, checked) => {
+    if (checked) {
+      if (!selectedCommentIds.value.includes(comment.id)) {
+        selectedCommentIds.value.push(comment.id)
+      }
+    } else {
+      const index = selectedCommentIds.value.indexOf(comment.id)
+      if (index > -1) {
+        selectedCommentIds.value.splice(index, 1)
+      }
+    }
+    updateSelectAllState()
+  }
+
+  // 全选/取消全选
+  const handleSelectAll = (checked) => {
+    if (checked) {
+      selectedCommentIds.value = comments.value.map(comment => comment.id)
+    } else {
+      selectedCommentIds.value = []
+    }
+    selectAll.value = checked
+  }
+
+  // 更新全选状态
+  const updateSelectAllState = () => {
+    if (comments.value.length === 0) {
+      selectAll.value = false
+      return
+    }
+    const allSelected = comments.value.every(comment => selectedCommentIds.value.includes(comment.id))
+    const someSelected = comments.value.some(comment => selectedCommentIds.value.includes(comment.id))
+    selectAll.value = allSelected
+  }
+
+  // 计算是否处于半选状态
+  const isIndeterminate = computed(() => {
+    if (comments.value.length === 0) return false
+    const selectedCount = selectedCommentIds.value.length
+    return selectedCount > 0 && selectedCount < comments.value.length
+  })
+
+  // 批量删除评论
+  const handleBatchDelete = async () => {
+    if (selectedCommentIds.value.length === 0) {
+      ElMessage.warning('请先选择要删除的评论')
+      return
+    }
+
+    try {
+      await ElMessageBox.confirm(
+        `确定要删除选中的 ${selectedCommentIds.value.length} 条评论吗？此操作不可恢复。`,
+        '确认删除',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+
+      loading.value = true
+      const deletePromises = selectedCommentIds.value.map(commentId => 
+        deleteComment(commentId).catch(error => {
+          console.error(`删除评论 ${commentId} 失败:`, error)
+          return { success: false, commentId, error }
+        })
+      )
+
+      const results = await Promise.all(deletePromises)
+      const successCount = results.filter(r => r.success !== false).length
+      const failCount = results.length - successCount
+
+      // 从列表中移除已删除的评论
+      comments.value = comments.value.filter(comment => !selectedCommentIds.value.includes(comment.id))
+      selectedCommentIds.value = []
+      selectAll.value = false
+      
+      // 更新总数
+      total.value = Math.max(0, total.value - successCount)
+
+      if (failCount === 0) {
+        ElMessage.success(`成功删除 ${successCount} 条评论`)
+      } else {
+        ElMessage.warning(`成功删除 ${successCount} 条评论，${failCount} 条删除失败`)
+      }
+
+      // 如果当前页没有数据了，且不是第一页，则跳转到上一页
+      if (comments.value.length === 0 && currentPage.value > 1) {
+        currentPage.value--
+        loadUserComments()
+      }
+    } catch (error) {
+      if (error !== 'cancel') {
+        console.error('批量删除失败:', error)
+        ElMessage.error('删除失败，请稍后重试')
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
   onMounted(() => {
     loadUserComments()
   })
@@ -179,6 +316,27 @@
 <style scoped>
 .comments-section {
   width: 100%;
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.comment-item-wrapper {
+  position: relative;
+}
+
+.comment-checkbox {
+  position: absolute;
+  left: 8px;
+  top: 16px;
+  z-index: 10;
 }
 
 .loading-container {
@@ -254,6 +412,7 @@
 
 .comment-content {
   margin-bottom: 12px;
+  margin-left: 32px;
 }
 
 .comment-header {

@@ -9,7 +9,8 @@
         全选
       </el-checkbox>
       <el-button 
-        type="danger" 
+        v-if="selectedPostIds.length > 0" 
+        type="danger"
         :icon="Delete"
         :disabled="selectedPostIds.length === 0"
         @click="handleBatchDelete"
@@ -383,6 +384,8 @@
   gap: 12px;
   margin-bottom: 24px;
   flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 0 10px;
 }
 
 .loading-container {

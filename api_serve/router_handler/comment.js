@@ -195,7 +195,10 @@ const deleteCommentRecursive = async (comment_id) => {
     await deleteCommentRecursive(child.id)
   }
   
-  // 3. 删除当前评论
+  // 3. 删除当前评论的所有投票记录（解决外键约束问题）
+  await conMysql('DELETE FROM votes WHERE comment_id = ?', [comment_id])
+  
+  // 4. 删除当前评论
   await conMysql('DELETE FROM comments WHERE id = ?', [comment_id])
 }
 

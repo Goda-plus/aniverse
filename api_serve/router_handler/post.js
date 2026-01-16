@@ -711,7 +711,25 @@ exports.deletePost = async (req, res, next) => {
     if (!post) return res.cc(false, '帖子不存在', 404)
     if (post.user_id !== user_id) return res.cc(false, '无权删除', 403)
 
-    // 删除帖子（可级联删除评论、投票等）
+    // 1. 删除帖子的所有投票记录（解决外键约束问题）
+    await conMysql('DELETE FROM votes WHERE post_id = ?', [post_id])
+
+    // 2. 删除帖子的所有评论（评论的投票会在删除评论时自动处理）
+    // 先获取所有评论ID
+    const comments = await conMysql('SELECT id FROM comments WHERE post_id = ?', [post_id])
+    
+    // 删除每个评论的投票记录
+    for (const comment of comments) {
+      await conMysql('DELETE FROM votes WHERE comment_id = ?', [comment.id])
+    }
+    
+    // 删除所有评论
+    await conMysql('DELETE FROM comments WHERE post_id = ?', [post_id])
+
+    // 3. 删除浏览历史记录
+    await conMysql('DELETE FROM browse_history WHERE target_type = ? AND target_id = ?', ['post', post_id])
+
+    // 4. 最后删除帖子本身
     await conMysql('DELETE FROM posts WHERE id = ?', [post_id])
     res.cc(true, '删除成功', 200)
   } catch (err) {

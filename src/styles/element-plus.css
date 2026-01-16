@@ -362,3 +362,42 @@
 .theme-dark .el-pagination.is-background .el-pager li.is-active {
   color: var(--el-pagination-hover-color);
 }
+
+/* 下拉菜单主题适配 */
+.theme-dark .el-dropdown-menu {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+.theme-light .el-dropdown-menu {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+.theme-dark .el-dropdown-menu__item {
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+}
+
+.theme-light .el-dropdown-menu__item {
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+}
+
+.theme-dark .el-dropdown-menu__item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.theme-light .el-dropdown-menu__item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.theme-dark .el-dropdown-menu__item.is-divided {
+  border-top-color: var(--card-border);
+}
+
+.theme-light .el-dropdown-menu__item.is-divided {
+  border-top-color: var(--card-border);
+}

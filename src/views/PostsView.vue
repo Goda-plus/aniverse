@@ -37,21 +37,31 @@
                   <span>{{ (communityInfo.member_count) }} 在线</span>
                 </div>
               </div>
-              <el-button 
-                v-if="!communityInfo.is_joined"
-                type="primary" 
-                class="join-button"
-                @click="handleJoin"
-              >
-                加入
-              </el-button>
-              <el-button 
-                v-else
-                class="joined-button"
-                @click="handleLeave"
-              >
-                已加入
-              </el-button>
+              <div class="community-actions">
+                <el-button 
+                  v-if="!communityInfo.is_joined"
+                  type="primary" 
+                  class="join-button"
+                  @click="handleJoin"
+                >
+                  加入
+                </el-button>
+                <el-button 
+                  v-else
+                  class="joined-button"
+                  @click="handleLeave"
+                >
+                  已加入
+                </el-button>
+                <el-button 
+                  circle
+                  class="favorite-button"
+                  :class="{ 'favorited': communityInfo.favorited }"
+                  @click="handleCommunityFavorite"
+                >
+                  <el-icon><StarFilled /></el-icon>
+                </el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -135,6 +145,14 @@
             >
               已加入
             </el-button>
+            <el-button 
+              class="sidebar-favorite-button"
+              :class="{ 'favorited': communityInfo.favorited }"
+              @click="handleCommunityFavorite"
+            >
+              <el-icon><Star /></el-icon>
+              <span>{{ communityInfo.favorited ? '已收藏' : '收藏' }}</span>
+            </el-button>
           </div>
         </div>
 
@@ -184,16 +202,19 @@
   import { useRoute, useRouter } from 'vue-router'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import PostList from '@/components/PostList.vue'
-  import { ChatLineRound, Loading } from '@element-plus/icons-vue'
+  import { ChatLineRound, Loading, StarFilled, Star } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import { getAllPostsWithUser, getPostsBySubreddit } from '@/axios/post'
   import RecentBrowsed from '@/components/RecentBrowsed.vue'
   import { userVote } from '@/axios/vote'
   import { getSubredditDetail } from '@/axios/subreddit'
   import { toggleMember } from '@/axios/subredditMember'
+  import { toggleFavorite, checkFavorite } from '@/axios/favorite'
+  import { useUserStore } from '@/stores/user'
 
   const route = useRoute()
   const router = useRouter()
+  const userStore = useUserStore()
 
   const communityInfo = ref(null)
   const posts = ref([])
@@ -443,6 +464,58 @@
       console.log( 'communityInfo.value', communityInfo.value)
       // 检测描述是否需要展开
       await checkDescriptionOverflow()
+      // 检查收藏状态
+      if (userStore.isLoggedIn && communityInfo.value?.id) {
+        await checkCommunityFavoriteStatus()
+      }
+    }
+  }
+
+  // 检查社区收藏状态
+  const checkCommunityFavoriteStatus = async () => {
+    if (!userStore.isLoggedIn || !communityInfo.value?.id) return
+
+    try {
+      const response = await checkFavorite({
+        target_type: 'subreddit',
+        target_id: communityInfo.value.id
+      })
+      if (response.code === 200) {
+        communityInfo.value.favorited = response.data.favorited
+      }
+    } catch (error) {
+      console.error('检查收藏状态失败:', error)
+    }
+  }
+
+  // 处理社区收藏
+  const handleCommunityFavorite = async () => {
+    if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    if (!communityInfo.value?.id) {
+      ElMessage.error('社区信息不完整')
+      return
+    }
+
+    try {
+      const response = await toggleFavorite({
+        target_type: 'subreddit',
+        target_id: communityInfo.value.id,
+        tags: communityInfo.value.tags || null
+      })
+      
+      if (response.code === 200) {
+        communityInfo.value.favorited = response.data.favorited
+        ElMessage.success(response.data.favorited ? '收藏成功' : '取消收藏成功')
+      } else {
+        ElMessage.error(response.message || '操作失败')
+      }
+    } catch (error) {
+      console.error('收藏操作失败:', error)
+      ElMessage.error(error.response?.data?.message || '操作失败')
     }
   }
 
@@ -650,6 +723,31 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.community-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.favorite-button {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #ffffff;
+  transition: all 0.3s ease;
+}
+
+.favorite-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.favorite-button.favorited {
+  background: rgba(245, 158, 11, 0.3);
+  border-color: #f59e0b;
+  color: #fbbf24;
 }
 
 .community-name {
@@ -883,6 +981,29 @@
 
 .sidebar-joined-button:hover {
   background: var(--bg-hover);
+}
+
+.sidebar-favorite-button {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--bg-secondary);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.sidebar-favorite-button:hover {
+  background: var(--bg-hover);
+}
+
+.sidebar-favorite-button.favorited {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.sidebar-favorite-button.favorited:hover {
+  background: rgba(245, 158, 11, 0.2);
 }
 
 /* 关于内容 */

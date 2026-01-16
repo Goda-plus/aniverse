@@ -63,9 +63,15 @@
                   <el-icon><Share /></el-icon>
                   <span>共享</span>
                 </el-button>
-                <el-button text size="small" class="action-btn" :type="post.starred ? 'warning' : 'default'" @click="store.toggleStar(post.id)">
+                <el-button 
+                  text 
+                  size="small" 
+                  class="action-btn" 
+                  :class="{ 'favorited': post.favorited }"
+                  @click="handleFavorite(post)"
+                >
                   <el-icon><Star /></el-icon>
-                  <span>{{ post.starred ? '已收藏' : '收藏' }}</span>
+                  <span>{{ post.favorited ? '已收藏' : '收藏' }}</span>
                 </el-button>
               </div>
             </div>
@@ -131,11 +137,16 @@
 </template>
 
 <script setup>
+  import { ref, onMounted, watch } from 'vue'
   import { useDataStore } from '@/stores/data'
+  import { useUserStore } from '@/stores/user'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import { ArrowUp, ArrowDown, ChatDotRound, Share, Star, ChatLineRound, PictureRounded, ShoppingCartFull, Coin } from '@element-plus/icons-vue'
+  import { toggleFavorite, checkFavoritesBatch } from '@/axios/favorite'
+  import { ElMessage } from 'element-plus'
 
   const store = useDataStore()
+  const userStore = useUserStore()
   const hotTags = ['#热血机甲', '#夏日祭', '#冷门佳作安利', '#COS 情报', '#周边鉴定']
   
   const popularCommunities = [
@@ -144,6 +155,69 @@
     { name: 'r/周边商城', members: '5,511,765', icon: ShoppingCartFull },
     { name: 'r/众筹', members: '744,425', icon: Coin }
   ]
+
+  // 处理帖子收藏
+  const handleFavorite = async (post) => {
+    if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    try {
+      const response = await toggleFavorite({
+        target_type: 'post',
+        target_id: post.id
+      })
+      
+      if (response.code === 200) {
+        post.favorited = response.data.favorited
+        ElMessage.success(response.data.favorited ? '收藏成功' : '取消收藏成功')
+      } else {
+        ElMessage.error(response.message || '操作失败')
+      }
+    } catch (error) {
+      console.error('收藏操作失败:', error)
+      ElMessage.error(error.response?.data?.message || '操作失败')
+    }
+  }
+
+  // 批量检查收藏状态
+  const checkFavoritesStatus = async () => {
+    if (!userStore.isLoggedIn || !store.feed || store.feed.length === 0) {
+      return
+    }
+
+    try {
+      const postIds = store.feed.map(p => p.id).filter(Boolean)
+      if (postIds.length === 0) return
+
+      const response = await checkFavoritesBatch({
+        target_type: 'post',
+        target_ids: postIds
+      })
+
+      if (response.code === 200 && response.data.favorited_map) {
+        store.feed.forEach(post => {
+          if (post.id) {
+            post.favorited = response.data.favorited_map[post.id] || false
+          }
+        })
+      }
+    } catch (error) {
+      console.error('检查收藏状态失败:', error)
+    }
+  }
+
+  // 监听 feed 变化，检查收藏状态
+  watch(() => store.feed, () => {
+    if (store.feed && store.feed.length > 0) {
+      checkFavoritesStatus()
+    }
+  }, { immediate: true, deep: true })
+
+  onMounted(() => {
+    checkFavoritesStatus()
+  })
 </script>
 
 <style scoped>
@@ -338,6 +412,14 @@
 .action-btn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.action-btn.favorited {
+  color: #f59e0b;
+}
+
+.action-btn.favorited:hover {
+  color: #d97706;
 }
 
 /* 右侧栏样式 */

@@ -165,7 +165,7 @@
           </div>
 
           <!-- 帖子操作栏 -->
-          <div class="post-actions">
+          <div class="post-actions" @click.stop>
             <!-- 卡片模式下的投票按钮 -->
             <div v-if="viewMode === 'card'" class="card-vote-section">
               <el-button 
@@ -192,26 +192,40 @@
               <el-icon><ChatLineRound /></el-icon>
               <span>{{ formatCount(post.commentCount) }} 条评论</span>
             </el-button>
-            <el-button text class="action-button" @click.stop="handleReward(post)">
+            <el-button 
+              text 
+              class="action-button" 
+              :class="{ 'favorited': post.favorited }"
+              @click.stop="handleFavorite(post)"
+            >
               <el-icon><Star /></el-icon>
-              <span>奖励</span>
+              <span>{{ post.favorited ? '已收藏' : '收藏' }}</span>
             </el-button>
-            <el-button text class="action-button" @click.stop="handleShare(post)">
-              <el-icon><Share /></el-icon>
-              <span>共享</span>
-            </el-button>
-            <el-button text class="action-button" @click.stop="handleSave(post)">
-              <el-icon><Collection /></el-icon>
-              <span>保存</span>
-            </el-button>
-            <el-button v-if="viewMode === 'compact'" text class="action-button" @click.stop="handleHide(post)">
-              <el-icon><View /></el-icon>
-              <span>隐藏</span>
-            </el-button>
-            <el-button v-if="viewMode === 'compact'" text class="action-button" @click.stop="handleReport(post)">
-              <el-icon><Warning /></el-icon>
-              <span>举报</span>
-            </el-button>
+            <el-dropdown trigger="click" @command="handleMenuCommand">
+              <el-button text class="action-button more-button">
+                <el-icon><MoreFilled /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :command="{ action: 'share', post }">
+                    <el-icon><Share /></el-icon>
+                    <span>共享</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'save', post }">
+                    <el-icon><Collection /></el-icon>
+                    <span>保存</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'hide', post }">
+                    <el-icon><View /></el-icon>
+                    <span>隐藏</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'report', post }" divided>
+                    <el-icon><Warning /></el-icon>
+                    <span>举报</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
       </div>
@@ -233,10 +247,14 @@
     Share,
     Collection,
     View,
-    Warning
+    Warning,
+    MoreFilled
   } from '@element-plus/icons-vue'
   import { useUserStore } from '@/stores/user'
   import { addBrowse } from '@/axios/browse'
+  import { toggleFavorite, checkFavoritesBatch } from '@/axios/favorite'
+  import { ElMessage } from 'element-plus'
+  import { onMounted, watch } from 'vue'
 
   const props = defineProps({
     posts: {
@@ -317,6 +335,27 @@
     emit('report', post)
   }
 
+  const handleMenuCommand = (command) => {
+    const { action, post } = command
+    switch (action) {
+      case 'reward':
+        handleReward(post)
+        break
+      case 'share':
+        handleShare(post)
+        break
+      case 'save':
+        handleSave(post)
+        break
+      case 'hide':
+        handleHide(post)
+        break
+      case 'report':
+        handleReport(post)
+        break
+    }
+  }
+
   const handlePostClick = async (post) => {
     // 添加浏览记录
     if(userStore.isLoggedIn){
@@ -341,6 +380,72 @@
   const handleCheckboxChange = (post, checked) => {
     emit('select-change', { post, checked })
   }
+
+  // 收藏功能
+  const handleFavorite = async (post) => {
+    if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    try {
+      const response = await toggleFavorite({
+        target_type: 'post',
+        target_id: post.id
+      })
+      
+      if (response.code === 200) {
+        // 更新本地状态
+        post.favorited = response.data.favorited
+        ElMessage.success(response.data.favorited ? '收藏成功' : '取消收藏成功')
+      } else {
+        ElMessage.error(response.message || '操作失败')
+      }
+    } catch (error) {
+      console.error('收藏操作失败:', error)
+      ElMessage.error(error.response?.data?.message || '操作失败')
+    }
+  }
+
+  // 批量检查收藏状态
+  const checkFavoritesStatus = async () => {
+    if (!userStore.isLoggedIn || !props.posts || props.posts.length === 0) {
+      return
+    }
+
+    try {
+      const postIds = props.posts.map(p => p.id).filter(Boolean)
+      if (postIds.length === 0) return
+
+      const response = await checkFavoritesBatch({
+        target_type: 'post',
+        target_ids: postIds
+      })
+
+      if (response.code === 200 && response.data.favorited_map) {
+        // 更新每个帖子的收藏状态
+        props.posts.forEach(post => {
+          if (post.id) {
+            post.favorited = response.data.favorited_map[post.id] || false
+          }
+        })
+      }
+    } catch (error) {
+      console.error('检查收藏状态失败:', error)
+      // 静默失败，不影响用户体验
+    }
+  }
+
+  // 监听 posts 变化，检查收藏状态
+  watch(() => props.posts, () => {
+    if (props.posts && props.posts.length > 0) {
+      checkFavoritesStatus()
+    }
+  }, { immediate: true, deep: true })
+
+  onMounted(() => {
+    checkFavoritesStatus()
+  })
 
   const formatVoteCount = (count) => {
     if (count >= 1000) {
@@ -821,6 +926,7 @@
   /* 文本截断样式 */
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -878,7 +984,29 @@
   background: var(--bg-hover);
 }
 
+.action-button.favorited {
+  color: #f59e0b;
+}
+
+.action-button.favorited:hover {
+  color: #d97706;
+}
+
 .action-button .el-icon {
+  font-size: 16px;
+}
+
+.more-button {
+  padding: 4px;
+}
+
+:deep(.el-dropdown-menu__item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:deep(.el-dropdown-menu__item .el-icon) {
   font-size: 16px;
 }
 

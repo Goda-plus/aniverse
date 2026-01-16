@@ -21,7 +21,12 @@
                   <el-button type="primary" size="large" class="add-list-btn">
                     Add to List
                   </el-button>
-                  <el-button circle class="favorite-btn">
+                  <el-button 
+                    circle 
+                    class="favorite-btn"
+                    :class="{ 'favorited': isFavorited }"
+                    @click="handleFavorite"
+                  >
                     <el-icon>
                       <StarFilled />
                     </el-icon>
@@ -110,6 +115,8 @@
   import { StarFilled } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import { getMediaDetail } from '@/axios/media'
+  import { toggleFavorite, checkFavorite } from '@/axios/favorite'
+  import { useUserStore } from '@/stores/user'
 
   const route = useRoute()
   const router = useRouter()
@@ -117,6 +124,8 @@
   const media = ref(null)
   const loading = ref(false)
   const activeTab = ref('overview')
+  const isFavorited = ref(false)
+  const userStore = useUserStore()
 
   provide('mediaDetail', media)
 
@@ -247,6 +256,10 @@
       const response = await getMediaDetail(route.params.id)
       if (response.code === 200) {
         media.value = response.data
+        // 检查收藏状态
+        if (userStore.isLoggedIn && media.value?.id) {
+          await checkFavoriteStatus()
+        }
       } else {
         ElMessage.error(response.message || '获取媒体详情失败')
       }
@@ -255,6 +268,55 @@
       ElMessage.error('获取媒体详情失败')
     } finally {
       loading.value = false
+    }
+  }
+
+  // 检查收藏状态
+  const checkFavoriteStatus = async () => {
+    if (!userStore.isLoggedIn || !media.value?.id) return
+
+    try {
+      const response = await checkFavorite({
+        target_type: 'media',
+        target_id: media.value.id
+      })
+      if (response.code === 200) {
+        isFavorited.value = response.data.favorited
+      }
+    } catch (error) {
+      console.error('检查收藏状态失败:', error)
+    }
+  }
+
+  // 处理收藏
+  const handleFavorite = async () => {
+    if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    if (!media.value?.id) {
+      ElMessage.error('媒体信息不完整')
+      return
+    }
+
+    try {
+      const response = await toggleFavorite({
+        target_type: 'media',
+        target_id: media.value.id,
+        genres: media.value.genres || null,
+        tags: media.value.tags || null
+      })
+      
+      if (response.code === 200) {
+        isFavorited.value = response.data.favorited
+        ElMessage.success(response.data.favorited ? '收藏成功' : '取消收藏成功')
+      } else {
+        ElMessage.error(response.message || '操作失败')
+      }
+    } catch (error) {
+      console.error('收藏操作失败:', error)
+      ElMessage.error(error.response?.data?.message || '操作失败')
     }
   }
 
@@ -354,6 +416,19 @@
   background: rgba(15, 23, 42, 0.8);
   border-color: rgba(148, 163, 184, 0.5);
   color: #fde68a;
+  transition: all 0.3s ease;
+}
+
+.favorite-btn.favorited {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.favorite-btn:hover {
+  background: rgba(245, 158, 11, 0.3);
+  border-color: #f59e0b;
+  color: #fbbf24;
 }
 
 .media-hero-right {
