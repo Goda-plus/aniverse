@@ -57,31 +57,58 @@
             <el-icon><ChatLineRound /></el-icon>
             <span>回复</span>
           </el-button>
-          <el-button 
-            text 
-            class="action-btn"
-            @click="handleAward"
-          >
-            <el-icon><Trophy /></el-icon>
-            <span>奖励</span>
-          </el-button>
-          <el-button 
-            text 
-            class="action-btn"
-            @click="handleShare"
-          >
-            <el-icon><Share /></el-icon>
-            <span>共享</span>
-          </el-button>
-          <el-button 
-            v-if="canDelete"
-            text 
-            class="action-btn delete-btn"
-            @click="handleDelete"
-          >
-            <el-icon><Delete /></el-icon>
-            <span>删除</span>
-          </el-button>
+          <div class="vote-section">
+            <el-button 
+              text 
+              class="vote-button upvote"
+              :class="{ active: currentVote === 'up' }"
+              @click="handleVote('up')"
+            >
+              <el-icon><ArrowUp /></el-icon>
+            </el-button>
+            <span
+              class="vote-count" :class="{ 
+                positive: currentNetVotes > 0, 
+                negative: currentNetVotes < 0 
+              }"
+              style="font-size: 12px;"
+            >
+              {{ formatVoteCount(currentNetVotes) }}
+            </span>
+            <el-button 
+              text 
+              class="vote-button downvote"
+              :class="{ active: currentVote === 'down' }"
+              @click="handleVote('down')"
+            >
+              <el-icon><ArrowDown /></el-icon>
+            </el-button>
+          </div>
+          <div ref="menuContainerRef" class="comment-more-btn">
+            <el-button 
+              text 
+              class="action-btn menu-btn"
+              @click="toggleMenu"
+            >
+              <el-icon><MoreFilled /></el-icon>
+            </el-button>
+            <Transition name="menu-fade">
+              <div v-if="showMenu" ref="menuRef" class="comment-menu">
+                <div class="menu-item" @click="handleShare">
+                  <el-icon><Share /></el-icon>
+                  <span>共享</span>
+                </div>
+                <div 
+                  class="menu-item danger" 
+                  :class="{ disabled: !canDelete }"
+                  @click="canDelete ? handleDelete() : null"
+                >
+                  <el-icon><Delete /></el-icon>
+                  <span>删除</span>
+                </div>
+              </div>
+            </Transition>
+          </div>
         </div>
 
         <!-- 折叠时显示的占位符 -->
@@ -99,6 +126,7 @@
           :comment="reply"
           :depth="depth + 1"
           :max-depth="maxDepth"
+          :post-author-id="postAuthorId"
           @reply="handleChildReply"
           @delete="handleChildDelete"
         />
@@ -108,11 +136,12 @@
 </template>
 
 <script setup>
-  import { ref, computed, onMounted, defineProps, defineEmits } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, watch, defineProps, defineEmits } from 'vue'
   import { useRoute } from 'vue-router'
   import { useUserStore } from '@/stores/user'
-  import { Plus, Minus, ChatLineRound, Trophy, Share, Delete } from '@element-plus/icons-vue'
-  import { ElMessage } from 'element-plus'
+  import { userVote } from '@/axios/vote'
+  import { Plus, Minus, ChatLineRound, Share, Delete, MoreFilled, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
 
   const props = defineProps({
     comment: {
@@ -126,15 +155,27 @@
     maxDepth: {
       type: Number,
       default: 10
+    },
+    postAuthorId: {
+      type: [Number, String],
+      default: null
     }
   })
 
-  const emit = defineEmits(['reply', 'delete'])
+  const emit = defineEmits(['reply', 'delete', 'vote'])
 
   const userStore = useUserStore()
   const route = useRoute()
   const isCollapsed = ref(false)
   const isHighlighted = ref(false)
+  
+  // 菜单相关
+  const showMenu = ref(false)
+  const menuRef = ref(null)
+  const menuContainerRef = ref(null)
+  
+  // 投票相关
+  const isVoted = ref(null)
 
   // 检查是否是目标评论
   onMounted(() => {
@@ -146,6 +187,21 @@
         isHighlighted.value = false
       }, 2000)
     }
+
+    // 添加点击外部关闭菜单的事件监听
+    document.addEventListener('click', handleClickOutside)
+    
+    // 从接口返回的数据中直接获取投票状态
+    if (props.comment.voted && props.comment.vote_type) {
+      isVoted.value = props.comment.vote_type
+      localVote.value = props.comment.vote_type
+    }
+  })
+
+  // 组件卸载前清理
+  onBeforeUnmount(() => {
+    // 移除点击外部关闭菜单的事件监听
+    document.removeEventListener('click', handleClickOutside)
   })
 
   // 计算是否有回复
@@ -158,9 +214,27 @@
     return props.comment.reply_count || (props.comment.replies ? props.comment.replies.length : 0)
   })
 
-  // 是否可以删除（只有评论作者可以删除）
+  // 是否可以删除（评论作者或帖子发布者可以删除）
   const canDelete = computed(() => {
-    return userStore.isLoggedIn && userStore.userId === props.comment.user_id
+    if (!userStore.isLoggedIn || !userStore.user) {
+      return false
+    }
+    // 确保 user_id 类型一致（都转为字符串或数字进行比较）
+    const currentUserId = userStore.user?.id
+    const commentUserId = props.comment?.user_id
+    const postAuthorId = props.postAuthorId
+    
+    if (!currentUserId) {
+      return false
+    }
+    
+    // 检查是否是评论作者
+    const isCommentAuthor = commentUserId && String(currentUserId) === String(commentUserId)
+    
+    // 检查是否是帖子发布者
+    const isPostAuthor = postAuthorId && String(currentUserId) === String(postAuthorId)
+    
+    return isCommentAuthor || isPostAuthor
   })
 
   // 切换折叠状态
@@ -178,8 +252,19 @@
     emit('reply', comment)
   }
 
+  // 切换菜单显示
+  const toggleMenu = () => {
+    showMenu.value = !showMenu.value
+  }
+
+  // 关闭菜单
+  const closeMenu = () => {
+    showMenu.value = false
+  }
+
   // 处理删除
   const handleDelete = () => {
+    closeMenu()
     emit('delete', props.comment)
   }
 
@@ -188,18 +273,120 @@
     emit('delete', comment)
   }
 
-  // 处理奖励
-  const handleAward = () => {
+  // 本地投票状态
+  // 优先使用接口返回的 vote_type（如果 voted 为 true）
+  const localVote = ref(
+    (props.comment.voted && props.comment.vote_type) 
+      ? props.comment.vote_type 
+      : (props.comment.userVote || null)
+  )
+  const localNetVotes = ref(props.comment.net_votes || 0)
+  
+  // 计算当前投票状态
+  // 优先级：本地状态 > 接口返回的 vote_type > userVote
+  const currentVote = computed(() => {
+    if (isVoted.value) return isVoted.value
+    if (localVote.value) return localVote.value
+    if (props.comment.voted && props.comment.vote_type) return props.comment.vote_type
+    if (props.comment.userVote) return props.comment.userVote
+    return null
+  })
+  
+  // 监听 comment 变化，更新投票状态
+  watch(() => props.comment, (newComment) => {
+    if (newComment.voted && newComment.vote_type) {
+      isVoted.value = newComment.vote_type
+      localVote.value = newComment.vote_type
+    }
+    if (newComment.net_votes !== undefined) {
+      localNetVotes.value = newComment.net_votes
+    }
+  }, { deep: true })
+  
+  // 计算当前投票数
+  const currentNetVotes = computed(() => {
+    return localNetVotes.value !== 0 ? localNetVotes.value : (props.comment.net_votes || '投票')
+  })
+
+  // 处理投票
+  const handleVote = async (type) => {
     if (!userStore.isLoggedIn) {
       ElMessage.warning('请先登录')
       return
     }
-    ElMessage.info('奖励功能开发中')
+    
+    try {
+      const prevVote = currentVote.value
+      const prevScore = currentNetVotes.value
+      
+      // 乐观更新本地状态
+      if (prevVote === type) {
+        // 再次点击同一方向 -> 取消投票
+        localVote.value = null
+        localNetVotes.value = prevScore - (type === 'up' ? 1 : -1)
+        isVoted.value = null
+      } else {
+        // 切换投票方向或首次投票
+        const voteChange = type === 'up' ? 1 : -1
+        let newScore = prevScore
+        if (prevVote === 'up') {
+          newScore = prevScore - 1 + voteChange
+        } else if (prevVote === 'down') {
+          newScore = prevScore + 1 + voteChange
+        } else {
+          newScore = prevScore + voteChange
+        }
+        localVote.value = type
+        localNetVotes.value = newScore
+        isVoted.value = type
+      }
+      
+      // 调用后端投票接口
+      const res = await userVote({
+        comment_id: props.comment.id,
+        vote_type: type
+      })
+      
+      if (!res.success) {
+        // 接口返回失败，回滚本地状态
+        localVote.value = prevVote
+        localNetVotes.value = prevScore
+        isVoted.value = prevVote
+        ElMessage.error(res.message || '投票失败，请稍后重试')
+      } else {
+        // 更新投票数
+        if (res.data) {
+          localNetVotes.value = res.data.upvotes - res.data.downvotes || localNetVotes.value
+        }
+        // 通知父组件更新
+        emit('vote', { 
+          type, 
+          comment: props.comment,
+          voteData: res.data
+        })
+      }
+    } catch (error) {
+      // 请求异常，回滚本地状态
+      const prevVote = currentVote.value
+      const prevScore = currentNetVotes.value
+      localVote.value = prevVote
+      localNetVotes.value = prevScore
+      isVoted.value = prevVote
+      ElMessage.error(error.response?.data?.message || '投票失败，请稍后重试')
+    }
   }
 
   // 处理分享
   const handleShare = () => {
+    closeMenu()
     ElMessage.info('分享功能开发中')
+  }
+
+  // 点击外部关闭菜单
+  const handleClickOutside = (event) => {
+    if (showMenu.value && menuContainerRef.value && !menuContainerRef.value.contains(event.target)) {
+      closeMenu()
+    }
   }
 
   // 格式化时间
@@ -222,6 +409,16 @@
       month: 'long',
       day: 'numeric'
     })
+  }
+
+  // 格式化投票数
+  const formatVoteCount = (count) => {
+    const num = count || 0
+    if (num === 0) return '0'
+    if (Math.abs(num) >= 1000) {
+      return (num / 1000).toFixed(1) + 'k'
+    }
+    return num.toString()
   }
 
 </script>
@@ -391,8 +588,83 @@
   background: var(--bg-hover, #343536);
 }
 
-.action-btn.delete-btn:hover {
-  color: #ff4444;
+.comment-more-btn {
+  position: relative;
+}
+
+.menu-btn {
+  color: var(--text-secondary, #818384);
+  transition: color 0.2s ease;
+}
+
+.menu-btn:hover {
+  color: var(--text-primary, #d7dadc);
+}
+
+.comment-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--card-bg, #1a1a1b);
+  border: 1px solid var(--card-border, #343536);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 160px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-primary, #d7dadc);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.menu-item:hover {
+  background: var(--bg-hover, #343536);
+}
+
+.menu-item.danger {
+  color: #ff6b6b;
+}
+
+.menu-item.danger:hover {
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.menu-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.menu-item.disabled:hover {
+  background: transparent;
+}
+
+.menu-item .el-icon {
+  font-size: 16px;
+}
+
+/* 菜单过渡动画 */
+.menu-fade-enter-active,
+.menu-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.menu-fade-enter-from {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
+}
+
+.menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
 }
 
 .collapsed-placeholder {

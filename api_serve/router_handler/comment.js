@@ -182,6 +182,23 @@ exports.getCommentTree = async (req, res, next) => {
   }
 }
 
+// 递归删除评论及其所有子评论
+const deleteCommentRecursive = async (comment_id) => {
+  // 1. 先查找所有子评论
+  const children = await conMysql(
+    'SELECT id FROM comments WHERE parent_comment_id = ?',
+    [comment_id]
+  )
+  
+  // 2. 递归删除所有子评论
+  for (const child of children) {
+    await deleteCommentRecursive(child.id)
+  }
+  
+  // 3. 删除当前评论
+  await conMysql('DELETE FROM comments WHERE id = ?', [comment_id])
+}
+
 // 删除评论
 exports.deleteComment = async (req, res, next) => {
   try {
@@ -189,13 +206,30 @@ exports.deleteComment = async (req, res, next) => {
     const user_id = req.user.id
     if (!comment_id) return res.cc(false, '缺少 comment_id', 400)
 
-    // 校验是否本人
-    const [comment] = await conMysql('SELECT user_id FROM comments WHERE id = ?', [comment_id])
+    // 获取评论信息，包括帖子ID
+    const [comment] = await conMysql(
+      'SELECT user_id, post_id FROM comments WHERE id = ?', 
+      [comment_id]
+    )
     if (!comment) return res.cc(false, '评论不存在', 404)
-    if (comment.user_id !== user_id) return res.cc(false, '无权删除', 403)
 
-    // 删除评论（可级联删除子评论，或只删除本条）
-    await conMysql('DELETE FROM comments WHERE id = ?', [comment_id])
+    // 获取帖子信息，检查当前用户是否是帖子发布者
+    const [post] = await conMysql(
+      'SELECT user_id FROM posts WHERE id = ?', 
+      [comment.post_id]
+    )
+    if (!post) return res.cc(false, '帖子不存在', 404)
+
+    // 校验权限：评论作者或帖子发布者可以删除
+    const isCommentAuthor = comment.user_id === user_id
+    const isPostAuthor = post.user_id === user_id
+    
+    if (!isCommentAuthor && !isPostAuthor) {
+      return res.cc(false, '无权删除', 403)
+    }
+
+    // 递归删除评论及其所有子评论
+    await deleteCommentRecursive(comment_id)
     res.cc(true, '删除成功', 200)
   } catch (err) {
     next(err)

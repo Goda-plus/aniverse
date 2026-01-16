@@ -2,7 +2,7 @@
   <div class="profile-page setting-control">
     <!-- Banner背景横幅 - 占据40%高度 -->
     <div class="profile-banner">
-      <div :style="{ backgroundImage: 'url(' + userStore.user.banner + ')' }" class="banner-image" />
+      <div :style="{ backgroundImage: 'url(' + userStore.user?.banner + ')' }" class="banner-image" />
     </div>
 
     <!-- 主要内容容器 -->

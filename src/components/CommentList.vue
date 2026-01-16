@@ -29,6 +29,7 @@
         :comment="comment"
         :depth="0"
         :max-depth="maxDepth"
+        :post-author-id="postAuthorId"
         @reply="handleReply"
         @delete="handleDelete"
       />
@@ -74,6 +75,10 @@
     autoLoad: {
       type: Boolean,
       default: true
+    },
+    postAuthorId: {
+      type: [Number, String],
+      default: null
     }
   })
 
@@ -180,7 +185,6 @@
         }
 
         if (removeComment(comments.value, comment.id)) {
-          ElMessage.success('评论已删除')
           emit('delete', comment)
         
           // 计算总评论数（包括所有子评论）

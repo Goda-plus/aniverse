@@ -188,6 +188,7 @@
     <CommentList
       ref="commentListRef"
       :post-id="post.post_id"
+      :post-author-id="post.user_id"
       @reply="handleCommentReply"
       @delete="handleCommentDelete"
       @comment-count-change="handleCommentCountChange"
