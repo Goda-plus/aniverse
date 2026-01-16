@@ -29,10 +29,22 @@
             <span v-if="post.subreddit_name" class="separator">·</span>
             <span class="post-time">{{ formatTime(post.created_at) }}</span>
           </div>
-          <div v-if="userStore.isLoggedIn && post.user_id === userStore.user.id" class="post-more-btn">
-            <el-button text class="menu-btn">
+          <div v-if="userStore.isLoggedIn && post.user_id === userStore.user.id" ref="menuContainerRef" class="post-more-btn">
+            <el-button text class="menu-btn" @click="toggleMenu">
               <el-icon><MoreFilled /></el-icon>
             </el-button>
+            <Transition name="menu-fade">
+              <div v-if="showMenu" ref="menuRef" class="post-menu">
+                <div class="menu-item" @click="handleEdit">
+                  <el-icon><Edit /></el-icon>
+                  <span>编辑</span>
+                </div>
+                <div class="menu-item danger" @click="handleDelete">
+                  <el-icon><Delete /></el-icon>
+                  <span>删除</span>
+                </div>
+              </div>
+            </Transition>
           </div>
         </div>
       </div>
@@ -187,13 +199,14 @@
   import { defineProps, defineEmits, ref, defineExpose, onMounted, onBeforeUnmount, shallowRef, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
-  import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close ,MoreFilled} from '@element-plus/icons-vue'
-  import { ElMessage } from 'element-plus'
+  import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   import CommentList from './CommentList.vue'
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor } from '@wangeditor/editor-for-vue'
   import { createComment } from '@/axios/comment'
   import { getUserVoteStatus, getPostVoteStatus } from '@/axios/vote'
+  import { deletePost } from '@/axios/post'
 
   const props = defineProps({
     post: {
@@ -202,7 +215,7 @@
     }
   })
   let isVoted = ref(null)
-  const emit = defineEmits(['vote', 'comment', 'share', 'back'])
+  const emit = defineEmits(['vote', 'comment', 'share', 'back', 'edit', 'delete'])
 
   const router = useRouter()
   const userStore = useUserStore()
@@ -210,6 +223,11 @@
   const commentContent = ref('')
   const submitting = ref(false)
   const replyingTo = ref(null)
+  
+  // 菜单相关
+  const showMenu = ref(false)
+  const menuRef = ref(null)
+  const menuContainerRef = ref(null)
 
   // wangeditor 相关
   const editorRef = shallowRef(null)
@@ -266,6 +284,79 @@
 
   const handleShare = () => {
     emit('share', props.post)
+  }
+
+  // 切换菜单显示
+  const toggleMenu = () => {
+    showMenu.value = !showMenu.value
+  }
+
+  // 关闭菜单
+  const closeMenu = () => {
+    showMenu.value = false
+  }
+
+  // 处理编辑
+  const handleEdit = () => {
+    closeMenu()
+    // 将帖子数据存储到 sessionStorage，供编辑页面使用
+    const editData = {
+      post_id: props.post.post_id,
+      title: props.post.title,
+      content_html: props.post.content_html,
+      subreddit_id: props.post.subreddit_id,
+      subreddit_name: props.post.subreddit_name,
+      image_url: props.post.image_url
+    }
+    sessionStorage.setItem('editingPost', JSON.stringify(editData))
+    
+    // 导航到创建帖子页面
+    router.push({
+      path: '/create-post',
+      query: {
+        edit: 'true'
+      }
+    })
+  }
+
+  // 处理删除
+  const handleDelete = async () => {
+    closeMenu()
+    try {
+      await ElMessageBox.confirm(
+        '确定要删除这条帖子吗？此操作不可恢复。',
+        '删除确认',
+        {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          type: 'warning',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+
+      // 用户确认删除
+      try {
+        const response = await deletePost(props.post.post_id)
+        if (response.success) {
+          ElMessage.success('帖子已删除')
+          emit('delete', props.post)
+          // 延迟一下再返回，让用户看到成功消息
+          setTimeout(() => {
+            handleBack()
+          }, 500)
+        } else {
+          ElMessage.error(response.message || '删除失败')
+        }
+      } catch (error) {
+        console.error('删除帖子失败:', error)
+        ElMessage.error(error.response?.data?.message || error.message || '删除失败，请稍后重试')
+      }
+    } catch (error) {
+      // 用户取消删除，不需要处理
+      if (error !== 'cancel') {
+        console.error('删除确认失败:', error)
+      }
+    }
   }
 
   // 处理评论回复
@@ -376,6 +467,13 @@
     }
     return num.toString()
   }
+  // 点击外部关闭菜单
+  const handleClickOutside = (event) => {
+    if (showMenu.value && menuContainerRef.value && !menuContainerRef.value.contains(event.target)) {
+      closeMenu()
+    }
+  }
+
   onMounted(async () => {
     // 初始化编辑器内容
     if (props.post?.content_html) {
@@ -405,10 +503,16 @@
         console.warn('获取投票状态失败:', error)
       }
     }
+
+    // 添加点击外部关闭菜单的事件监听
+    document.addEventListener('click', handleClickOutside)
   })
 
   // 组件卸载前清理编辑器
   onBeforeUnmount(() => {
+    // 移除点击外部关闭菜单的事件监听
+    document.removeEventListener('click', handleClickOutside)
+    
     const editor = editorRef.value
     if (editor != null) {
       try {
@@ -784,6 +888,7 @@
 }
 
 .post-more-btn {
+  position: relative;
   flex: 1;
   display: flex;
   justify-content: flex-end;
@@ -791,7 +896,72 @@
   gap: 4px;
   padding: 4px 8px;
   color: var(--text-primary);
- 
+}
+
+.menu-btn {
+  color: var(--text-secondary, #818384);
+  transition: color 0.2s ease;
+}
+
+.menu-btn:hover {
+  color: var(--text-primary, #d7dadc);
+}
+
+.post-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--card-bg, #1a1a1b);
+  border: 1px solid var(--card-border, #343536);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 160px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-primary, #d7dadc);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.menu-item:hover {
+  background: var(--bg-hover, #343536);
+}
+
+.menu-item.danger {
+  color: #ff6b6b;
+}
+
+.menu-item.danger:hover {
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.menu-item .el-icon {
+  font-size: 16px;
+}
+
+/* 菜单过渡动画 */
+.menu-fade-enter-active,
+.menu-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.menu-fade-enter-from {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
+}
+
+.menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
 }
 
 /* 响应式设计 */

@@ -3,7 +3,7 @@
     <div class="create-post">
       <div class="create-post-header">
         <h2 class="create-post-title">
-          创建帖子
+          {{ isEditMode ? '编辑帖子' : '创建帖子' }}
         </h2>
         <el-button text @click="handleCancel">
           <el-icon><Close /></el-icon>
@@ -86,7 +86,7 @@
             保存草稿
           </el-button>
           <el-button type="primary" :loading="submitting" @click="handleSubmit">
-            发布
+            {{ isEditMode ? '更新' : '发布' }}
           </el-button>
         </div>
       </div>
@@ -122,6 +122,10 @@
   const subredditSelectRef = ref(null)
   const dropdownWrapEl = ref(null)
   const loadingSubreddits = ref(false)
+  
+  // 编辑模式相关
+  const isEditMode = ref(false)
+  const editingPostId = ref(null)
 
   // 编辑器实例
   const editorRef = shallowRef(null)
@@ -439,7 +443,7 @@
     return count.toString()
   }
 
-  // 提交表单（发布）
+  // 提交表单（发布或更新）
   const handleSubmit = async () => {
     // 验证表单
     if (!formData.title || formData.title.trim() === '') {
@@ -462,30 +466,60 @@
       const finalEditorContent = getEditorHtml()
       const finalTextContent = getEditorText()
       
-      // 创建帖子（发布）
-      const postData = {
-        subreddit_id: formData.subreddit || null,
-        title: formData.title,
-        content_html: finalEditorContent,
-        content_text: finalTextContent,
-        image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
-        is_draft: 0  // 0表示已发布
-      }
+      if (isEditMode.value && editingPostId.value) {
+        // 编辑模式：更新帖子
+        const postData = {
+          post_id: editingPostId.value,
+          subreddit_id: formData.subreddit || null,
+          title: formData.title,
+          content_html: finalEditorContent,
+          content_text: finalTextContent,
+          image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
+          is_draft: 0  // 0表示已发布
+        }
 
-      const res = await createPost(postData)
-      ElMessage.success('帖子发布成功')
-      
-      // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
-      formData.subreddit = ''
-      formData.title = ''
-      formData.content = ''
-      imageUrl.value = [] // 重置图片 URL 数组
-      
-      // 发出成功事件，父组件会处理导航
-      emit('success', res.data)
+        const res = await updatePost(postData)
+        ElMessage.success('帖子更新成功')
+        
+        // 清除编辑数据
+        sessionStorage.removeItem('editingPost')
+        isEditMode.value = false
+        editingPostId.value = null
+        
+        // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
+        formData.subreddit = ''
+        formData.title = ''
+        formData.content = ''
+        imageUrl.value = [] // 重置图片 URL 数组
+        
+        // 发出成功事件，父组件会处理导航
+        emit('success', res.data)
+      } else {
+        // 创建模式：创建新帖子
+        const postData = {
+          subreddit_id: formData.subreddit || null,
+          title: formData.title,
+          content_html: finalEditorContent,
+          content_text: finalTextContent,
+          image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
+          is_draft: 0  // 0表示已发布
+        }
+
+        const res = await createPost(postData)
+        ElMessage.success('帖子发布成功')
+        
+        // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
+        formData.subreddit = ''
+        formData.title = ''
+        formData.content = ''
+        imageUrl.value = [] // 重置图片 URL 数组
+        
+        // 发出成功事件，父组件会处理导航
+        emit('success', res.data)
+      }
     } catch (error) {
-      console.error('发布帖子失败:', error)
-      ElMessage.error(error.response?.data?.message || '发布失败，请重试')
+      console.error(isEditMode.value ? '更新帖子失败:' : '发布帖子失败:', error)
+      ElMessage.error(error.response?.data?.message || (isEditMode.value ? '更新失败，请重试' : '发布失败，请重试'))
     } finally {
       submitting.value = false
     }
@@ -533,12 +567,20 @@
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
+        // 清除编辑数据
+        if (isEditMode.value) {
+          sessionStorage.removeItem('editingPost')
+        }
         emit('cancel')
         // 导航逻辑由父组件 CreatePostView 的 handleCancel 处理
       }).catch(() => {
       // 用户取消
       })
     } else {
+      // 清除编辑数据
+      if (isEditMode.value) {
+        sessionStorage.removeItem('editingPost')
+      }
       emit('cancel')
       // 导航逻辑由父组件 CreatePostView 的 handleCancel 处理
     }
@@ -604,14 +646,90 @@
 
 
   // 组件挂载
-  onMounted(() => {
+  // 加载编辑数据
+  const loadEditData = async () => {
+    try {
+      // 检查路由参数
+      if (route.query.edit === 'true') {
+        // 从 sessionStorage 读取编辑数据
+        const editDataStr = sessionStorage.getItem('editingPost')
+        if (editDataStr) {
+          const editData = JSON.parse(editDataStr)
+          isEditMode.value = true
+          editingPostId.value = editData.post_id
+          
+          // 填充表单数据
+          formData.title = editData.title || ''
+          formData.subreddit = editData.subreddit_id || ''
+          
+          // 处理图片 URL
+          if (editData.image_url) {
+            try {
+              const imageUrls = typeof editData.image_url === 'string' 
+                ? JSON.parse(editData.image_url) 
+                : editData.image_url
+              imageUrl.value = Array.isArray(imageUrls) ? imageUrls : []
+            } catch (e) {
+              imageUrl.value = []
+            }
+          }
+          
+          // 等待编辑器创建后填充内容
+          const waitForEditorAndSetContent = async () => {
+            const maxRetries = 20
+            let retries = 0
+            const checkEditor = () => {
+              return new Promise((resolve) => {
+                const editor = editorRef.value
+                if (editor && !editor.isDestroyed) {
+                  resolve(editor)
+                } else if (retries < maxRetries) {
+                  retries++
+                  setTimeout(() => {
+                    checkEditor().then(resolve)
+                  }, 100)
+                } else {
+                  resolve(null)
+                }
+              })
+            }
+            const editor = await checkEditor()
+            if (editor && editData.content_html) {
+              try {
+                isClearingEditor.value = true
+                editor.setHtml(editData.content_html)
+                formData.content = editData.content_html
+                isClearingEditor.value = false
+              } catch (error) {
+                console.error('设置编辑器内容失败:', error)
+              }
+            }
+          }
+          
+          // 延迟一下确保编辑器已创建
+          setTimeout(() => {
+            waitForEditorAndSetContent()
+          }, 300)
+        }
+      }
+    } catch (error) {
+      console.error('加载编辑数据失败:', error)
+    }
+  }
+
+  onMounted(async () => {
     isMounted.value = true
-    loadSubreddits()
+    
+    // 先加载社区列表
+    await loadSubreddits()
   
     // 如果路由中有社区参数，自动填充
     if (route.params.community) {
       formData.subreddit = route.params.community
     }
+    
+    // 加载编辑数据（在社区列表加载完成后）
+    loadEditData()
   })
 
   // 组件卸载前清理资源
