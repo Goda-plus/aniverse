@@ -10,9 +10,21 @@
                 <img :src="communityInfo.image_url" :alt="communityInfo.name">
               </div>
               <div class="community-details">
-                <h1 class="community-name">
-                  r/{{ communityInfo.name }}
-                </h1>
+                <div class="community-name-row">
+                  <h1 class="community-name">
+                    r/{{ communityInfo.name }}
+                  </h1>
+                  <div v-if="communityInfo.media && communityInfo.media.length > 0" class="community-media">
+                    <el-tag
+                      v-for="media in communityInfo.media"
+                      :key="media.id"
+                      class="media-tag"
+                      size="small"
+                    >
+                      {{ media.title_native }}
+                    </el-tag>
+                  </div>
+                </div>
                 <div class="community-description-container">
                   <el-tag v-for="tag in communityInfo.tags" :key="tag" :type="tag.type">
                     #{{ tag.name }}
@@ -418,20 +430,19 @@
       avatar: 'https://via.placeholder.com/64?text=' + name,
       banner: 'https://via.placeholder.com/1200x200?text=' + name,
       is_joined: false,
-      createdAt: Date.now() - 365 * 24 * 60 * 60 * 1000
+      createdAt: Date.now() - 365 * 24 * 60 * 60 * 1000,
+      media: []
     }
-    try {
-      const res = await getSubredditDetail({ id: route.query.subredditId })
-      if (res.success) {
-        communityInfo.value = res.data
-        communityInfo.value.tags = JSON.parse(communityInfo.value.tags)
-      }
+    const res = await getSubredditDetail({ id: route.query.subredditId })
+    if (res.success) {
+      communityInfo.value =  res.data
+      // 解析 tags
+      communityInfo.value.tags = JSON.parse(communityInfo.value.tags)
+      // 解析 media（关联的动漫）
+      communityInfo.value.media = JSON.parse(communityInfo.value.media)
       console.log( 'communityInfo.value', communityInfo.value)
       // 检测描述是否需要展开
       await checkDescriptionOverflow()
-    } catch (error) {
-      console.error('加载社区信息失败:', error)
-      ElMessage.error(error.response?.data?.message || '加载社区信息失败，请稍后重试')
     }
   }
 
@@ -633,11 +644,38 @@
   color: #ffffff;
 }
 
+.community-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .community-name {
   font-size: 28px;
   font-weight: 700;
-  margin: 0 0 8px 0;
+  margin: 0;
   color: #ffffff;
+}
+
+.community-media {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.media-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.media-tag {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  backdrop-filter: blur(4px);
 }
 
 .community-description {
@@ -747,6 +785,33 @@
   color: var(--text-primary);
   margin: 0;
   transition: color 0.3s ease;
+}
+
+.community-sidebar-media {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.sidebar-media-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: color 0.3s ease;
+}
+
+.sidebar-media-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sidebar-media-tag {
+  background: var(--bg-secondary);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
 
 .community-sidebar-description-container {
@@ -942,6 +1007,15 @@
 
   .community-name {
     font-size: 24px;
+  }
+
+  .community-name-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .community-media {
+    margin-top: 4px;
   }
 }
 </style>
