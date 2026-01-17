@@ -11,6 +11,11 @@
         <slot name="sidebar" />
       </aside>
     </div>
+
+    <!-- 底部栏 -->
+    <div class="bottom-bar" :class="{ 'hidden': showBottomBar }">
+      <slot name="bottom" />
+    </div>
   </div>
 </template>
 
@@ -20,6 +25,10 @@
     sidebar: {
       type: Boolean,
       default: true
+    },
+    showBottomBar: {
+      type: Boolean,
+      default: false
     }
   })
 </script>
@@ -48,6 +57,16 @@
 }
 
 .right-sidebar.hidden {
+  display: none;
+}
+
+.bottom-bar {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--card-border);
+}
+
+.bottom-bar.hidden {
   display: none;
 }
 

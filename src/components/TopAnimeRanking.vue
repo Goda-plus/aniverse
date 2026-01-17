@@ -7,7 +7,7 @@
         </h2>
         <span class="section-subtitle">Showing top 10</span>
       </div>
-      <el-button link type="primary">
+      <el-button link type="primary" @click="handleViewAll">
         View All
       </el-button>
     </div>
@@ -118,13 +118,19 @@
 </template>
 
 <script setup>
-  import { onMounted, ref } from 'vue'
+  import { onMounted, ref ,defineEmits} from 'vue'
   import { ElMessage } from 'element-plus'
   import { Smile } from '@element-plus/icons-vue'
   import { getMediaList } from '@/axios/media'
 
+  const emit = defineEmits(['view-all'])
+
   const topMedia = ref([])
   const loadingTop = ref(false)
+
+  const handleViewAll = () => {
+    emit('view-all')
+  }
 
   const fetchTopMedia = async () => {
     loadingTop.value = true

@@ -192,28 +192,22 @@
               <el-icon><ChatLineRound /></el-icon>
               <span>{{ formatCount(post.commentCount) }} 条评论</span>
             </el-button>
-            <el-button 
-              text 
-              class="action-button" 
-              :class="{ 'favorited': post.favorited }"
-              @click.stop="handleFavorite(post)"
-            >
-              <el-icon><Star /></el-icon>
-              <span>{{ post.favorited ? '已收藏' : '收藏' }}</span>
-            </el-button>
             <el-dropdown trigger="click" @command="handleMenuCommand">
               <el-button text class="action-button more-button">
                 <el-icon><MoreFilled /></el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item 
+                    :command="{ action: 'favorite', post }"
+                    :class="{ 'favorited-item': post.favorited }"
+                  >
+                    <el-icon><Star /></el-icon>
+                    <span>{{ post.favorited ? '已收藏' : '收藏' }}</span>
+                  </el-dropdown-item>
                   <el-dropdown-item :command="{ action: 'share', post }">
                     <el-icon><Share /></el-icon>
                     <span>共享</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item :command="{ action: 'save', post }">
-                    <el-icon><Collection /></el-icon>
-                    <span>保存</span>
                   </el-dropdown-item>
                   <el-dropdown-item :command="{ action: 'hide', post }">
                     <el-icon><View /></el-icon>
@@ -338,6 +332,9 @@
   const handleMenuCommand = (command) => {
     const { action, post } = command
     switch (action) {
+      case 'favorite':
+        handleFavorite(post)
+        break
       case 'reward':
         handleReward(post)
         break
@@ -984,11 +981,11 @@
   background: var(--bg-hover);
 }
 
-.action-button.favorited {
+:deep(.el-dropdown-menu__item.favorited-item) {
   color: #f59e0b;
 }
 
-.action-button.favorited:hover {
+:deep(.el-dropdown-menu__item.favorited-item:hover) {
   color: #d97706;
 }
 

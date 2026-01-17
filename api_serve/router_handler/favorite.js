@@ -106,18 +106,44 @@ exports.getFavorites = async (req, res, next) => {
     let sql, data
     if (target_type === 'post') {
       sql = `
-        SELECT p.*, f.genres, f.tags, f.created_at as favorited_at
+        SELECT 
+          p.*,
+          f.genres, 
+          f.tags, 
+          f.created_at as favorited_at,
+          u.username as author,
+          u.avatar_url as authorAvatar,
+          s.name as subreddit,
+          s.image_url as subredditIcon,
+          COALESCE(SUM(v.vote_type), 0) as score,
+          COUNT(DISTINCT c.id) as commentCount,
+          uv.vote_type as userVote,
+          p.created_at as createdAt,
+          p.image_url as image
         FROM favorites f
         JOIN posts p ON f.target_id = p.id
+        LEFT JOIN users u ON p.user_id = u.id
+        LEFT JOIN subreddits s ON p.subreddit_id = s.id
+        LEFT JOIN votes v ON p.id = v.post_id
+        LEFT JOIN comments c ON p.id = c.post_id
+        LEFT JOIN votes uv ON p.id = uv.post_id AND uv.user_id = ?
         WHERE f.user_id = ? AND f.target_type = 'post'
+        GROUP BY p.id, f.genres, f.tags, f.created_at, u.username, u.avatar_url, s.name, s.image_url, uv.vote_type
         ORDER BY f.created_at DESC
       `
     } else if (target_type === 'subreddit') {
       sql = `
-        SELECT s.*, f.genres, f.tags, f.created_at as favorited_at
+        SELECT 
+          s.*, 
+          f.genres, 
+          f.tags, 
+          f.created_at as favorited_at,
+          COUNT(DISTINCT sm.user_id) as member_count
         FROM favorites f
         JOIN subreddits s ON f.target_id = s.id
+        LEFT JOIN subreddit_members sm ON s.id = sm.subreddit_id
         WHERE f.user_id = ? AND f.target_type = 'subreddit'
+        GROUP BY s.id, f.genres, f.tags, f.created_at
         ORDER BY f.created_at DESC
       `
     } else if (target_type === 'media') {
@@ -130,9 +156,14 @@ exports.getFavorites = async (req, res, next) => {
       `
     }
 
-    data = await conMysql(sql, [user_id])
+    // 根据不同的 target_type 传递不同的参数
+    if (target_type === 'post') {
+      data = await conMysql(sql, [user_id, user_id])
+    } else {
+      data = await conMysql(sql, [user_id])
+    }
     
-    // 解析 JSON 字段（如果存在）
+    // 解析 JSON 字段（如果存在）并添加 favorited 标记
     data = data.map(item => {
       if (item.genres) {
         try {
@@ -148,6 +179,8 @@ exports.getFavorites = async (req, res, next) => {
           // 如果解析失败，保持原值
         }
       }
+      // 添加 favorited 标记，因为这些都是收藏的项目
+      item.favorited = true
       return item
     })
     

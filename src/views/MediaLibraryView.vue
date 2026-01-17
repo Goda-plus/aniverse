@@ -257,7 +257,7 @@
           </div>
 
           <!-- TOP 100 ANIME 排名（展示前10条） -->
-          <TopAnimeRanking />
+          <TopAnimeRanking @view-all="viewAllTop" />
         </div>
 
         <!-- 有筛选时显示：筛选后的媒体列表 -->
@@ -274,8 +274,8 @@
 </template>
 
 <script setup>
-  import { ref, onMounted, computed } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { ref, onMounted, computed, watch } from 'vue'
+  import { useRouter, useRoute } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { Search, Filter, ArrowDown } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
@@ -287,6 +287,7 @@
   import { useScrollPagination } from '@/utils/useScrollPagination'
 
   const router = useRouter()
+  const route = useRoute()
 
   // 数据
   const trendingMedia = ref([])
@@ -302,6 +303,8 @@
   const mediaLayout = ref('grid')
   const sortBy = ref('popularity')
   const sortOrder = ref('DESC')
+  // 强制显示筛选结果（即使没有筛选条件，仅按排序）
+  const forceShowFiltered = ref(false)
   const filteredPagination = ref({
     total: 0,
     totalPages: 0,
@@ -343,6 +346,7 @@
   // 当前是否有激活的过滤条件
   const hasActiveFilters = computed(() => {
     return (
+      forceShowFiltered.value ||
       !!filters.value.search ||
       (filters.value.genre && filters.value.genre.length > 0) ||
       !!filters.value.year ||
@@ -502,8 +506,8 @@
     const params = {
       page,
       pageSize: filteredPagination.value.pageSize || 20,
-      sort: sortBy.value,
-      order: sortOrder.value
+      sortBy: sortBy.value,
+      order: sortOrder.value.toLowerCase()
     }
 
     if (filters.value.search) {
@@ -619,6 +623,7 @@
       season: null,
       format: null
     }
+    forceShowFiltered.value = false
     handleFilterChange()
   }
 
@@ -663,26 +668,123 @@
     mediaLayout.value = layout
   }
 
-  // 查看全部
+  // 查看全部 - TRENDING NOW
   const viewAllTrending = () => {
-    router.push({
-      path: '/media-library',
-      query: { section: 'trending', ...filters.value }
-    })
+    // 清空现有筛选条件
+    filters.value = {
+      search: '',
+      genre: [],
+      year: null,
+      season: null,
+      format: null
+    }
+    // 设置排序为 trending
+    sortBy.value = 'trending'
+    sortOrder.value = 'DESC'
+    // 强制显示筛选结果
+    forceShowFiltered.value = true
+    // 触发筛选
+    handleFilterChange()
   }
 
+  // 查看全部 - POPULAR THIS SEASON
   const viewAllSeason = () => {
-    router.push({
-      path: '/media-library',
-      query: { section: 'season', ...filters.value }
-    })
+    const currentDate = new Date()
+    const currentYear = currentDate.getFullYear()
+    let currentSeason = 'SPRING'
+    
+    const month = currentDate.getMonth() + 1
+    if (month >= 3 && month <= 5) {
+      currentSeason = 'SPRING'
+    } else if (month >= 6 && month <= 8) {
+      currentSeason = 'SUMMER'
+    } else if (month >= 9 && month <= 11) {
+      currentSeason = 'FALL'
+    } else {
+      currentSeason = 'WINTER'
+    }
+    
+    // 设置筛选条件
+    filters.value = {
+      search: '',
+      genre: [],
+      year: currentYear,
+      season: currentSeason,
+      format: null
+    }
+    // 设置排序为 popularity
+    sortBy.value = 'popularity'
+    sortOrder.value = 'DESC'
+    // 有筛选条件时不需要强制显示
+    forceShowFiltered.value = false
+    // 触发筛选
+    handleFilterChange()
   }
+
+  // 查看全部 - TOP 100 ANIME
+  const viewAllTop = () => {
+    // 设置筛选条件
+    filters.value = {
+      search: '',
+      genre: [],
+      year: null,
+      season: null,
+      format: 'TV'
+    }
+    // 设置排序为 average_score
+    sortBy.value = 'average_score'
+    sortOrder.value = 'DESC'
+    // 有筛选条件时不需要强制显示
+    forceShowFiltered.value = false
+    // 触发筛选
+    handleFilterChange()
+  }
+
+  // 根据路由查询参数初始化筛选条件
+  const initFiltersFromQuery = () => {
+    const query = route.query
+    if (query.section) {
+      switch (query.section) {
+        case 'trending':
+          viewAllTrending()
+          break
+        case 'season':
+          viewAllSeason()
+          break
+        case 'top':
+          viewAllTop()
+          break
+      }
+    } else if (query.search || query.genre || query.year || query.season || query.format) {
+      // 从查询参数恢复筛选条件
+      if (query.search) filters.value.search = query.search
+      if (query.genre) {
+        filters.value.genre = Array.isArray(query.genre) ? query.genre.map(Number) : [Number(query.genre)]
+      }
+      if (query.year) filters.value.year = Number(query.year)
+      if (query.season) filters.value.season = query.season
+      if (query.format) filters.value.format = query.format
+      if (query.sortBy) sortBy.value = query.sortBy
+      if (query.sortOrder) sortOrder.value = query.sortOrder
+      // 触发筛选
+      handleFilterChange()
+    }
+  }
+
+  // 监听路由变化
+  watch(() => route.query, () => {
+    initFiltersFromQuery()
+  }, { deep: true })
 
   // 初始化
   onMounted(() => {
     fetchGenres()
     fetchTrendingMedia()
     fetchSeasonMedia()
+    // 延迟初始化筛选条件，确保 genres 已加载
+    setTimeout(() => {
+      initFiltersFromQuery()
+    }, 100)
   })
 </script>
 

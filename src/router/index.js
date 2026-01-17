@@ -160,6 +160,11 @@ const routes = [
     component: () => import('../views/MediaLibraryView.vue')
   },
   {
+    path: '/pro',
+    name: 'favorites',
+    component: () => import('../views/FavoriteView.vue')
+  },
+  {
     path: '/media/:id',
     name: 'media-detail',
     component: () => import('../views/MediaDetailView.vue'),
