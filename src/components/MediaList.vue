@@ -42,7 +42,7 @@
                 <span v-if="getEpisodes(media)">• {{ getEpisodes(media) }}</span>
               </div>
             </div>
-            <div class="media-card-row-header-right" v-if="getScore(media) !== null">
+            <div v-if="getScore(media) !== null" class="media-card-row-header-right">
               <div class="media-score-circle">
                 <span class="media-score-value">{{ getScore(media) }}%</span>
               </div>
@@ -51,7 +51,7 @@
           <p v-if="media.description || media.description_preview" class="media-card-row-description">
             {{ media.description_preview || media.description }}
           </p>
-          <div class="media-card-row-tags" v-if="getGenres(media).length">
+          <div v-if="getGenres(media).length" class="media-card-row-tags">
             <span
               v-for="genre in getGenres(media)"
               :key="genre"
@@ -83,7 +83,7 @@
             <h3 class="media-compact-title">
               {{ getTitle(media) }}
             </h3>
-            <div class="media-compact-tags" v-if="getGenres(media).length">
+            <div v-if="getGenres(media).length" class="media-compact-tags">
               <span
                 v-for="genre in getGenres(media)"
                 :key="genre"
@@ -95,7 +95,7 @@
           </div>
         </div>
         <div class="media-compact-right">
-          <div class="media-compact-score" v-if="getScore(media) !== null">
+          <div v-if="getScore(media) !== null" class="media-compact-score">
             {{ getScore(media) }}%
           </div>
           <div class="media-compact-meta">

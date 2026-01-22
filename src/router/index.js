@@ -187,6 +187,11 @@ const routes = [
       },
       // Staff / Stats tabs removed
     ]
+  },
+  {
+    path: '/character/:id',
+    name: 'character-detail',
+    component: () => import('../views/CharacterDetailView.vue')
   }
 ]
 

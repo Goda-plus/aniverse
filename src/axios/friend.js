@@ -9,6 +9,9 @@ export const getPendingList = () => request.get('/api/friends/pendlist')
 // 添加好友
 export const addFriend = (data) => request.post('/api/friends/request', data)
 
+// 搜索用户（按用户名关键字）
+export const searchUsers = (keyword) => request.get('/api/user/search', { params: { username: keyword } })
+
 // 处理好友请求
 export const handleFriendRequest = (data) => request.post('/api/friends/handle', data)
 

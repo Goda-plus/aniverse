@@ -63,7 +63,7 @@
         <div class="top-rank">
           #{{ index + 1 }}
         </div>
-        <div class="top-cover">
+        <div class="top-cover" @click="handleMediaClick(media.id)">
           <img
             :src="media.cover_image_medium || media.cover_image_large"
             :alt="media.title_english || media.title_native"
@@ -119,17 +119,23 @@
 
 <script setup>
   import { onMounted, ref ,defineEmits} from 'vue'
+  import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { Smile } from '@element-plus/icons-vue'
   import { getMediaList } from '@/axios/media'
 
   const emit = defineEmits(['view-all'])
+  const router = useRouter()
 
   const topMedia = ref([])
   const loadingTop = ref(false)
 
   const handleViewAll = () => {
     emit('view-all')
+  }
+
+  const handleMediaClick = (mediaId) => {
+    router.push(`/media/${mediaId}`)
   }
 
   const fetchTopMedia = async () => {
@@ -254,6 +260,12 @@
   overflow: hidden;
   background: var(--bg-tertiary);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.top-cover:hover {
+  transform: scale(1.05);
 }
 
 .top-cover img {

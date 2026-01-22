@@ -76,3 +76,27 @@ exports.login = async (req, res, next) => {
     next(err)
   }
 }
+
+// 按用户名关键字搜索用户（用于添加好友）
+exports.searchUsers = async (req, res, next) => {
+  try {
+    const { username } = req.query
+    if (!username || !username.trim()) {
+      return res.cc(false, '请输入要搜索的用户名', 400)
+    }
+
+    // 模糊匹配用户名，最多返回 20 条
+    const keyword = `%${username.trim()}%`
+    const sql = `
+      SELECT id, username, avatar_url
+      FROM users
+      WHERE username LIKE ?
+      ORDER BY id DESC
+      LIMIT 20
+    `
+    const rows = await conMysql(sql, [keyword])
+    res.cc(true, '搜索用户成功', 200, rows)
+  } catch (err) {
+    next(err)
+  }
+}

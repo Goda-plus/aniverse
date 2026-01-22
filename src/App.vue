@@ -41,6 +41,15 @@
               获取应用
             </el-button>
             <el-button 
+              v-if="userStore.isLoggedIn"
+              text 
+              class="chat-btn"
+              @click="showChatWindow = true"
+            >
+              <el-icon><ChatDotRound /></el-icon>
+              聊天
+            </el-button>
+            <el-button 
               v-if="!userStore.isLoggedIn"
               type="primary" 
               round 
@@ -280,13 +289,21 @@
         v-model="showCreateCommunityDialog"
         @success="handleCommunityCreated"
       />
+      
+      <!-- 聊天窗口 - 只在用户登录后显示 -->
+      <component 
+        :is="ChatWindowComponent"
+        v-if="userStore.isLoggedIn && ChatWindowComponent"
+        v-model:visible="showChatWindow" 
+        @close="showChatWindow = false" 
+      />
     </template>
   </div>
   <AvatarEditor v-model="showAvatarEditor" />
 </template>
 
 <script setup>
-  import { computed, ref, onMounted } from 'vue'
+  import { computed, ref, onMounted, defineAsyncComponent, shallowRef } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useThemeStore } from '@/stores/theme'
   import { useUserStore } from '@/stores/user'
@@ -294,6 +311,9 @@
   import ThemeSettings from '@/components/ThemeSettings.vue'
   import CreateCommunityDialog from '@/components/CreateCommunityDialog.vue'
   import AvatarEditor from '@/components/AvatarEditor.vue'
+  
+  // 条件导入聊天窗口组件，只在用户登录后加载
+  const ChatWindow = shallowRef(null)
   import {
     House,
     ArrowUp,
@@ -322,7 +342,8 @@
     DataBoard,
     Plus,
     ShoppingCartFull,
-    Collection
+    Collection,
+    ChatDotRound
   } from '@element-plus/icons-vue'
 
   const route = useRoute()
@@ -333,6 +354,7 @@
   const showThemeSettings = ref(false)
   const showUserMenu = ref(false)
   const showCreateCommunityDialog = ref(false)
+  const showChatWindow = ref(false)
   const themeStore = useThemeStore()
   const userStore = useUserStore()
   const darkModeEnabled = computed({
@@ -346,6 +368,10 @@
   const isAuthPage = computed(() => {
     return route.path === '/login' || route.path === '/register'
   })
+  
+  // 计算属性：当用户登录后加载聊天窗口组件
+  // 修正：避免在 computed 内部产生副作用，直接定义 async component 并通过 computed 控制是否渲染
+  const ChatWindowComponent = defineAsyncComponent(() => import('@/components/ChatWindow.vue'))
 
   const toggleSidebar = () => {
     sidebarVisible.value = !sidebarVisible.value
@@ -562,6 +588,16 @@
 }
 
 .get-app-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.chat-btn {
+  color: var(--text-primary);
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+
+.chat-btn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }

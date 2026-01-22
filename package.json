@@ -22,12 +22,14 @@
     "element-plus": "^2.7.8",
     "express": "^5.2.1",
     "express-jwt": "^8.5.1",
+    "gsap": "^3.14.2",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "mysql": "^2.18.1",
     "pinia": "^2.1.7",
     "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "vue": "^3.2.13",
     "vue-router": "^4.0.3"
   },
@@ -58,6 +60,12 @@
     ],
     "parserOptions": {
       "parser": "@babel/eslint-parser"
+    },
+    "globals": {
+      "defineProps": "readonly",
+      "defineEmits": "readonly",
+      "defineExpose": "readonly",
+      "withDefaults": "readonly"
     },
     "rules": {}
   },

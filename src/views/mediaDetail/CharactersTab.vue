@@ -6,9 +6,10 @@
 
     <div v-if="media && media.characters && media.characters.length" class="characters-list">
       <div
-        v-for="ch in media.characters"
+        v-for="ch in displayedCharacters"
         :key="`${ch.id}-${ch.voice_actor_id || 'na'}`"
         class="character-row"
+        @click="goToCharacterDetail(ch.id)"
       >
         <div class="character-main">
           <div class="character-avatar">
@@ -49,17 +50,54 @@
       </div>
     </div>
 
-    <p v-else class="empty-text">
+    <div v-if="hasMoreCharacters" class="load-more-container">
+      <el-button 
+        class="load-more-btn" 
+        type="primary"
+        plain
+        @click="loadMoreCharacters"
+      >
+        加载更多角色 ({{ remainingCount }})
+      </el-button>
+    </div>
+
+    <p v-else-if="!media || !media.characters || !media.characters.length" class="empty-text">
       暂无角色数据。
     </p>
   </div>
 </template>
 
 <script setup>
-  import { inject, computed } from 'vue'
+  import { inject, computed, ref } from 'vue'
+  import { useRouter } from 'vue-router'
 
+  const router = useRouter()
   const injected = inject('mediaDetail', null)
   const media = computed(() => injected?.value ?? injected ?? null)
+
+  const visibleCount = ref(6)
+  const initialCount = 6
+
+  const displayedCharacters = computed(() => {
+    if (!media.value?.characters) return []
+    return media.value.characters.slice(0, visibleCount.value)
+  })
+
+  const hasMoreCharacters = computed(() => {
+    if (!media.value?.characters) return false
+    return media.value.characters.length > visibleCount.value
+  })
+
+  const remainingCount = computed(() => {
+    if (!media.value?.characters) return 0
+    return media.value.characters.length - visibleCount.value
+  })
+
+  const loadMoreCharacters = () => {
+    if (media.value?.characters) {
+      visibleCount.value = media.value.characters.length
+    }
+  }
 
   const formatCharacterRole = (role) => {
     if (!role) return ''
@@ -69,6 +107,12 @@
       BACKGROUND: 'Background'
     }
     return map[role] || role
+  }
+
+  const goToCharacterDetail = (characterId) => {
+    if (characterId) {
+      router.push(`/character/${characterId}`)
+    }
   }
 </script>
 
@@ -100,6 +144,15 @@
   background: rgba(15, 23, 42, 0.95);
   border: 1px solid rgba(31, 41, 55, 0.9);
   width: calc(50% - 6px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.character-row:hover {
+  background: rgba(15, 23, 42, 1);
+  border-color: var(--primary, #0079d3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .character-main {
@@ -185,6 +238,38 @@
 .empty-text {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.load-more-btn {
+  --el-button-bg-color: rgba(15, 23, 42, 0.95) !important;
+  --el-button-border-color: rgba(31, 41, 55, 0.9) !important;
+  --el-button-text-color: #f9fafb !important;
+  --el-button-hover-bg-color: rgba(15, 23, 42, 1) !important;
+  --el-button-hover-border-color: var(--primary, #0079d3) !important;
+  --el-button-hover-text-color: #f9fafb !important;
+  --el-button-active-bg-color: rgba(15, 23, 42, 1) !important;
+  --el-button-active-border-color: var(--primary, #0079d3) !important;
+  --el-button-active-text-color: #f9fafb !important;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.load-more-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 @media (max-width: 900px) {

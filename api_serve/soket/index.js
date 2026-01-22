@@ -5,8 +5,23 @@ const {conMysql} = require('../db/index')
 
 const userSocketMap = new Map()
 
+// 获取用户 Socket ID 的工具函数
+function getUserSocketId (userId) {
+  return userSocketMap.get(userId)
+}
+
+// 向特定用户发送消息的工具函数
+function sendToUser (io, userId, event, data) {
+  const socketId = getUserSocketId(userId)
+  if (socketId) {
+    io.to(socketId).emit(event, data)
+  }
+}
+
+let io = null
+
 module.exports = function initSocket (server) {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
       origin: ['http://localhost:8080', 'http://localhost:3000'],
       credentials: true
@@ -14,8 +29,8 @@ module.exports = function initSocket (server) {
   })
 
   // 使用 express-jwt 进行握手鉴权（支持 Bearer 与 auth.token）
-  const authenticate = expressJWT({ 
-    secret: config.jwtSecretKey, 
+  const authenticate = expressJWT({
+    secret: config.jwtSecretKey,
     algorithms: ['HS256'],
     requestProperty: 'user'  // 将解析后的 token 数据放在 req.user 上
   })
@@ -73,6 +88,7 @@ module.exports = function initSocket (server) {
         )
 
         io.to(roomId).emit('chatMessage', {
+          roomId: roomId,
           user: msg.username,
           userId: msg.user_id,
           content: msg.content,
@@ -96,6 +112,22 @@ module.exports = function initSocket (server) {
       }
     })
   })
+
+  return {
+    io,
+    userSocketMap,
+    sendToUser: (userId, event, data) => {
+      console.log(`尝试向用户 ${userId} 发送事件 ${event}:`, data)
+      const socketId = userSocketMap.get(userId)
+      console.log(`用户 ${userId} 的socketId:`, socketId)
+      if (socketId) {
+        io.to(socketId).emit(event, data)
+        console.log(`事件 ${event} 已发送给用户 ${userId}`)
+      } else {
+        console.log(`用户 ${userId} 未连接，无法发送事件 ${event}`)
+      }
+    }
+  }
 }
 
 module.exports.userSocketMap = userSocketMap

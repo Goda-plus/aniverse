@@ -244,20 +244,20 @@ exports.getCharacterMedia = async (req, res, next) => {
     const limit = parseInt(pageSize)
 
     const sql = `
-      SELECT 
-        m.*,
-        mc.role
-      FROM media m
-      INNER JOIN media_characters mc ON m.id = mc.media_id
-      WHERE mc.character_id = ?
-      ORDER BY 
-        CASE mc.role
-          WHEN 'MAIN' THEN 1
-          WHEN 'SUPPORTING' THEN 2
-          WHEN 'BACKGROUND' THEN 3
-        END,
-        m.popularity DESC
-      LIMIT ? OFFSET ?
+      SELECT DISTINCT
+    m.*,
+    mc.role
+FROM media m
+INNER JOIN media_characters mc ON m.id = mc.media_id
+WHERE mc.character_id = ?
+ORDER BY 
+    CASE mc.role
+        WHEN 'MAIN' THEN 1
+        WHEN 'SUPPORTING' THEN 2
+        WHEN 'BACKGROUND' THEN 3
+    END,
+    m.popularity DESC
+    LIMIT ? OFFSET ?
     `
 
     const countSql = `

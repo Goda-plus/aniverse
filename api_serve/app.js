@@ -199,7 +199,10 @@ app.use((err, req, res, next) => {
   res.cc(false, err.message, 500)
 })
 
-initSocket(server)
+const socketInstance = initSocket(server)
+
+// 将 socket 实例挂载到全局，这样其他模块可以访问
+global.socketInstance = socketInstance
 
 // 调用 app.listen 方法，指定端口号并启动web服务器
 server.listen(3000, () => {

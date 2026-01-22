@@ -1,5 +1,8 @@
 const {conMysql} = require('../db')
 
+// 获取 Socket.io 实例（通过全局变量）
+const getSocketInstance = () => global.socketInstance
+
 exports.requestFriend = async (req, res, next) => {
   let { friendId } = req.body
   const userId = req.user.id
@@ -32,6 +35,17 @@ exports.requestFriend = async (req, res, next) => {
        VALUES (?, ?, 'pending')`,
       [userId, friendId]
     )
+
+    // 发送实时通知给被申请者
+    const socketInstance = getSocketInstance()
+    if (socketInstance) {
+      socketInstance.sendToUser(friendId, 'friendRequest', {
+        fromUserId: userId,
+        fromUsername: req.user.username,
+        message: '想添加你为好友'
+      })
+    }
+
     res.cc(true, '好友请求已发送')
   } catch (e) { next(e) }
 }
@@ -55,6 +69,16 @@ exports.handleRequest = async (req, res, next) => {
          VALUES (?, ?, 'accepted')`,
         [userId, friendId]
       )
+
+      // 发送实时通知给申请者
+      const socketInstance = getSocketInstance()
+      if (socketInstance) {
+        socketInstance.sendToUser(friendId, 'friendRequestAccepted', {
+          fromUserId: userId,
+          fromUsername: req.user.username
+        })
+      }
+
       res.cc(true, '好友请求已接受')
     } else {
       // 拒绝：删除请求
@@ -83,7 +107,7 @@ exports.listFriends = async (req, res, next) => {
          SELECT user_id FROM friends
          WHERE friend_id = ? AND status = 'accepted'
        )`,
-       [userId, userId]
+      [userId, userId]
     )
     res.cc(true, '获取好友列表成功', 200, rows)
   } catch (e) { next(e) }

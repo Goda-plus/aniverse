@@ -44,6 +44,31 @@ exports.listRooms = async (req, res, next) => {
        JOIN chat_room_members m ON m.room_id = r.id
        WHERE m.user_id = ? ORDER BY r.created_at DESC`, [userId]
     )
+    
+    // 为每个房间获取成员信息和最后一条消息
+    for (const room of rows) {
+      // 获取房间成员
+      const members = await conMysql(
+        `SELECT u.id, u.username, u.avatar_url
+         FROM chat_room_members m
+         JOIN users u ON m.user_id = u.id
+         WHERE m.room_id = ? AND u.id != ?`, [room.id, userId]
+      )
+      room.members = members
+      
+      // 获取最后一条消息
+      const [lastMsg] = await conMysql(
+        `SELECT content, username, created_at
+         FROM messages
+         WHERE room_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`, [room.id]
+      )
+      if (lastMsg) {
+        room.lastMessage = lastMsg
+      }
+    }
+    
     res.cc(true, '获取房间成功', 200, rows)
   } catch (e) { next(e) }
 }

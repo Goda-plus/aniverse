@@ -143,6 +143,54 @@
                 layout="grid"
               />
             </div>
+
+            <!-- 角色列表 -->
+            <div v-else-if="activeCategory === 'character'" key="character" class="characters-list">
+              <div v-if="filteredCharacters.length === 0" class="empty-state">
+                <el-empty description="暂无收藏的角色" />
+              </div>
+              <div v-else class="favorite-items-list">
+                <div
+                  v-for="character in filteredCharacters"
+                  :key="character.id"
+                  class="favorite-item-card"
+                  @click="goToCharacter(character)"
+                >
+                  <div class="favorite-item-thumbnail">
+                    <img
+                      v-if="character.image_medium || character.image_large"
+                      :src="character.image_medium || character.image_large"
+                      :alt="character.name_native || character.name_alternative"
+                    >
+                    <div v-else class="favorite-item-placeholder">
+                      <el-icon><User /></el-icon>
+                    </div>
+                  </div>
+                  <div class="favorite-item-content">
+                    <h3 class="favorite-item-title">
+                      {{ character.name_native || character.name_alternative || character.name || '未知角色' }}
+                    </h3>
+                    <div class="favorite-item-tags">
+                      <span class="favorite-tag">角色</span>
+                      <span v-if="character.role" class="favorite-tag">{{ character.role }}</span>
+                    </div>
+                  </div>
+                  <div class="favorite-item-right">
+                    <div class="favorite-item-meta">
+                      <span>角色</span>
+                      <span>已收藏</span>
+                    </div>
+                    <el-button
+                      text
+                      class="favorite-item-btn"
+                      @click.stop="handleUnfavorite(character, 'character')"
+                    >
+                      <el-icon><Star /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </transition>
         </div>
       </div>
@@ -194,7 +242,7 @@
   import { ref, computed, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import { Search, Star, ChatLineRound, Document, VideoPlay } from '@element-plus/icons-vue'
+  import { Search, Star, ChatLineRound, Document, VideoPlay, User } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import MediaList from '@/components/MediaList.vue'
   import { getFavorite } from '@/axios/favorite'
@@ -206,7 +254,8 @@
   const categories = [
     { key: 'post', label: '帖子', icon: Document },
     { key: 'subreddit', label: '社区', icon: ChatLineRound },
-    { key: 'media', label: '动漫', icon: VideoPlay }
+    { key: 'media', label: '动漫', icon: VideoPlay },
+    { key: 'character', label: '角色', icon: User }
   ]
 
   // 当前激活的分类
@@ -216,6 +265,7 @@
   const posts = ref([])
   const communities = ref([])
   const media = ref([])
+  const characters = ref([])
 
   // 搜索关键词
   const searchKeyword = ref('')
@@ -264,6 +314,8 @@
           communities.value = items
         } else if (activeCategory.value === 'media') {
           media.value = items
+        } else if (activeCategory.value === 'character') {
+          characters.value = items
         }
         // 更新分页信息
         total.value = pagination.total || items.length
@@ -340,6 +392,16 @@
     })
   })
 
+  const filteredCharacters = computed(() => {
+    if (!searchKeyword.value) return characters.value
+    const keyword = searchKeyword.value.toLowerCase()
+    return characters.value.filter(character => {
+      const name = (character.name_native || character.name_alternative || character.name || '').toLowerCase()
+      const desc = (character.description || '').toLowerCase()
+      return name.includes(keyword) || desc.includes(keyword)
+    })
+  })
+
   // 搜索处理
   const handleSearch = () => {
   // 搜索逻辑已在 computed 中处理
@@ -374,6 +436,11 @@
     } else {
       router.push(`/post/${post.id}`)
     }
+  }
+
+  // 跳转到角色详情
+  const goToCharacter = (character) => {
+    router.push(`/character/${character.id}`)
   }
 
   // 格式化成员数
@@ -579,6 +646,11 @@
 
 /* 动漫列表样式 */
 .media-list {
+  width: 100%;
+}
+
+/* 角色列表样式 */
+.characters-list {
   width: 100%;
 }
 

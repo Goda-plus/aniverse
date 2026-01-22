@@ -41,17 +41,25 @@
     <template #sidebar>
       <div class="sidebar-content">
         <div class="sidebar-card">
-          <div class="sidebar-title">热门社区</div>
+          <div class="sidebar-title">
+            热门社区
+          </div>
           <div class="community-item">
             <div class="community-icon">
               <el-icon><PictureRounded /></el-icon>
             </div>
             <div class="community-info">
-              <div class="community-name">r/名场面</div>
-              <div class="community-members">5,598,208 位成员</div>
+              <div class="community-name">
+                r/名场面
+              </div>
+              <div class="community-members">
+                5,598,208 位成员
+              </div>
             </div>
           </div>
-          <el-button text class="view-more-btn">查看更多内容</el-button>
+          <el-button text class="view-more-btn">
+            查看更多内容
+          </el-button>
         </div>
       </div>
     </template>
