@@ -83,8 +83,8 @@ module.exports = function initSocket (server) {
 
       try {
         await conMysql(
-          'INSERT INTO messages (room_id, user_id, username, content) VALUES (?,?,?,?)',
-          [msg.room_id, msg.user_id, msg.username, msg.content]
+          'INSERT INTO messages (room_id, user_id, content, created_at) VALUES (?,?,?,NOW())',
+          [msg.room_id, msg.user_id, msg.content]
         )
 
         io.to(roomId).emit('chatMessage', {
