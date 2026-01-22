@@ -221,6 +221,8 @@
             :chat-rooms="chatRooms"
             :friends="friends"
             @send-message="handleSendMessage"
+            @recall-message="handleRecallMessage"
+            @send-image="handleSendImage"
           />
 
           <div v-else class="chat-main-empty">
@@ -447,6 +449,7 @@
   onUnmounted(() => {
     if (socket.value) {
       socket.value.off('chatMessage')
+      socket.value.off('messageRecalled')
     }
     // 销毁拖拽实例
     if (draggableInstance.value) {
@@ -474,14 +477,18 @@
             user_id: data.userId,
             username: data.user,
             content: data.content,
-            created_at: data.time || new Date().toISOString()
+            imageUrl: data.imageUrl,
+            messageType: data.messageType || 'text',
+            created_at: data.time || new Date().toISOString(),
+            status: 'read' // 收到的消息标记为已读
           })
           scrollToBottom()
         } else {
-          // 如果是自己的消息，更新最后一条临时消息的ID
+          // 如果是自己的消息，更新最后一条临时消息的ID和状态
           const lastMsg = messages.value[messages.value.length - 1]
-          if (lastMsg && lastMsg.user_id === currentUserId.value && lastMsg.content === data.content) {
+          if (lastMsg && lastMsg.user_id === currentUserId.value && lastMsg.content === data.content && lastMsg.status === 'sending') {
             lastMsg.id = Date.now() // 更新为服务器返回的ID
+            lastMsg.status = 'sent' // 更新状态为已发送
           }
         }
       }
@@ -539,6 +546,20 @@
           content: data.content,
           timestamp: new Date().toISOString()
         })
+      }
+    })
+
+    // 监听消息撤回
+    socket.value.on('messageRecalled', (data) => {
+      const receivedRoomId = Number(data.roomId)
+      const currentRoomId = Number(activeRoomId.value)
+
+      if (receivedRoomId === currentRoomId) {
+        const messageIndex = messages.value.findIndex(msg => msg.id === data.messageId)
+        if (messageIndex > -1) {
+          messages.value[messageIndex].recalled = true
+          messages.value[messageIndex].content = ''
+        }
       }
     })
   }
@@ -633,7 +654,10 @@
     try {
       const res = await getChatHistory({ roomId, page: 1, pageSize: 50 })
       if (res.success) {
-        messages.value = res.data || []
+        messages.value = (res.data || []).map(msg => ({
+          ...msg,
+          status: msg.user_id === currentUserId.value ? 'sent' : 'read' // 设置消息状态
+        }))
         await nextTick()
         scrollToBottom()
       }
@@ -657,7 +681,8 @@
       user_id: currentUserId.value,
       username: userStore.username,
       content: messageContent,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      status: 'sending' // 添加发送状态
     })
     scrollToBottom()
 
@@ -688,6 +713,80 @@
   // 处理来自 MessageList 组件的发送消息事件
   function handleSendMessage (content) {
     sendMessage(content)
+  }
+
+  // 处理撤回消息
+  async function handleRecallMessage (messageId) {
+    try {
+      // 这里可以调用后端API来撤回消息
+      // 暂时先在前端处理
+      const messageIndex = messages.value.findIndex(msg => msg.id === messageId)
+      if (messageIndex > -1) {
+        // 标记消息为已撤回
+        messages.value[messageIndex].recalled = true
+        messages.value[messageIndex].content = '' // 清空内容
+
+        // 通过Socket通知其他用户消息已被撤回
+        if (socket.value) {
+          socket.value.emit('recallMessage', {
+            roomId: activeRoomId.value.toString(),
+            messageId: messageId
+          })
+        }
+      }
+    } catch (error) {
+      ElMessage.error('撤回消息失败')
+    }
+  }
+
+  // 处理发送图片消息
+  async function handleSendImage (file) {
+    if (!activeRoomId.value || sendingMessage.value) return
+
+    const tempId = Date.now()
+
+    // 创建图片预览URL
+    const imageUrl = URL.createObjectURL(file)
+
+    // 立即显示图片消息（乐观更新）
+    messages.value.push({
+      id: tempId,
+      user_id: currentUserId.value,
+      username: userStore.username,
+      content: '[图片]',
+      imageUrl: imageUrl,
+      messageType: 'image',
+      created_at: new Date().toISOString(),
+      status: 'sending'
+    })
+    scrollToBottom()
+
+    sendingMessage.value = true
+    try {
+      // 这里应该将图片上传到服务器并获取URL
+      // 暂时先使用本地URL进行演示
+      if (socket.value) {
+        socket.value.emit('chatMessage', {
+          roomId: activeRoomId.value.toString(),
+          content: '[图片]',
+          imageUrl: imageUrl,
+          messageType: 'image'
+        })
+
+        // 更新消息状态
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg && lastMsg.id === tempId) {
+          lastMsg.status = 'sent'
+        }
+      }
+    } catch (error) {
+      ElMessage.error('发送图片失败')
+      // 移除临时消息
+      const index = messages.value.findIndex(m => m.id === tempId)
+      if (index > -1) messages.value.splice(index, 1)
+    } finally {
+      sendingMessage.value = false
+    }
   }
 
   // 创建新聊天
@@ -1833,11 +1932,83 @@
     border-radius: 0;
     right: 0;
     bottom: 0;
+    top: 0 !important;
+    left: 0 !important;
   }
 
   .chat-window.maximized {
     width: 100vw;
     height: 100vh;
+  }
+
+  .chat-sidebar {
+    width: 280px;
+    min-width: 250px;
+    max-width: 300px;
+  }
+
+  .chat-main {
+    min-width: 0;
+  }
+
+  .chat-header {
+    padding: 0 8px;
+  }
+
+  .chat-header-left {
+    gap: 6px;
+  }
+
+  .chat-title {
+    font-size: 14px;
+  }
+
+  .sidebar-search {
+    padding: 12px 8px;
+  }
+
+  .messages-header {
+    padding: 8px 12px;
+  }
+
+  .messages-container {
+    padding: 12px 8px;
+  }
+
+  .message-input-container {
+    padding: 8px 12px;
+  }
+
+  .add-friend-view,
+  .create-chat-view {
+    padding: 12px;
+  }
+
+  /* 表情符选择器在移动端优化 */
+  .emoji-picker {
+    width: 250px;
+    max-height: 150px;
+  }
+
+  .emoji-grid {
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    padding: 8px;
+  }
+
+  .emoji-item {
+    font-size: 18px;
+    padding: 2px;
+  }
+
+  /* 消息菜单在移动端优化 */
+  .message-menu {
+    min-width: 100px;
+  }
+
+  .menu-item {
+    padding: 6px 8px;
+    font-size: 12px;
   }
 }
 </style>
