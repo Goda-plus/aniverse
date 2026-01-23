@@ -47,3 +47,6 @@ export * from './voiceActors'
 
 // 媒体类型相关接口
 export * from './mediaGenres'
+
+// 众筹相关接口
+export * from './crowdfunding'

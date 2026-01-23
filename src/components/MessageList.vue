@@ -217,14 +217,14 @@
           accept="image/*"
           style="display: none"
           @change="handleImageSelect"
-        />
+        >
         <!-- 表情符选择器 -->
         <div
           v-if="showEmojiPicker"
           class="emoji-picker"
+          tabindex="0"
           @click.stop
           @keydown="handleEmojiKeydown"
-          tabindex="0"
         >
           <div class="emoji-grid">
             <span

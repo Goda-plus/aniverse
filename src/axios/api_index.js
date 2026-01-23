@@ -15,7 +15,10 @@ instance.interceptors.request.use((config) => {
   const storage = getStorage()
   const token = storage.getItem('token')
   if (token) {
-    config.headers.Authorization = token
+    // 后端使用 express-jwt，默认要求 Authorization: Bearer <token>
+    config.headers.Authorization = token.toLowerCase().startsWith('bearer ')
+      ? token
+      : `Bearer ${token}`
   }
   
   return config

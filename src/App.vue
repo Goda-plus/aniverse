@@ -231,10 +231,10 @@
                     帮助
                   </template>
                 </el-menu-item>
-                <el-menu-item index="/blog">
-                  <el-icon><Document /></el-icon>
+                <el-menu-item index="/crowdfunding">
+                  <el-icon><Coin /></el-icon>
                   <template #title>
-                    博客
+                    创意众筹
                   </template>
                 </el-menu-item>
                 <el-menu-item index="/careers">
@@ -343,7 +343,8 @@
     Plus,
     ShoppingCartFull,
     Collection,
-    ChatDotRound
+    ChatDotRound,
+    Coin
   } from '@element-plus/icons-vue'
 
   const route = useRoute()

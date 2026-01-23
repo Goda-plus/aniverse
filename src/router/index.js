@@ -77,6 +77,28 @@ const routes = [
     component: () => import('../views/OrderDetailView.vue')
   },
   {
+    path: '/crowdfunding',
+    name: 'crowdfunding',
+    component: () => import('../views/CrowdfundingView.vue')
+  },
+  {
+    path: '/crowdfunding/project/:id',
+    name: 'crowdfunding-project',
+    component: () => import('../views/CrowdfundingProjectView.vue')
+  },
+  {
+    path: '/crowdfunding/create',
+    name: 'crowdfunding-create',
+    component: () => import('../views/CrowdfundingCreateView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/crowdfunding/edit/:id',
+    name: 'crowdfunding-edit',
+    component: () => import('../views/CrowdfundingEditView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/crowd',
     name: 'crowd',
     component: () => import('../views/CrowdView.vue')

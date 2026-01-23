@@ -85,6 +85,11 @@ app.use(
         /^\/api\/mall\/categories$/,
         /^\/api\/mall\/product\/\d+$/,
         /^\/api\/mall\/reviews$/,
+        // 众筹公开接口（仅 GET）
+        // 注意：这里必须限制 methods，否则 PUT/POST 会被错误地放行，导致 req.user 为空而 500
+        { url: /^\/api\/crowdfunding\/projects\/\d+$/, methods: ['GET'] },
+        { url: /^\/api\/crowdfunding\/projects\/\d+\/updates$/, methods: ['GET'] },
+        { url: /^\/api\/crowdfunding\/projects\/\d+\/comments$/, methods: ['GET'] },
         // 次元库公开接口（查询类接口）
         /^\/api\/media\/list$/,
         /^\/api\/media\/detail\/\d+$/,
@@ -165,6 +170,7 @@ const friendRouter   = require('./router/friends')
 const chatRoomRouter = require('./router/chatRoom')
 const chatRouter     = require('./router/chat')
 const mallRouter     = require('./router/mall')
+const crowdfundingRouter = require('./router/crowdfunding')
 
 // 次元库相关路由
 const mediaRouter = require('./router/media')
@@ -177,6 +183,7 @@ app.use('/api/friends',   friendRouter)
 app.use('/api/chatroom',  chatRoomRouter)
 app.use('/api/chat',      chatRouter)
 app.use('/api/mall',      mallRouter)
+app.use('/api/crowdfunding', crowdfundingRouter)
 
 // 次元库路由
 app.use('/api/media', mediaRouter)
