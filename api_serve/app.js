@@ -192,6 +192,12 @@ app.use('/api/characters', charactersRouter)
 app.use('/api/voice-actors', voiceActorsRouter)
 app.use('/api/media-genres', mediaGenresRouter)
 
+// 同好匹配模块路由
+const userInterestRouter = require('./router/userInterest')
+const userRecommendationRouter = require('./router/userRecommendation')
+app.use('/api/user', userInterestRouter)
+app.use('/api/user', userRecommendationRouter)
+
 
 
 

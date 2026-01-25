@@ -6,11 +6,37 @@ exports.addOrUpdateHistory = async (req, res, next) => {
     const { target_type, target_id } = req.body
     const user_id = req.user.id
 
-    const sql = `
-      INSERT INTO browse_history (user_id, target_type, target_id)
-      VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE last_visited_at = CURRENT_TIMESTAMP
+    // 检查是否存在 visit_count 字段
+    const checkColumnSql = `
+      SELECT COUNT(*) as count 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'browse_history' 
+        AND COLUMN_NAME = 'visit_count'
     `
+    const [columnCheck] = await conMysql(checkColumnSql)
+    const hasVisitCount = columnCheck && columnCheck.count > 0
+
+    // 根据字段是否存在，使用不同的SQL
+    let sql
+    if (hasVisitCount) {
+      // 如果存在 visit_count 字段，更新时增加访问次数
+      sql = `
+        INSERT INTO browse_history (user_id, target_type, target_id, visit_count)
+        VALUES (?, ?, ?, 1)
+        ON DUPLICATE KEY UPDATE 
+          last_visited_at = CURRENT_TIMESTAMP,
+          visit_count = visit_count + 1
+      `
+    } else {
+      // 如果不存在 visit_count 字段，使用原来的SQL
+      sql = `
+        INSERT INTO browse_history (user_id, target_type, target_id)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE last_visited_at = CURRENT_TIMESTAMP
+      `
+    }
+    
     await conMysql(sql, [user_id, target_type, target_id])
 
     res.cc(true, '记录浏览历史成功', 201)
