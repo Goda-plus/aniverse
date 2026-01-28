@@ -58,7 +58,7 @@ exports.listRooms = async (req, res, next) => {
       
       // 获取最后一条消息
       const [lastMsg] = await conMysql(
-        `SELECT m.content, u.username, m.created_at
+        `SELECT m.content, u.username, m.created_at, m.content_text
          FROM messages m
          JOIN users u ON m.user_id = u.id
          WHERE m.room_id = ?

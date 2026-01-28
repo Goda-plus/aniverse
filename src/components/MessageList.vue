@@ -134,8 +134,32 @@
               <span>消息已撤回</span>
             </div>
             <div v-else class="message-content" @contextmenu="showMessageMenu($event, message)">
-              <!-- 所有消息统一按 HTML 内容渲染 -->
-              <div v-html="message.content" />
+              <!-- 根据消息类型渲染不同内容 -->
+              <!-- 文件消息（非图片） -->
+              <div v-if="message.messageType === 'file' || message.messageType === 'video' || message.messageType === 'audio'">
+                <div class="file-message">
+                  <el-icon class="file-icon">
+                    <Document />
+                  </el-icon>
+                  <div class="file-info">
+                    <div class="file-name">
+                      {{ message.fileName || '文件' }}
+                    </div>
+                    <div v-if="message.fileSize" class="file-size">
+                      {{ formatFileSize(message.fileSize) }}
+                    </div>
+                  </div>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    @click="openFile(message)"
+                  >
+                    打开
+                  </el-button>
+                </div>
+              </div>
+              <!-- 其他消息（包括图片和文本）都用HTML渲染 -->
+              <div v-else v-html="message.content" />
               <!-- 消息菜单 -->
               <div
                 v-if="menuVisible && selectedMessage?.id === message.id"
@@ -423,6 +447,11 @@
 
     const html = editor.getHtml() || ''
 
+    // 检查是否只是空的HTML标签
+    if (html === '<p><br></p>' || html === '<p></p>' || html.trim() === '') {
+      return
+    }
+
     // 仍然通过纯文本判断是否为空，避免发送空消息
     const div = document.createElement('div')
     div.innerHTML = html
@@ -519,6 +548,11 @@
     window.open(message.fileUrl, '_blank')
   }
 
+  function openImage (message) {
+    if (!message.imageUrl) return
+    window.open(message.imageUrl, '_blank')
+  }
+
   function formatFileSize (size) {
     if (!size && size !== 0) return ''
     if (size < 1024) return size + 'B'
@@ -528,12 +562,12 @@
   }
 
   // 富文本编辑器通过 toolbar 发送图片 / 文件
-  function handleEditorSendImage (file) {
-    emit('send-image', file)
+  function handleEditorSendImage (payload) {
+    emit('send-image', payload)
   }
 
-  function handleEditorSendFile (file) {
-    emit('send-file', file)
+  function handleEditorSendFile (payload) {
+    emit('send-file', payload)
   }
 
   // 多选相关
@@ -1053,6 +1087,40 @@
   transform: scale(1.05);
 }
 
+/* 文件消息样式 */
+.file-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary, #2a2b2e);
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #3a3b3e);
+}
+
+.file-icon {
+  font-size: 24px;
+  color: var(--primary-color, #ff4500);
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  color: var(--text-color, #d7dadc);
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.file-size {
+  font-size: 12px;
+  color: var(--text-color-secondary, #818384);
+  margin-top: 2px;
+}
+
 .image-caption {
   margin-top: 6px;
   font-size: 12px;
@@ -1137,6 +1205,24 @@
   .message-image {
     max-width: 100%;
     max-height: 150px;
+  }
+
+  /* 文件消息在移动端优化 */
+  .file-message {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .file-icon {
+    font-size: 20px;
+  }
+
+  .file-name {
+    font-size: 13px;
+  }
+
+  .file-size {
+    font-size: 11px;
   }
 
 

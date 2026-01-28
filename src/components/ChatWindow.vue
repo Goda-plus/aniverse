@@ -692,7 +692,7 @@
     const messageContent = content.trim()
     // 提取纯文本内容
     const contentText = extractPlainText(messageContent).trim()
-    
+
     // 如果纯文本为空，则不发送
     if (!contentText) return
 
@@ -793,13 +793,13 @@
   }
 
   // 处理发送图片消息
-  async function handleSendImage (file) {
+  async function handleSendImage (payload) {
     if (!activeRoomId.value || sendingMessage.value) return
 
     const tempId = Date.now()
 
     await sendFileLikeMessage({
-      file,
+      payload,
       tempId,
       messageType: 'image',
       placeholderContent: '[图片]'
@@ -807,10 +807,10 @@
   }
 
   // 处理发送普通文件 / 视频 / 音频
-  async function handleSendFile (file) {
+  async function handleSendFile (payload) {
     if (!activeRoomId.value || sendingMessage.value) return
 
-    const mime = file.type || ''
+    const mime = payload?.type || payload?.file?.type || ''
     let messageType = 'file'
     if (mime.startsWith('video/')) {
       messageType = 'video'
@@ -820,35 +820,43 @@
 
     const tempId = Date.now()
     await sendFileLikeMessage({
-      file,
+      payload,
       tempId,
       messageType,
-      placeholderContent: file.name
+      placeholderContent: payload?.name || payload?.file?.name || '文件'
     })
   }
 
   // 统一处理文件/图片类消息的发送
-  async function sendFileLikeMessage ({ file, tempId, messageType, placeholderContent }) {
-    // 这里建议替换为真正的上传接口，返回可访问的 URL
-    const objectUrl = URL.createObjectURL(file)
+  async function sendFileLikeMessage ({ payload, tempId, messageType, placeholderContent }) {
+    // payload 可能是：
+    // 1) RichTextEditor 上传后抛出的 { url, name, size, type, messageType }
+    // 2) 老逻辑直接传 File（兼容）
+    const isFile = payload instanceof File
+    const url = isFile ? URL.createObjectURL(payload) : payload?.url
+    const fileName = isFile ? payload.name : payload?.name
+    const fileSize = isFile ? payload.size : payload?.size
 
     const baseMessage = {
       id: tempId,
       user_id: currentUserId.value,
       username: userStore.username,
-      content: placeholderContent,
-      content_text: placeholderContent, // 文件消息的纯文本就是占位符内容
+      content_text: placeholderContent, // 文件消息的纯文本
       created_at: new Date().toISOString(),
       messageType,
       status: 'sending'
     }
 
     if (messageType === 'image') {
-      baseMessage.imageUrl = objectUrl
+      // 图片消息：content是HTML格式，包含img标签
+      baseMessage.content = `<img src="${url}" alt="图片" style="max-width: 240px; border-radius: 12px;">`
+      baseMessage.imageUrl = url // 保留imageUrl以便其他地方使用
     } else {
-      baseMessage.fileUrl = objectUrl
-      baseMessage.fileName = file.name
-      baseMessage.fileSize = file.size
+      // 其他文件消息：content是占位符文字
+      baseMessage.content = placeholderContent
+      baseMessage.fileUrl = url
+      baseMessage.fileName = fileName
+      baseMessage.fileSize = fileSize
     }
 
     messages.value.push(baseMessage)
@@ -859,12 +867,12 @@
       if (socket.value) {
         socket.value.emit('chatMessage', {
           roomId: activeRoomId.value.toString(),
-          content: placeholderContent,
+          content: baseMessage.content, // 使用baseMessage中的content（对于图片是HTML）
           content_text: placeholderContent, // 文件消息的纯文本
-          imageUrl: messageType === 'image' ? objectUrl : undefined,
-          fileUrl: messageType !== 'image' ? objectUrl : undefined,
-          fileName: messageType !== 'image' ? file.name : undefined,
-          fileSize: messageType !== 'image' ? file.size : undefined,
+          imageUrl: messageType === 'image' ? url : undefined,
+          fileUrl: messageType !== 'image' ? url : undefined,
+          fileName: messageType !== 'image' ? fileName : undefined,
+          fileSize: messageType !== 'image' ? fileSize : undefined,
           messageType
         })
 

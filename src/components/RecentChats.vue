@@ -43,7 +43,7 @@
               {{ getRoomName(room) }}
             </div>
             <div v-if="room.lastMessage" class="room-preview">
-              {{ room.lastMessage.content }}
+              {{ room.lastMessage.content_text }}
             </div>
           </div>
           <div class="room-meta">

@@ -22,6 +22,8 @@
   import { shallowRef, ref, watch, onBeforeUnmount } from 'vue'
   import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
   import '@wangeditor/editor/dist/css/style.css'
+  import { ElMessage } from 'element-plus'
+  import { uploadPostImage, uploadPostVideo } from '@/axios/post'
 
   // eslint-disable-next-line no-undef
   const props = defineProps({
@@ -43,7 +45,71 @@
 
   // 仅保留表情和文件上传相关的工具栏按钮
   const toolbarConfig = {
-    toolbarKeys: ['emotion', '|', 'uploadImage', 'uploadVideo']
+    toolbarKeys: ['emotion',  'uploadImage', 'uploadVideo']
+  }
+
+  function normalizeUploadedUrl (res) {
+    // 兼容不同后端返回格式：{ success, code, data:{url} } / { code, data:{url} } / { url } / { data:{url} }
+    if (!res) return ''
+    if (res.success && res.code === 200 && res.data?.url) return res.data.url
+    if (res.code === 200 && res.data?.url) return res.data.url
+    if (res.url) return res.url
+    if (res.data?.url) return res.data.url
+    return ''
+  }
+
+  async function uploadByType (file) {
+    const mime = file?.type || ''
+    if (mime.startsWith('image/')) {
+      const maxSize = 5 * 1024 * 1024
+      if (file.size > maxSize) {
+        ElMessage.error('图片大小不能超过 5MB')
+        return { url: '' }
+      }
+      const res = await uploadPostImage(file)
+      const url = normalizeUploadedUrl(res)
+      return { url, messageType: 'image' }
+    }
+
+    // 非图片统一走“视频上传”接口（项目内目前只有这两个上传端点）
+    const maxSize = 100 * 1024 * 1024
+    if (file.size > maxSize) {
+      ElMessage.error('文件大小不能超过 100MB')
+      return { url: '' }
+    }
+    const res = await uploadPostVideo(file)
+    const url = normalizeUploadedUrl(res)
+    const messageType = mime.startsWith('video/')
+      ? 'video'
+      : (mime.startsWith('audio/') ? 'audio' : 'file')
+    return { url, messageType }
+  }
+
+  async function customUploadAndEmit (file) {
+    try {
+      const { url, messageType } = await uploadByType(file)
+      if (!url) {
+        ElMessage.error('上传失败')
+        return
+      }
+      const payload = {
+        url,
+        name: file.name,
+        size: file.size,
+        type: file.type || '',
+        messageType
+      }
+      if (messageType === 'image') {
+        emit('send-image', payload)
+      } else {
+        emit('send-file', payload)
+      }
+    } catch (e) {
+      // axios error 兼容
+      const msg = e?.response?.data?.message || e?.message || '上传失败，请重试'
+      ElMessage.error(msg)
+      console.error('上传失败:', e)
+    }
   }
 
   const editorConfig = {
@@ -53,14 +119,14 @@
     MENU_CONF: {
       uploadImage: {
         // 使用自定义上传：不直接插入到编辑器内容，而是走外层聊天的发送逻辑
-        customUpload (file, insertFn) {
-          emit('send-image', file)
+        async customUpload (file, insertFn) {
+          await customUploadAndEmit(file)
           // 不调用 insertFn，避免把图片插入到文本消息中
         }
       },
       uploadVideo: {
-        customUpload (file, insertFn) {
-          emit('send-file', file)
+        async customUpload (file, insertFn) {
+          await customUploadAndEmit(file)
           // 同样不插入到富文本内容中
         }
       }
@@ -148,7 +214,6 @@
   display: flex;
   flex-direction: column;
   border-radius: 6px;
-  overflow: hidden;
   min-height: 90px;
   max-height: 140px;
   background: var(--bg-secondary, #1a1a1b);
@@ -165,6 +230,11 @@
   max-height: 120px;
   overflow-y: auto;
   padding: 6px 8px;
+}
+
+.rich-editor-wrapper :deep(.w-e-drop-panel) {
+  top: unset !important;
+  bottom: 0px !important;
 }
 </style>
 
