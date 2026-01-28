@@ -435,15 +435,13 @@
   })
 
   const filteredMedia = computed(() => {
-    if (!mediaSearchKeyword.value) {
+    // 如果有搜索关键词，说明已经通过API搜索过了，直接返回搜索结果
+    // 如果没有搜索关键词，返回默认列表的前20个
+    if (!mediaSearchKeyword.value || mediaSearchKeyword.value.trim() === '') {
       return mediaList.value.slice(0, 20) // 默认显示前20个
     }
-    const keyword = mediaSearchKeyword.value.toLowerCase()
-    return mediaList.value.filter(media => 
-      (media.title && media.title.toLowerCase().includes(keyword)) ||
-      (media.name && media.name.toLowerCase().includes(keyword)) ||
-      (media.description && media.description.toLowerCase().includes(keyword))
-    ).slice(0, 20)
+    // API已经返回了匹配的结果，不需要再次过滤
+    return mediaList.value
   })
 
   const isTagSelected = (tagId) => {

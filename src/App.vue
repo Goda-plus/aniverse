@@ -297,6 +297,9 @@
         v-model:visible="showChatWindow" 
         @close="showChatWindow = false" 
       />
+
+      <!-- 悬浮按钮 -->
+      <FloatingActionButtons v-if="isMallPage" />
     </template>
   </div>
   <AvatarEditor v-model="showAvatarEditor" />
@@ -310,6 +313,7 @@
   import { ElMessageBox, ElMessage } from 'element-plus'
   import ThemeSettings from '@/components/ThemeSettings.vue'
   import CreateCommunityDialog from '@/components/CreateCommunityDialog.vue'
+  import FloatingActionButtons from '@/components/FloatingActionButtons.vue'
   import AvatarEditor from '@/components/AvatarEditor.vue'
   
   // 条件导入聊天窗口组件，只在用户登录后加载
@@ -370,6 +374,9 @@
     return route.path === '/login' || route.path === '/register'
   })
   
+  const isMallPage = computed(() => {
+    return route.path === '/mall'
+  })
   // 计算属性：当用户登录后加载聊天窗口组件
   // 修正：避免在 computed 内部产生副作用，直接定义 async component 并通过 computed 控制是否渲染
   const ChatWindowComponent = defineAsyncComponent(() => import('@/components/ChatWindow.vue'))

@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const userInterestHandler = require('../router_handler/userInterest')
-const { authenticateToken } = require('../middleware/optionalAuth')
+const authenticateToken = require('../middleware/optionalAuth')
 
 // 获取用户兴趣标签列表
 router.get('/interests', authenticateToken, userInterestHandler.getUserInterests)

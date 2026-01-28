@@ -50,3 +50,9 @@ export * from './mediaGenres'
 
 // 众筹相关接口
 export * from './crowdfunding'
+
+// 同好匹配相关接口
+export * from './match'
+
+// 用户兴趣标签相关接口
+export * from './userInterest'

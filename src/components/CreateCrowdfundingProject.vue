@@ -301,7 +301,7 @@
     Delete,
     Edit
   } from '@element-plus/icons-vue'
-  import { createCrowdfundingProject } from '@/axios/crowdfunding'
+  import { createCrowdfundingProject, uploadPostImage } from '@/axios/api.js'
 
   const props = defineProps({
     visible: {
@@ -418,12 +418,8 @@
     formData.append('image', options.file)
 
     try {
-      const response = await axios.post('/api/post/upload-image', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
-      
+      const response = await uploadPostImage(options.file)
+
       if (response.success) {
         form.cover_image = response.data.url
         ElMessage.success('封面上传成功')

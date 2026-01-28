@@ -223,6 +223,9 @@
             @send-message="handleSendMessage"
             @recall-message="handleRecallMessage"
             @send-image="handleSendImage"
+            @send-file="handleSendFile"
+            @delete-message="handleDeleteMessages"
+            @multi-operation="handleMultiOperation"
           />
 
           <div v-else class="chat-main-empty">
@@ -477,6 +480,7 @@
             user_id: data.userId,
             username: data.user,
             content: data.content,
+            content_text: data.content_text || extractPlainText(data.content || ''),
             imageUrl: data.imageUrl,
             messageType: data.messageType || 'text',
             created_at: data.time || new Date().toISOString(),
@@ -489,11 +493,13 @@
           if (lastMsg && lastMsg.user_id === currentUserId.value && lastMsg.content === data.content && lastMsg.status === 'sending') {
             lastMsg.id = Date.now() // 更新为服务器返回的ID
             lastMsg.status = 'sent' // 更新状态为已发送
+            lastMsg.content_text = data.content_text || extractPlainText(data.content || '') // 更新纯文本
           }
         }
       }
-      // 更新房间的最后一条消息
-      updateRoomLastMessage(receivedRoomId, data.content, data.user)
+      // 更新房间的最后一条消息（使用纯文本）
+      const previewText = data.content_text || extractPlainText(data.content || '')
+      updateRoomLastMessage(receivedRoomId, previewText, data.user)
     })
 
     // 监听好友请求通知
@@ -559,6 +565,7 @@
         if (messageIndex > -1) {
           messages.value[messageIndex].recalled = true
           messages.value[messageIndex].content = ''
+          messages.value[messageIndex].content_text = '' // 同时清空纯文本
         }
       }
     })
@@ -656,6 +663,8 @@
       if (res.success) {
         messages.value = (res.data || []).map(msg => ({
           ...msg,
+          messageType: msg.messageType || msg.message_type || 'text',
+          content_text: msg.content_text || extractPlainText(msg.content || ''), // 确保有纯文本字段
           status: msg.user_id === currentUserId.value ? 'sent' : 'read' // 设置消息状态
         }))
         await nextTick()
@@ -668,11 +677,25 @@
     }
   }
 
+  // 从HTML内容中提取纯文本
+  function extractPlainText (html) {
+    if (!html) return ''
+    const div = document.createElement('div')
+    div.innerHTML = html
+    return div.innerText || div.textContent || ''
+  }
+
   // 发送消息
   async function sendMessage (content) {
     if (!content || !content.trim() || !activeRoomId.value || sendingMessage.value) return
 
     const messageContent = content.trim()
+    // 提取纯文本内容
+    const contentText = extractPlainText(messageContent).trim()
+    
+    // 如果纯文本为空，则不发送
+    if (!contentText) return
+
     const tempId = Date.now()
     
     // 立即显示消息（乐观更新）
@@ -681,6 +704,8 @@
       user_id: currentUserId.value,
       username: userStore.username,
       content: messageContent,
+      content_text: contentText,
+      messageType: 'text',
       created_at: new Date().toISOString(),
       status: 'sending' // 添加发送状态
     })
@@ -691,7 +716,8 @@
       if (socket.value) {
         socket.value.emit('chatMessage', {
           roomId: activeRoomId.value.toString(),
-          content: messageContent
+          content: messageContent,
+          content_text: contentText
         })
         // 消息会通过 socket 监听器更新（替换临时消息）
       } else {
@@ -718,13 +744,12 @@
   // 处理撤回消息
   async function handleRecallMessage (messageId) {
     try {
-      // 这里可以调用后端API来撤回消息
-      // 暂时先在前端处理
       const messageIndex = messages.value.findIndex(msg => msg.id === messageId)
       if (messageIndex > -1) {
         // 标记消息为已撤回
         messages.value[messageIndex].recalled = true
-        messages.value[messageIndex].content = '' // 清空内容
+        messages.value[messageIndex].content = '' // 清空HTML内容
+        messages.value[messageIndex].content_text = '' // 清空纯文本内容
 
         // 通过Socket通知其他用户消息已被撤回
         if (socket.value) {
@@ -739,49 +764,117 @@
     }
   }
 
+  // 删除消息（本地删除，可根据需要接入后端接口）
+  function handleDeleteMessages (ids) {
+    if (!Array.isArray(ids)) return
+    messages.value = messages.value.filter(msg => !ids.includes(msg.id))
+  }
+
+  // 处理多选操作
+  function handleMultiOperation (payload) {
+    const { action, messageIds } = payload || {}
+    if (!Array.isArray(messageIds) || !messageIds.length) return
+
+    if (action === 'delete') {
+      handleDeleteMessages(messageIds)
+    } else if (action === 'copy') {
+      const texts = messages.value
+        .filter(m => messageIds.includes(m.id) && !m.recalled && (!m.messageType || m.messageType === 'text'))
+        .map(m => m.content_text || extractPlainText(m.content || ''))
+        .join('\n')
+      if (texts) {
+        navigator.clipboard.writeText(texts).then(() => {
+          ElMessage.success('已复制所选消息')
+        }).catch(() => {
+          ElMessage.error('复制失败，请稍后重试')
+        })
+      }
+    }
+  }
+
   // 处理发送图片消息
   async function handleSendImage (file) {
     if (!activeRoomId.value || sendingMessage.value) return
 
     const tempId = Date.now()
 
-    // 创建图片预览URL
-    const imageUrl = URL.createObjectURL(file)
+    await sendFileLikeMessage({
+      file,
+      tempId,
+      messageType: 'image',
+      placeholderContent: '[图片]'
+    })
+  }
 
-    // 立即显示图片消息（乐观更新）
-    messages.value.push({
+  // 处理发送普通文件 / 视频 / 音频
+  async function handleSendFile (file) {
+    if (!activeRoomId.value || sendingMessage.value) return
+
+    const mime = file.type || ''
+    let messageType = 'file'
+    if (mime.startsWith('video/')) {
+      messageType = 'video'
+    } else if (mime.startsWith('audio/')) {
+      messageType = 'audio'
+    }
+
+    const tempId = Date.now()
+    await sendFileLikeMessage({
+      file,
+      tempId,
+      messageType,
+      placeholderContent: file.name
+    })
+  }
+
+  // 统一处理文件/图片类消息的发送
+  async function sendFileLikeMessage ({ file, tempId, messageType, placeholderContent }) {
+    // 这里建议替换为真正的上传接口，返回可访问的 URL
+    const objectUrl = URL.createObjectURL(file)
+
+    const baseMessage = {
       id: tempId,
       user_id: currentUserId.value,
       username: userStore.username,
-      content: '[图片]',
-      imageUrl: imageUrl,
-      messageType: 'image',
+      content: placeholderContent,
+      content_text: placeholderContent, // 文件消息的纯文本就是占位符内容
       created_at: new Date().toISOString(),
+      messageType,
       status: 'sending'
-    })
+    }
+
+    if (messageType === 'image') {
+      baseMessage.imageUrl = objectUrl
+    } else {
+      baseMessage.fileUrl = objectUrl
+      baseMessage.fileName = file.name
+      baseMessage.fileSize = file.size
+    }
+
+    messages.value.push(baseMessage)
     scrollToBottom()
 
     sendingMessage.value = true
     try {
-      // 这里应该将图片上传到服务器并获取URL
-      // 暂时先使用本地URL进行演示
       if (socket.value) {
         socket.value.emit('chatMessage', {
           roomId: activeRoomId.value.toString(),
-          content: '[图片]',
-          imageUrl: imageUrl,
-          messageType: 'image'
+          content: placeholderContent,
+          content_text: placeholderContent, // 文件消息的纯文本
+          imageUrl: messageType === 'image' ? objectUrl : undefined,
+          fileUrl: messageType !== 'image' ? objectUrl : undefined,
+          fileName: messageType !== 'image' ? file.name : undefined,
+          fileSize: messageType !== 'image' ? file.size : undefined,
+          messageType
         })
 
-        // 更新消息状态
         const lastMsg = messages.value[messages.value.length - 1]
         if (lastMsg && lastMsg.id === tempId) {
           lastMsg.status = 'sent'
         }
       }
     } catch (error) {
-      ElMessage.error('发送图片失败')
-      // 移除临时消息
+      ElMessage.error('发送文件失败')
       const index = messages.value.findIndex(m => m.id === tempId)
       if (index > -1) messages.value.splice(index, 1)
     } finally {
@@ -1782,6 +1875,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100%;
   border-left: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }

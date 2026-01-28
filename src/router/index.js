@@ -77,6 +77,11 @@ const routes = [
     component: () => import('../views/OrderDetailView.vue')
   },
   {
+    path: '/browse-history',
+    name: 'browse-history',
+    component: () => import('../views/BrowseHistoryView.vue')
+  },
+  {
     path: '/crowdfunding',
     name: 'crowdfunding',
     component: () => import('../views/CrowdfundingView.vue')

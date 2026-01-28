@@ -71,20 +71,32 @@ module.exports = function initSocket (server) {
     })
 
     // 聊天消息事件
-    socket.on('chatMessage', async ({ roomId, content }) => {
+    socket.on('chatMessage', async ({ roomId, content, content_text, imageUrl, fileUrl, fileName, fileSize, messageType }) => {
       if (!roomId || !content?.trim()) return
+
+      // 如果没有提供 content_text，从 content 中提取纯文本（处理 HTML）
+      let plainText = content_text
+      if (!plainText && content) {
+        // 简单的 HTML 标签移除（如果后端需要处理）
+        plainText = content.replace(/<[^>]*>/g, '').trim()
+      }
+      // 如果仍然为空，使用 content 作为后备
+      if (!plainText) {
+        plainText = content.trim()
+      }
 
       const msg = {
         room_id: roomId,
         user_id: socket.user.id,
         username: socket.user.username,
-        content
+        content,
+        content_text: plainText
       }
 
       try {
         await conMysql(
-          'INSERT INTO messages (room_id, user_id, content, created_at) VALUES (?,?,?,NOW())',
-          [msg.room_id, msg.user_id, msg.content]
+          'INSERT INTO messages (room_id, user_id, content, content_text, created_at) VALUES (?,?,?,?,NOW())',
+          [msg.room_id, msg.user_id, msg.content, msg.content_text]
         )
 
         io.to(roomId).emit('chatMessage', {
@@ -92,6 +104,12 @@ module.exports = function initSocket (server) {
           user: msg.username,
           userId: msg.user_id,
           content: msg.content,
+          content_text: msg.content_text,
+          imageUrl,
+          fileUrl,
+          fileName,
+          fileSize,
+          messageType: messageType || 'text',
           time: new Date()
         })
       } catch (error) {
@@ -99,18 +117,23 @@ module.exports = function initSocket (server) {
       }
     })
 
-    // 撤回消息（可选）
-    socket.on('revokeMessage', async ({ msgId, roomId }) => {
+    // 撤回消息（支持 recallMessage 和 revokeMessage 两种事件名）
+    const handleRecallMessage = async ({ msgId, roomId, messageId }) => {
+      const id = msgId || messageId
+      if (!id || !roomId) return
       try {
         await conMysql(
-          'UPDATE messages SET content=\'[已撤回]\' WHERE id=? AND user_id=?',
-          [msgId, socket.user.id]
+          'UPDATE messages SET content=\'[已撤回]\', content_text=\'[已撤回]\' WHERE id=? AND user_id=?',
+          [id, socket.user.id]
         )
-        io.to(roomId).emit('revokeMessage', { msgId })
+        io.to(roomId).emit('messageRecalled', { messageId: id, roomId })
       } catch (error) {
         console.error('撤回失败:', error)
       }
-    })
+    }
+    
+    socket.on('recallMessage', handleRecallMessage)
+    socket.on('revokeMessage', handleRecallMessage)
   })
 
   return {

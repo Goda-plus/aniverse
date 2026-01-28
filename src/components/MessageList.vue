@@ -31,6 +31,14 @@
           <el-icon><Close /></el-icon>
           取消
         </el-button>
+        <el-button
+          v-if="messages.length"
+          text
+          size="small"
+          @click="toggleMultiSelect"
+        >
+          多选
+        </el-button>
       </div>
     </div>
 
@@ -96,8 +104,10 @@
           :key="message.id"
           :class="['message-item', {
             'own-message': isOwnMessage(message.user_id),
-            'search-highlight': isSearchResult(messageIndex)
+            'search-highlight': isSearchResult(messageIndex),
+            'is-selected': isMessageSelected(message.id)
           }]"
+          @click="handleMessageClick(message)"
         >
           <el-avatar
             :size="36"
@@ -107,6 +117,13 @@
             {{ message.username?.charAt(0)?.toUpperCase() || 'U' }}
           </el-avatar>
           <div class="message-content-wrapper">
+            <!-- 多选勾选框 -->
+            <div v-if="multiSelectMode" class="message-select-checkbox">
+              <el-checkbox
+                :model-value="isMessageSelected(message.id)"
+                @change.stop="toggleMessageSelection(message)"
+              />
+            </div>
             <div
               v-if="message.recalled"
               class="message-recalled"
@@ -117,22 +134,8 @@
               <span>消息已撤回</span>
             </div>
             <div v-else class="message-content" @contextmenu="showMessageMenu($event, message)">
-              <!-- 图片消息 -->
-              <div v-if="message.messageType === 'image'" class="image-message">
-                <el-image
-                  :src="message.imageUrl"
-                  :preview-src-list="[message.imageUrl]"
-                  class="message-image"
-                  fit="cover"
-                />
-                <div v-if="message.content && message.content !== '[图片]'" class="image-caption">
-                  {{ message.content }}
-                </div>
-              </div>
-              <!-- 文本消息 -->
-              <div v-else>
-                {{ message.content }}
-              </div>
+              <!-- 所有消息统一按 HTML 内容渲染 -->
+              <div v-html="message.content" />
               <!-- 消息菜单 -->
               <div
                 v-if="menuVisible && selectedMessage?.id === message.id"
@@ -141,12 +144,42 @@
                 @click.stop
               >
                 <div
+                  v-if="canCopyMessage(message)"
+                  class="menu-item"
+                  @click="copyMessage(message)"
+                >
+                  <el-icon><DocumentCopy /></el-icon>
+                  <span>复制</span>
+                </div>
+                <div
+                  v-if="canDownloadMessage(message)"
+                  class="menu-item"
+                  @click="downloadMessageFile(message)"
+                >
+                  <el-icon><Download /></el-icon>
+                  <span>下载</span>
+                </div>
+                <div
                   v-if="canRecallMessage(message)"
                   class="menu-item"
                   @click="recallMessage(message)"
                 >
                   <el-icon><Back /></el-icon>
                   <span>撤回消息</span>
+                </div>
+                <div
+                  class="menu-item"
+                  @click="enterMultiSelectFromMessage(message)"
+                >
+                  <el-icon><Select /></el-icon>
+                  <span>多选</span>
+                </div>
+                <div
+                  class="menu-item"
+                  @click="deleteSingleMessage(message)"
+                >
+                  <el-icon><Delete /></el-icon>
+                  <span>删除</span>
                 </div>
               </div>
             </div>
@@ -183,79 +216,69 @@
       </div>
     </div>
 
+    <!-- 多选操作条（固定在输入框上方） -->
+    <div v-if="multiSelectMode" class="multi-select-bar">
+      <span class="multi-select-text">
+        已选择 {{ selectedCount }} 条消息
+      </span>
+      <el-button
+        text
+        size="small"
+        :disabled="!selectedCount"
+        @click="handleMultiOperation('copy')"
+      >
+        复制
+      </el-button>
+      <el-button
+        text
+        size="small"
+        :disabled="!selectedCount"
+        @click="handleMultiOperation('delete')"
+      >
+        删除
+      </el-button>
+      <el-button
+        text
+        size="small"
+        @click="exitMultiSelect"
+      >
+        取消
+      </el-button>
+    </div>
+
     <!-- 消息输入框 -->
     <div class="message-input-container">
-      <el-input
-        ref="messageInputRef"
-        v-model="messageInput"
-        type="textarea"
-        :rows="2"
-        placeholder="输入消息..."
+      <!-- 中间 wangEditor 输入区 -->
+      <RichTextEditor
+        ref="richTextEditorRef"
         :disabled="sendingMessage"
         class="message-input"
-        @keyup.ctrl.enter="handleSend"
-        @keyup.enter.exact.prevent="handleSend"
+        @submit="handleSend"
+        @send-image="handleEditorSendImage"
+        @send-file="handleEditorSendFile"
       />
-      <div class="input-actions">
+
+      <!-- 右下角发送按钮 -->
+      <div class="send-button-wrapper">
         <el-button
-          text
-          class="action-button"
-          @click="toggleEmojiPicker"
+          type="primary"
+          :loading="sendingMessage"
+          :disabled="sendingMessage"
+          class="send-button"
+          @click="handleSend"
         >
-          <el-icon><Smile /></el-icon>
+          发送
         </el-button>
-        <el-button
-          text
-          class="action-button"
-          @click="$refs.imageInput.click()"
-        >
-          <el-icon><Picture /></el-icon>
-        </el-button>
-        <input
-          ref="imageInput"
-          type="file"
-          accept="image/*"
-          style="display: none"
-          @change="handleImageSelect"
-        >
-        <!-- 表情符选择器 -->
-        <div
-          v-if="showEmojiPicker"
-          class="emoji-picker"
-          tabindex="0"
-          @click.stop
-          @keydown="handleEmojiKeydown"
-        >
-          <div class="emoji-grid">
-            <span
-              v-for="(emoji, index) in emojiList"
-              :key="emoji"
-              :class="['emoji-item', { selected: index === selectedEmojiIndex }]"
-              @click="insertEmoji(emoji)"
-              @mouseenter="selectedEmojiIndex = index"
-            >
-              {{ emoji }}
-            </span>
-          </div>
-        </div>
       </div>
-      <el-button
-        type="primary"
-        :loading="sendingMessage"
-        :disabled="!messageInput.trim()"
-        class="send-button"
-        @click="handleSend"
-      >
-        发送
-      </el-button>
     </div>
   </div>
 </template>
 
 <script setup>
   import { ref, computed, watch, nextTick, onMounted } from 'vue'
-  import { Loading, Check, CircleCheck, InfoFilled, Back, Smile, Picture, Search, Close, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+  import { Loading, Check, CircleCheck, InfoFilled, Back, Search, Close, ArrowUp, ArrowDown, DocumentCopy, Download, Delete, Document, Select } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
+  import RichTextEditor from './RichTextEditor.vue'
 
   // eslint-disable-next-line no-undef
   const props = defineProps({
@@ -290,27 +313,26 @@
   })
 
   // eslint-disable-next-line no-undef
-  const emit = defineEmits(['send-message'])
+  const emit = defineEmits([
+    'send-message',
+    'recall-message',
+    'send-image',
+    'send-file',
+    'delete-message',
+    'multi-operation'
+  ])
 
-  const messageInput = ref('')
-  const messageInputRef = ref(null)
+  const richTextEditorRef = ref(null)
   const messagesContainerRef = ref(null)
   const menuVisible = ref(false)
   const selectedMessage = ref(null)
   const menuPosition = ref({ x: 0, y: 0 })
-  const showEmojiPicker = ref(false)
-  const selectedEmojiIndex = ref(-1)
   const showSearch = ref(false)
   const searchQuery = ref('')
   const searchResults = ref([])
   const currentSearchIndex = ref(-1)
-
-  // 表情符列表
-  const emojiList = [
-    '😀', '😂', '🥰', '😍', '🤔', '😉', '😎', '😢', '😭', '😤',
-    '👍', '👎', '👌', '✌️', '🤞', '👏', '🙏', '🤝', '❤️', '💔',
-    '🔥', '⭐', '✨', '💯', '🎉', '🎊', '🎈', '🎁', '🏆', '⚽'
-  ]
+  const multiSelectMode = ref(false)
+  const selectedMessageIds = ref(new Set())
 
   // 获取当前房间信息
   const currentRoom = computed(() => {
@@ -344,6 +366,10 @@
   // 判断是否为自己的消息
   function isOwnMessage (userId) {
     return Number(userId) === Number(props.currentUserId)
+  }
+
+  function isMessageSelected (id) {
+    return selectedMessageIds.value.has(id)
   }
 
   // 获取用户头像
@@ -388,11 +414,32 @@
     }
   }
 
-  // 发送消息
+  // 发送消息（直接发送 HTML 内容）
   function handleSend () {
-    if (!messageInput.value.trim() || props.sendingMessage) return
-    emit('send-message', messageInput.value.trim())
-    messageInput.value = ''
+    if (props.sendingMessage) return
+
+    const editor = richTextEditorRef.value
+    if (!editor || !editor.getHtml) return
+
+    const html = editor.getHtml() || ''
+
+    // 仍然通过纯文本判断是否为空，避免发送空消息
+    const div = document.createElement('div')
+    div.innerHTML = html
+    const plainText = div.innerText.replace(/\u200b/g, '').trim()
+
+    if (!plainText) return
+
+    emit('send-message', html)
+    if (editor.clear) {
+      editor.clear()
+    }
+  }
+
+  // 点击消息（多选模式下切换选中）
+  function handleMessageClick (message) {
+    if (!multiSelectMode.value) return
+    toggleMessageSelection(message)
   }
 
   // 显示消息菜单
@@ -430,69 +477,109 @@
     menuVisible.value = false
   }
 
-  // 切换表情符选择器
-  function toggleEmojiPicker () {
-    showEmojiPicker.value = !showEmojiPicker.value
-    if (showEmojiPicker.value) {
-      selectedEmojiIndex.value = -1
+  // 复制消息
+  function canCopyMessage (message) {
+    return !message.recalled && (!message.messageType || message.messageType === 'text')
+  }
+
+  async function copyMessage (message) {
+    if (!canCopyMessage(message)) return
+    // 优先使用 content_text，如果没有则从 content 中提取纯文本
+    const textToCopy = message.content_text || extractPlainText(message.content || '')
+    if (!textToCopy) return
+    try {
+      await navigator.clipboard.writeText(textToCopy)
+      ElMessage.success('已复制到剪贴板')
+    } catch (e) {
+      ElMessage.error('复制失败，请手动选择文本')
+    } finally {
+      menuVisible.value = false
     }
   }
 
-  // 处理表情符键盘导航
-  function handleEmojiKeydown (event) {
-    const cols = 10 // 每行10个表情符
-    const total = emojiList.length
+  // 文件下载/打开
+  function canDownloadMessage (message) {
+    return ['image', 'video', 'audio', 'file'].includes(message.messageType) && (message.imageUrl || message.fileUrl)
+  }
 
-    switch (event.key) {
-      case 'ArrowRight':
-        selectedEmojiIndex.value = Math.min(selectedEmojiIndex.value + 1, total - 1)
-        event.preventDefault()
-        break
-      case 'ArrowLeft':
-        selectedEmojiIndex.value = Math.max(selectedEmojiIndex.value - 1, 0)
-        event.preventDefault()
-        break
-      case 'ArrowDown':
-        selectedEmojiIndex.value = Math.min(selectedEmojiIndex.value + cols, total - 1)
-        event.preventDefault()
-        break
-      case 'ArrowUp':
-        selectedEmojiIndex.value = Math.max(selectedEmojiIndex.value - cols, 0)
-        event.preventDefault()
-        break
-      case 'Enter':
-        if (selectedEmojiIndex.value >= 0) {
-          insertEmoji(emojiList[selectedEmojiIndex.value])
-        }
-        event.preventDefault()
-        break
-      case 'Escape':
-        showEmojiPicker.value = false
-        event.preventDefault()
-        break
+  function downloadMessageFile (message) {
+    const url = message.imageUrl || message.fileUrl
+    if (!url) return
+    const a = document.createElement('a')
+    a.href = url
+    a.download = message.fileName || ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    menuVisible.value = false
+  }
+
+  function openFile (message) {
+    if (!message.fileUrl) return
+    window.open(message.fileUrl, '_blank')
+  }
+
+  function formatFileSize (size) {
+    if (!size && size !== 0) return ''
+    if (size < 1024) return size + 'B'
+    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + 'KB'
+    if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + 'MB'
+    return (size / (1024 * 1024 * 1024)).toFixed(1) + 'GB'
+  }
+
+  // 富文本编辑器通过 toolbar 发送图片 / 文件
+  function handleEditorSendImage (file) {
+    emit('send-image', file)
+  }
+
+  function handleEditorSendFile (file) {
+    emit('send-file', file)
+  }
+
+  // 多选相关
+  function toggleMultiSelect () {
+    multiSelectMode.value = !multiSelectMode.value
+    if (!multiSelectMode.value) {
+      selectedMessageIds.value = new Set()
     }
   }
 
-  // 插入表情符
-  function insertEmoji (emoji) {
-    const input = messageInputRef.value?.$el?.querySelector('textarea')
-    if (input) {
-      const start = input.selectionStart
-      const end = input.selectionEnd
-      const text = messageInput.value
-      const newText = text.substring(0, start) + emoji + text.substring(end)
-      messageInput.value = newText
+  function enterMultiSelectFromMessage (message) {
+    multiSelectMode.value = true
+    selectedMessageIds.value = new Set([message.id])
+    menuVisible.value = false
+  }
 
-      // 设置光标位置
-      nextTick(() => {
-        input.focus()
-        input.setSelectionRange(start + emoji.length, start + emoji.length)
-      })
+  function toggleMessageSelection (message) {
+    const set = new Set(selectedMessageIds.value)
+    if (set.has(message.id)) {
+      set.delete(message.id)
     } else {
-      // 如果没有获取到输入框，直接追加到末尾
-      messageInput.value += emoji
+      set.add(message.id)
     }
-    showEmojiPicker.value = false
+    selectedMessageIds.value = set
+  }
+
+  function exitMultiSelect () {
+    multiSelectMode.value = false
+    selectedMessageIds.value = new Set()
+  }
+
+  const selectedCount = computed(() => selectedMessageIds.value.size)
+
+  function deleteSingleMessage (message) {
+    emit('delete-message', [message.id])
+    menuVisible.value = false
+  }
+
+  function handleMultiOperation (action) {
+    if (!selectedMessageIds.value.size) return
+    const ids = Array.from(selectedMessageIds.value)
+    emit('multi-operation', { action, messageIds: ids })
+    if (action === 'delete') {
+      // 交给父组件处理删除；这里仅退出多选模式
+      exitMultiSelect()
+    }
   }
 
   // 执行搜索
@@ -506,11 +593,12 @@
     const query = searchQuery.value.toLowerCase()
     const results = props.messages
       .map((message, index) => ({ message, index }))
-      .filter(({ message }) =>
-        !message.recalled &&
-        message.content &&
-        message.content.toLowerCase().includes(query)
-      )
+      .filter(({ message }) => {
+        if (message.recalled) return false
+        // 优先使用 content_text，如果没有则从 content 中提取纯文本
+        const searchText = message.content_text || extractPlainText(message.content || '')
+        return searchText && searchText.toLowerCase().includes(query)
+      })
 
     searchResults.value = results
     currentSearchIndex.value = results.length > 0 ? 0 : -1
@@ -519,6 +607,14 @@
     if (results.length > 0) {
       scrollToMessage(results[0].index)
     }
+  }
+
+  // 从HTML内容中提取纯文本
+  function extractPlainText (html) {
+    if (!html) return ''
+    const div = document.createElement('div')
+    div.innerHTML = html
+    return div.innerText || div.textContent || ''
   }
 
   // 导航搜索结果
@@ -559,29 +655,6 @@
     return searchResults.value.some(result => result.index === messageIndex)
   }
 
-  // 处理图片选择
-  function handleImageSelect (event) {
-    const file = event.target.files[0]
-    if (file) {
-      // 检查文件大小（限制为5MB）
-      if (file.size > 5 * 1024 * 1024) {
-        ElMessage.warning('图片大小不能超过5MB')
-        return
-      }
-
-      // 检查文件类型
-      if (!file.type.startsWith('image/')) {
-        ElMessage.warning('请选择图片文件')
-        return
-      }
-
-      // 发送图片消息
-      emit('send-image', file)
-      // 清空文件输入
-      event.target.value = ''
-    }
-  }
-
   // 监听消息变化，自动滚动到底部
   watch(() => props.messages.length, () => {
     scrollToBottom()
@@ -597,21 +670,9 @@
   onMounted(() => {
     scrollToBottom()
 
-    // 点击其他地方关闭表情符选择器
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.input-actions')) {
-        showEmojiPicker.value = false
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-
     // 全局键盘快捷键
     const handleKeydown = (event) => {
-      // Escape 关闭表情符选择器
-      if (event.key === 'Escape' && showEmojiPicker.value) {
-        showEmojiPicker.value = false
-        event.preventDefault()
-      }
+      // 预留快捷键位
     }
     document.addEventListener('keydown', handleKeydown)
   })
@@ -729,6 +790,10 @@
   animation: messageSlideIn 0.3s ease-out;
 }
 
+.message-item.is-selected .message-content {
+  box-shadow: 0 0 0 2px var(--primary-color, #ff4500);
+}
+
 .message-item.own-message {
   flex-direction: row-reverse;
 }
@@ -764,6 +829,10 @@
   flex-direction: column;
   gap: 4px;
   max-width: 70%;
+}
+
+.message-select-checkbox {
+  margin-bottom: 4px;
 }
 
 .message-item.own-message .message-content-wrapper {
@@ -869,22 +938,25 @@
 }
 
 .message-input-container {
-  padding: 12px 16px;
+  padding: 4px 16px;
   border-top: 1px solid var(--border-color, #343536);
-  background: var(--header-bg, #272729);
   display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  flex: 1;
+  max-height: min-content;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .message-input {
   flex: 1;
 }
 
-.input-actions {
+.input-top-actions {
   position: relative;
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .action-button {
@@ -897,42 +969,10 @@
   color: var(--primary-color, #ff4500);
 }
 
-.emoji-picker {
-  position: absolute;
-  bottom: 100%;
-  right: 0;
-  background: var(--bg-secondary, #1a1a1b);
-  border: 1px solid var(--border-color, #343536);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  z-index: 1000;
-  width: 280px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 4px;
-  padding: 12px;
-}
-
-.emoji-item {
-  font-size: 20px;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+.send-button-wrapper {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-}
-
-.emoji-item:hover,
-.emoji-item.selected {
-  background: var(--bg-hover, #272729);
-  outline: 2px solid var(--primary-color, #ff4500);
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 .send-button {
@@ -1099,22 +1139,6 @@
     max-height: 150px;
   }
 
-  /* 表情符选择器移动端优化 */
-  .emoji-picker {
-    width: 280px;
-    right: -10px;
-  }
-
-  .emoji-grid {
-    grid-template-columns: repeat(9, 1fr);
-    gap: 2px;
-    padding: 8px;
-  }
-
-  .emoji-item {
-    font-size: 18px;
-    padding: 2px;
-  }
 
   /* 消息菜单移动端优化 */
   .message-menu {

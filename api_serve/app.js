@@ -113,6 +113,10 @@ app.use(
         /^\/api\/media-genres\/list$/,
         /^\/api\/media-genres\/detail\/\d+$/,
         /^\/api\/media-genres\/\d+\/media$/,
+        // 名场面公开接口（GET）
+        { url: /^\/api\/scene-moments\/media\/\d+$/, methods: ['GET'] },
+        { url: /^\/api\/scene-moments\/\d+$/, methods: ['GET'] },
+        { url: /^\/api\/scene-moments\/\d+\/comments$/, methods: ['GET'] },
         /^\/uploads(\/.*)?$/
       ]
     })
@@ -178,6 +182,7 @@ const tagsRouter = require('./router/tags')
 const charactersRouter = require('./router/characters')
 const voiceActorsRouter = require('./router/voiceActors')
 const mediaGenresRouter = require('./router/mediaGenres')
+const sceneMomentsRouter = require('./router/sceneMoments')
 
 app.use('/api/friends',   friendRouter)
 app.use('/api/chatroom',  chatRoomRouter)
@@ -191,6 +196,7 @@ app.use('/api/tags', tagsRouter)
 app.use('/api/characters', charactersRouter)
 app.use('/api/voice-actors', voiceActorsRouter)
 app.use('/api/media-genres', mediaGenresRouter)
+app.use('/api/scene-moments', sceneMomentsRouter)
 
 // 同好匹配模块路由
 const userInterestRouter = require('./router/userInterest')

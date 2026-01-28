@@ -266,3 +266,8 @@ div[class*="w-e-"][class*="code"] [class*="dropdown"] {
 .w-e-textarea-video-container{
   background: none !important;
 }
+
+.theme-dark .w-e-text-container{
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}

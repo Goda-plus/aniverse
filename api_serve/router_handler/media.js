@@ -72,9 +72,9 @@ exports.getMediaList = async (req, res, next) => {
       params.push(tag_id)
     }
     if (search) {
-      sql += ' AND (m.title_native LIKE ? OR m.title_english LIKE ? OR m.description LIKE ?)'
+      sql += ' AND (m.title_native LIKE ? OR m.title_english LIKE ? OR m.description LIKE ? OR m.hashtag LIKE ?)'
       const searchPattern = `%${search}%`
-      params.push(searchPattern, searchPattern, searchPattern)
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
 
     // 分组

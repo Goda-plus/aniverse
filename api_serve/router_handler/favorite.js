@@ -47,7 +47,7 @@ exports.checkFavorite = async (req, res, next) => {
       return res.cc(false, '缺少必要参数', 400)
     }
     
-    if (!['post', 'subreddit', 'media', 'character'].includes(target_type)) {
+    if (!['post', 'subreddit', 'media', 'character', 'scene_moment'].includes(target_type)) {
       return res.cc(false, '无效的 target_type 参数', 400)
     }
 
@@ -70,7 +70,7 @@ exports.checkFavoritesBatch = async (req, res, next) => {
       return res.cc(false, '缺少必要参数', 400)
     }
     
-    if (!['post', 'subreddit', 'media', 'character'].includes(target_type)) {
+    if (!['post', 'subreddit', 'media', 'character', 'scene_moment'].includes(target_type)) {
       return res.cc(false, '无效的 target_type 参数', 400)
     }
 
@@ -99,7 +99,7 @@ exports.getFavorites = async (req, res, next) => {
   try {
     const user_id = req.user.id
     const target_type = req.query.target_type
-    if (!['post', 'subreddit', 'media', 'character'].includes(target_type)) {
+    if (!['post', 'subreddit', 'media', 'character', 'scene_moment'].includes(target_type)) {
       return res.cc(false, '无效的 target_type 参数', 400)
     }
 
@@ -160,6 +160,14 @@ exports.getFavorites = async (req, res, next) => {
         FROM favorites f
         JOIN characters c ON f.target_id = c.id
         WHERE f.user_id = ? AND f.target_type = 'character'
+        ORDER BY f.created_at DESC
+      `
+    } else if (target_type === 'scene_moment') {
+      sql = `
+        SELECT sm.*, f.genres, f.tags, f.created_at as favorited_at
+        FROM favorites f
+        JOIN scene_moments sm ON f.target_id = sm.id
+        WHERE f.user_id = ? AND f.target_type = 'scene_moment'
         ORDER BY f.created_at DESC
       `
     }

@@ -1,7 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const userRecommendationHandler = require('../router_handler/userRecommendation')
-const { authenticateToken } = require('../middleware/optionalAuth')
+const authenticateToken = require('../middleware/optionalAuth')
 
 // 获取推荐列表
 router.get('/recommendations', authenticateToken, userRecommendationHandler.getRecommendations)
