@@ -38,7 +38,7 @@
   })
 
   // eslint-disable-next-line no-undef
-  const emit = defineEmits(['update:modelValue', 'submit', 'send-image', 'send-file'])
+  const emit = defineEmits(['update:modelValue', 'submit', 'send-file'])
 
   const editorRef = shallowRef(null)
   const innerValue = ref(props.modelValue || '')
@@ -85,13 +85,14 @@
     return { url, messageType }
   }
 
-  async function customUploadAndEmit (file) {
+  async function customUploadAndInsert (file, insertFn) {
     try {
       const { url, messageType } = await uploadByType(file)
       if (!url) {
         ElMessage.error('上传失败')
         return
       }
+
       const payload = {
         url,
         name: file.name,
@@ -99,11 +100,27 @@
         type: file.type || '',
         messageType
       }
+
+      // 根据媒体类型处理
       if (messageType === 'image') {
-        emit('send-image', payload)
+        // 图片：插入到编辑器中显示预览
+        insertFn(url, '', url)
+      } else if (messageType === 'video') {
+        // 视频：直接发送，不在编辑器中显示
+        if (messageType === 'video') {
+          emit('send-file', payload)
+        }
       } else {
-        emit('send-file', payload)
+        // 其他文件：插入到编辑器中显示链接
+        const editor = editorRef.value
+        if (editor) {
+          const currentHtml = editor.getHtml() || ''
+          const fileHtml = `<p><a href="${url}" target="_blank">${file.name}</a></p>`
+          const newHtml = currentHtml.replace(/<\/p>$/, '') + fileHtml + '</p>'
+          editor.setHtml(newHtml)
+        }
       }
+
     } catch (e) {
       // axios error 兼容
       const msg = e?.response?.data?.message || e?.message || '上传失败，请重试'
@@ -118,16 +135,14 @@
     scroll: false,
     MENU_CONF: {
       uploadImage: {
-        // 使用自定义上传：不直接插入到编辑器内容，而是走外层聊天的发送逻辑
+        // 使用自定义上传：上传后插入到编辑器内容中
         async customUpload (file, insertFn) {
-          await customUploadAndEmit(file)
-          // 不调用 insertFn，避免把图片插入到文本消息中
+          await customUploadAndInsert(file, insertFn)
         }
       },
       uploadVideo: {
         async customUpload (file, insertFn) {
-          await customUploadAndEmit(file)
-          // 同样不插入到富文本内容中
+          await customUploadAndInsert(file, insertFn)
         }
       }
     }

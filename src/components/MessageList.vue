@@ -135,8 +135,18 @@
             </div>
             <div v-else class="message-content" @contextmenu="showMessageMenu($event, message)">
               <!-- 根据消息类型渲染不同内容 -->
-              <!-- 文件消息（非图片） -->
-              <div v-if="message.messageType === 'file' || message.messageType === 'video' || message.messageType === 'audio'">
+              <!-- 视频消息 -->
+              <div v-if="message.messageType === 'video'" class="video-message">
+                <video
+                  :src="message.fileUrl || message.imageUrl"
+                  controls
+                  preload="metadata"
+                  class="message-video"
+                  @click.stop
+                />
+              </div>
+              <!-- 文件消息（非图片、视频） -->
+              <div v-else-if="message.messageType === 'file' || message.messageType === 'audio'">
                 <div class="file-message">
                   <el-icon class="file-icon">
                     <Document />
@@ -278,8 +288,7 @@
         :disabled="sendingMessage"
         class="message-input"
         @submit="handleSend"
-        @send-image="handleEditorSendImage"
-        @send-file="handleEditorSendFile"
+        @send-file="handleSendFile"
       />
 
       <!-- 右下角发送按钮 -->
@@ -438,7 +447,7 @@
     }
   }
 
-  // 发送消息（直接发送 HTML 内容）
+  // 发送消息（直接发送HTML内容，包含文本和媒体）
   function handleSend () {
     if (props.sendingMessage) return
 
@@ -452,17 +461,18 @@
       return
     }
 
-    // 仍然通过纯文本判断是否为空，避免发送空消息
-    const div = document.createElement('div')
-    div.innerHTML = html
-    const plainText = div.innerText.replace(/\u200b/g, '').trim()
-
-    if (!plainText) return
-
+    // 直接发送HTML内容（包含文本、表情和媒体）
     emit('send-message', html)
+
+    // 清空编辑器内容
     if (editor.clear) {
       editor.clear()
     }
+  }
+
+  // 处理文件发送（用于视频直接发送）
+  function handleSendFile (payload) {
+    emit('send-file', payload)
   }
 
   // 点击消息（多选模式下切换选中）
@@ -561,14 +571,6 @@
     return (size / (1024 * 1024 * 1024)).toFixed(1) + 'GB'
   }
 
-  // 富文本编辑器通过 toolbar 发送图片 / 文件
-  function handleEditorSendImage (payload) {
-    emit('send-image', payload)
-  }
-
-  function handleEditorSendFile (payload) {
-    emit('send-file', payload)
-  }
 
   // 多选相关
   function toggleMultiSelect () {
@@ -716,6 +718,7 @@
 .chat-messages-view {
   flex: 1;
   display: flex;
+  height: 100%;
   flex-direction: column;
   background: var(--bg-color, #1a1a1b);
 }
@@ -1087,6 +1090,37 @@
   transform: scale(1.05);
 }
 
+/* 视频消息样式 */
+.video-message {
+  max-width: 240px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.video-message:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.message-video {
+  border-radius: 12px;
+  max-width: 100%;
+  max-height: 200px;
+  display: block;
+  background: #000;
+}
+
+.video-caption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-primary, #d7dadc);
+  word-break: break-word;
+  padding: 0 4px;
+  text-align: center;
+}
+
 /* 文件消息样式 */
 .file-message {
   display: flex;
@@ -1203,6 +1237,16 @@
   }
 
   .message-image {
+    max-width: 100%;
+    max-height: 150px;
+  }
+
+  /* 视频消息在移动端优化 */
+  .video-message {
+    max-width: 180px;
+  }
+
+  .message-video {
     max-width: 100%;
     max-height: 150px;
   }

@@ -98,15 +98,12 @@ exports.listFriends = async (req, res, next) => {
   const userId = req.user.id
   try {
     const rows = await conMysql(
-      `SELECT u.id, u.username
+      `SELECT u.id, u.username, f.tip
        FROM users u
-       WHERE u.id IN (
-         SELECT friend_id FROM friends
-         WHERE user_id = ? AND status = 'accepted'
-         UNION
-         SELECT user_id FROM friends
-         WHERE friend_id = ? AND status = 'accepted'
-       )`,
+       INNER JOIN friends f ON (
+         (f.user_id = ? AND f.friend_id = u.id) 
+       )
+       WHERE f.status = 'accepted'`,
       [userId, userId]
     )
     res.cc(true, '获取好友列表成功', 200, rows)
@@ -124,6 +121,64 @@ exports.pendingRequests = async (req, res, next) => {
       [userId]
     )
     res.cc(true, '获取待处理好友请求成功', 200, rows)
+  } catch (e) { next(e) }
+}
+
+// 更新好友备注
+exports.updateRemark = async (req, res, next) => {
+  const { friendId, remark } = req.body
+  const userId = req.user.id
+
+  try {
+    // 验证好友关系是否存在
+    const friendCheck = await conMysql(
+      `SELECT COUNT(*) as count FROM friends
+       WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
+       AND status = 'accepted'`,
+      [userId, friendId, friendId, userId]
+    )
+
+    if (friendCheck[0].count === 0) {
+      return res.cc(false, '好友关系不存在', 404)
+    }
+
+    // 更新备注（需要更新双方记录中的tip字段）
+    await conMysql(
+      `UPDATE friends SET tip = ?
+       WHERE (user_id = ? AND friend_id = ?)`,
+      [remark, userId, friendId]
+    )
+
+    res.cc(true, '备注更新成功')
+  } catch (e) { next(e) }
+}
+
+// 删除好友
+exports.deleteFriend = async (req, res, next) => {
+  const { friendId } = req.body
+  const userId = req.user.id
+
+  try {
+    // 验证好友关系是否存在
+    const friendCheck = await conMysql(
+      `SELECT COUNT(*) as count FROM friends
+       WHERE ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
+       AND status = 'accepted'`,
+      [userId, friendId, friendId, userId]
+    )
+
+    if (friendCheck[0].count === 0) {
+      return res.cc(false, '好友关系不存在', 404)
+    }
+
+    // 删除双方好友关系
+    await conMysql(
+      `DELETE FROM friends
+       WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)`,
+      [userId, friendId, friendId, userId]
+    )
+
+    res.cc(true, '好友删除成功')
   } catch (e) { next(e) }
 }
 

@@ -83,6 +83,7 @@
                   @select-room="handleSelectRoom"
                   @load-chat-rooms="loadChatRooms"
                   @friend-chat-opened="startingChatWithFriend = $event"
+                  @show-friend-detail="handleShowFriendDetail"
                 />
 
                 <RecentChats
@@ -210,9 +211,19 @@
             </div>
           </div>
 
+          <!-- 好友详情视图（右侧主内容） -->
+          <FriendDetail
+            v-else-if="currentView === 'friendDetail'"
+            :friend="selectedFriend"
+            @open-chat="openFriendChat"
+            @back="switchView('chat')"
+            @set-remark="handleSetRemark"
+            @delete-friend="handleDeleteFriend"
+          />
+
           <!-- 聊天消息视图 -->
           <MessageList
-            v-if="activeRoomId"
+            v-if="currentView === 'chat' && activeRoomId"
             :messages="messages"
             :loading-messages="loadingMessages"
             :sending-message="sendingMessage"
@@ -228,7 +239,7 @@
             @multi-operation="handleMultiOperation"
           />
 
-          <div v-else class="chat-main-empty">
+          <div v-else-if="currentView === 'chat'" class="chat-main-empty">
             <p v-if="currentView === 'addFriend'">
               在这里搜索用户名并添加好友
             </p>
@@ -284,22 +295,19 @@
 
 <script setup>
   import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
-  import { 
-    ChatDotRound, 
-    Close, 
+  import {
+    Close,
     CopyDocument,
     ArrowDown,
     Loading,
-    Check,
     User,
-    Setting,
     Search,
     Plus
   } from '@element-plus/icons-vue'
-  import { ElMessage } from 'element-plus'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   import { initSocket } from '@/utils/socket'
   import { getRoomList, createRoom, getChatHistory } from '@/axios/chat'
-  import { getFriendList, addFriend, searchUsers } from '@/axios/friend'
+  import { getFriendList, addFriend, searchUsers, updateFriendRemark, deleteFriend } from '@/axios/friend'
   import { useUserStore } from '@/stores/user'
   import { gsap } from 'gsap'
   import { Draggable } from 'gsap/Draggable'
@@ -307,6 +315,7 @@
   import FriendList from './FriendList.vue'
   import RecentChats from './RecentChats.vue'
   import MessageList from './MessageList.vue'
+  import FriendDetail from './FriendDetail.vue'
   
   gsap.registerPlugin(Draggable)
 
@@ -327,7 +336,7 @@
     set: (val) => emit('update:visible', val)
   })
 
-  const currentView = ref('chat') // 'chat' | 'create' | 'addFriend'
+  const currentView = ref('chat') // 'chat' | 'create' | 'addFriend' | 'friendDetail'
   const activeRoomId = ref(null)
   const activeCollapsePanels = ref(['notifications', 'friends', 'rooms']) // 控制折叠面板的展开状态
   const chatRooms = ref([])
@@ -353,68 +362,15 @@
   const messagesContainer = ref(null)
   const chatWindowRef = ref(null)
   const draggableInstance = ref(null)
+  const selectedFriend = ref(null)
 
   // 消息通知相关状态
-  const notifications = ref([
-    // Mock 数据 - 好友申请
-    {
-      id: 'mock-friend-request-1',
-      type: 'friendRequest',
-      title: '好友请求',
-      message: '用户 Alice 想添加你为好友',
-      fromUserId: 1001,
-      fromUsername: 'Alice',
-      timestamp: new Date(Date.now() - 5 * 60000).toISOString() // 5分钟前
-    },
-    {
-      id: 'mock-friend-request-2',
-      type: 'friendRequest',
-      title: '好友请求',
-      message: '用户 Bob 想添加你为好友',
-      fromUserId: 1002,
-      fromUsername: 'Bob',
-      timestamp: new Date(Date.now() - 30 * 60000).toISOString() // 30分钟前
-    },
-    // Mock 数据 - 新消息
-    {
-      id: 'mock-new-message-1',
-      type: 'newMessage',
-      title: '新消息',
-      message: 'Charlie 在 群聊 (5人) 中发送了消息',
-      user: 'Charlie',
-      fromUserId: 1003,
-      roomId: 2001,
-      roomName: '群聊 (5人)',
-      content: '大家好，今天天气真不错！',
-      timestamp: new Date(Date.now() - 10 * 60000).toISOString() // 10分钟前
-    },
-    // Mock 数据 - 好友申请通过
-    {
-      id: 'mock-friend-accepted-1',
-      type: 'friendAccepted',
-      title: '好友请求通过',
-      message: 'David 接受了您的好友请求',
-      fromUserId: 1004,
-      fromUsername: 'David',
-      timestamp: new Date(Date.now() - 2 * 3600000).toISOString() // 2小时前
-    }
-  ])
+  const notifications = ref([])
 
   const userStore = useUserStore()
   const currentUserId = computed(() => userStore.user?.id)
   const socket = ref(null)
 
-  const filteredFriends = computed(() => {
-    const keyword = sidebarFilter.value.trim().toLowerCase()
-    if (!keyword) return friends.value
-    return friends.value.filter(friend => friend.username?.toLowerCase().includes(keyword))
-  })
-
-  const filteredChatRooms = computed(() => {
-    const keyword = sidebarFilter.value.trim().toLowerCase()
-    if (!keyword) return chatRooms.value
-    return chatRooms.value.filter(room => getRoomName(room).toLowerCase().includes(keyword))
-  })
 
   const friendIdSet = computed(() => new Set(friends.value.map(f => Number(f.id))))
 
@@ -639,6 +595,96 @@
     }
   }
 
+  function handleShowFriendDetail (friend) {
+    selectedFriend.value = friend
+    currentView.value = 'friendDetail'
+    activeRoomId.value = null
+  }
+
+  async function handleSetRemark (friend) {
+    // 如果是从FriendDetail组件传来的更新后的好友数据，直接更新本地状态
+    if (friend && friend.tip !== undefined) {
+      // 更新好友列表中的备注
+      const friendIndex = friends.value.findIndex(f => f.id === friend.id)
+      if (friendIndex !== -1) {
+        friends.value[friendIndex].tip = friend.tip
+      }
+      // 更新选中的好友信息
+      if (selectedFriend.value && selectedFriend.value.id === friend.id) {
+        selectedFriend.value.tip = friend.tip
+      }
+      return
+    }
+
+    // 否则是从侧边栏触发的备注设置，需要显示对话框并调用API
+    try {
+      const { value: remark } = await ElMessageBox.prompt('请输入好友备注', '设置备注', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputValue: friend.tip || friend.username,
+        inputValidator: (value) => {
+          if (!value || !value.trim()) {
+            return '备注不能为空'
+          }
+          return true
+        }
+      })
+
+      if (remark) {
+        const res = await updateFriendRemark({
+          friendId: friend.id,
+          remark: remark.trim()
+        })
+
+        if (res.success) {
+          ElMessage.success('备注设置成功')
+          // 重新加载好友列表以更新备注
+          await loadFriends()
+          // 如果当前显示的是这个好友的详情页，更新选中好友信息
+          if (selectedFriend.value && selectedFriend.value.id === friend.id) {
+            selectedFriend.value.tip = remark.trim()
+          }
+        }
+      }
+    } catch (error) {
+      if (error !== 'cancel') {
+        ElMessage.error(error.response?.data?.message || '设置备注失败')
+      }
+    }
+  }
+
+  async function handleDeleteFriend (friend) {
+    try {
+      await ElMessageBox.confirm(
+        `确定要删除好友 "${friend.username}" 吗？删除后将无法恢复。`,
+        '删除好友',
+        {
+          confirmButtonText: '确定删除',
+          cancelButtonText: '取消',
+          type: 'warning',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+
+      const res = await deleteFriend({ friendId: friend.id })
+
+      if (res.success) {
+        ElMessage.success('好友删除成功')
+        // 重新加载好友列表
+        await loadFriends()
+        // 如果当前显示的是这个好友的详情页，返回聊天
+        if (selectedFriend.value && selectedFriend.value.id === friend.id) {
+          switchView('chat')
+        }
+      }
+
+    } catch (error) {
+      if (error !== 'cancel') {
+        ElMessage.error(error.response?.data?.message || '删除好友失败')
+      }
+    }
+  }
+
   // 选择房间
   async function selectRoom (room) {
     activeRoomId.value = room.id
@@ -719,6 +765,8 @@
           content: messageContent,
           content_text: contentText
         })
+        // 手动更新房间的最后消息（因为服务器可能不会广播给自己）
+        updateRoomLastMessage(activeRoomId.value, contentText, userStore.username)
         // 消息会通过 socket 监听器更新（替换临时消息）
       } else {
         ElMessage.warning('连接已断开，请刷新页面')
@@ -851,6 +899,12 @@
       // 图片消息：content是HTML格式，包含img标签
       baseMessage.content = `<img src="${url}" alt="图片" style="max-width: 240px; border-radius: 12px;">`
       baseMessage.imageUrl = url // 保留imageUrl以便其他地方使用
+    } else if (messageType === 'video') {
+      // 视频消息：content是HTML格式，包含video标签
+      baseMessage.content = `<video src="${url}" controls style="max-width: 240px; border-radius: 12px;" preload="metadata"></video>`
+      baseMessage.fileUrl = url
+      baseMessage.fileName = fileName
+      baseMessage.fileSize = fileSize
     } else {
       // 其他文件消息：content是占位符文字
       baseMessage.content = placeholderContent
@@ -875,6 +929,9 @@
           fileSize: messageType !== 'image' ? fileSize : undefined,
           messageType
         })
+
+        // 手动更新房间的最后消息
+        updateRoomLastMessage(activeRoomId.value, placeholderContent, userStore.username)
 
         const lastMsg = messages.value[messages.value.length - 1]
         if (lastMsg && lastMsg.id === tempId) {
@@ -1046,6 +1103,9 @@
     if (view === 'create' || view === 'addFriend') {
       activeRoomId.value = null
     }
+    if (view !== 'friendDetail') {
+      selectedFriend.value = null
+    }
     if (view !== 'addFriend') {
       searchUserKeyword.value = ''
       searchResults.value = []
@@ -1177,15 +1237,6 @@
     return null
   }
 
-  function getCurrentRoomName () {
-    const room = chatRooms.value.find(r => r.id === activeRoomId.value)
-    return room ? getRoomName(room) : ''
-  }
-
-  function getCurrentRoomAvatar () {
-    const room = chatRooms.value.find(r => r.id === activeRoomId.value)
-    return room ? getRoomAvatar(room) : null
-  }
 
   function getUserAvatar (userId) {
     // 从当前房间的成员中查找头像
@@ -1203,12 +1254,16 @@
   }
 
   function updateRoomLastMessage (roomId, content, username) {
-    const room = chatRooms.value.find(r => Number(r.id) === Number(roomId))
-    if (room) {
-      room.lastMessage = {
-        content,
-        username,
-        created_at: new Date().toISOString()
+    const roomIndex = chatRooms.value.findIndex(r => Number(r.id) === Number(roomId))
+    if (roomIndex > -1) {
+      // 使用 Vue 的响应式更新
+      chatRooms.value[roomIndex] = {
+        ...chatRooms.value[roomIndex],
+        lastMessage: {
+          content_text: content,
+          username,
+          created_at: new Date().toISOString()
+        }
       }
     }
   }
@@ -1221,38 +1276,6 @@
     }
   }
 
-  function formatTime (timestamp) {
-    if (!timestamp) return ''
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diff = now - date
-  
-    if (diff < 60000) return '刚刚'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-    if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
-  
-    return date.toLocaleDateString('zh-CN')
-  }
-
-  function formatMessageTime (timestamp) {
-    if (!timestamp) return ''
-    const date = new Date(timestamp)
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-
-    if (msgDate.getTime() === today.getTime()) {
-      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    }
-
-    return date.toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   // 消息通知相关函数
   function addNotification (notification) {
@@ -1566,27 +1589,6 @@
   gap: 8px;
 }
 
-.sidebar-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, #343536);
-  background: var(--bg-tertiary);
-}
-
-.sidebar-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.sidebar-title-icon {
-  font-size: 18px;
-  color: var(--primary-color, #ff4500);
-}
 
 .dropdown-trigger {
   display: flex;
@@ -1664,55 +1666,7 @@
   border: none;
 }
 
-.collapse-item {
-  margin-bottom: 12px;
-}
 
-.collapse-item:last-child {
-  margin-bottom: 0;
-}
-
-.list-section {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  color: var(--text-primary);
-  font-weight: 500;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.friend-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.friend-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background 0.2s;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.friend-item:hover,
-.friend-item.active {
-  background: var(--bg-hover);
-}
-
-.inline-loading {
-  font-size: 16px;
-  color: var(--text-secondary);
-}
 
 .empty-chat-list.compact {
   padding: 24px 16px;
@@ -1784,13 +1738,6 @@
   margin-bottom: 24px;
 }
 
-.reddit-snoos {
-  width: 120px;
-  height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 .empty-chat-list h3 {
   color: var(--text-primary);
@@ -1806,105 +1753,9 @@
   line-height: 1.5;
 }
 
-.start-chat-btn {
-  background: #0079d3;
-  border-color: #0079d3;
-}
 
-.start-chat-btn:hover {
-  background: #005ba1;
-  border-color: #005ba1;
-}
 
-.chat-rooms-list {
-  flex: 1;
-  overflow-y: auto;
-}
 
-.chat-room-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background 0.2s;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.chat-room-item:hover {
-  background: var(--bg-hover);
-}
-
-.chat-room-item.active {
-  background: var(--bg-hover);
-}
-
-.room-avatar {
-  flex-shrink: 0;
-}
-
-.room-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.room-name {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.room-preview {
-  color: var(--text-secondary);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.room-meta {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.room-time {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-/* 聊天消息视图 */
-.chat-messages-view {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  border-left: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.messages-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-}
-
-.messages-header-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.messages-room-name {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-}
 
 .messages-container {
   flex: 1;
@@ -1915,105 +1766,22 @@
   gap: 16px;
 }
 
-.empty-messages {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.empty-messages p {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.messages-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.message-item {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.message-item.own-message {
-  flex-direction: row-reverse;
-}
-
-.message-avatar {
-  flex-shrink: 0;
-}
-
-.message-content-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 70%;
-}
-
-.message-item.own-message .message-content-wrapper {
-  align-items: flex-end;
-}
-
-.message-content {
-  padding: 8px 12px;
-  background: var(--bg-hover);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.4;
-  word-wrap: break-word;
-}
-
-.message-item.own-message .message-content {
-  background: var(--btn-orange);
-  color: #fff;
-}
-
-.message-time {
-  font-size: 11px;
-  color: var(--text-secondary);
-  padding: 0 4px;
-}
-
-.message-input-container {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.message-input {
-  flex: 1;
-}
-
-.send-button {
-  flex-shrink: 0;
-}
 
 /* 滚动条样式 */
 .chat-sidebar-body::-webkit-scrollbar,
 .list-view::-webkit-scrollbar,
-.chat-rooms-list::-webkit-scrollbar,
 .messages-container::-webkit-scrollbar {
   width: 8px;
 }
 
 .chat-sidebar-body::-webkit-scrollbar-track,
 .list-view::-webkit-scrollbar-track,
-.chat-rooms-list::-webkit-scrollbar-track,
 .messages-container::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .chat-sidebar-body::-webkit-scrollbar-thumb,
 .list-view::-webkit-scrollbar-thumb,
-.chat-rooms-list::-webkit-scrollbar-thumb,
 .messages-container::-webkit-scrollbar-thumb {
   background: var(--border-color, #343536);
   border-radius: 4px;
@@ -2021,7 +1789,6 @@
 
 .chat-sidebar-body::-webkit-scrollbar-thumb:hover,
 .list-view::-webkit-scrollbar-thumb:hover,
-.chat-rooms-list::-webkit-scrollbar-thumb:hover,
 .messages-container::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }

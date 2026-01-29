@@ -25,7 +25,7 @@
           :key="friend.id"
           class="friend-item"
           :class="{ active: isFriendActive(friend.id) }"
-          @click="openFriendChat(friend)"
+          @click="handleFriendClick(friend)"
         >
           <el-avatar
             :size="40"
@@ -57,8 +57,6 @@
 <script setup>
   import { ref, computed, defineProps, defineEmits } from 'vue'
   import { Loading } from '@element-plus/icons-vue'
-  import { getRoomList, createRoom } from '@/axios/chat'
-  import { ElMessage } from 'element-plus'
 
   // Props
   const props = defineProps({
@@ -89,7 +87,13 @@
   })
 
   // Emits
-  const emit = defineEmits(['openAddFriendView', 'selectRoom', 'loadChatRooms', 'friendChatOpened'])
+  const emit = defineEmits([
+    'openAddFriendView',
+    'selectRoom',
+    'loadChatRooms',
+    'friendChatOpened',
+    'showFriendDetail'
+  ])
 
   // Computed
   const filteredFriends = computed(() => {
@@ -110,33 +114,9 @@
     return room ? Number(props.activeRoomId) === Number(room.id) : false
   }
 
-  async function openFriendChat (friend) {
-    const existingRoom = findDirectRoom(friend.id)
-    if (existingRoom) {
-      await selectRoom(existingRoom)
-      return
-    }
-
-    emit('friendChatOpened', friend.id)
-
-    try {
-      const res = await createRoom({
-        memberIds: [friend.id],
-        name: null
-      })
-      if (res.success) {
-        const roomId = res.data.roomId
-        emit('loadChatRooms')
-        const newRoom = props.chatRooms.find(r => Number(r.id) === Number(roomId))
-        if (newRoom) {
-          await selectRoom(newRoom)
-        }
-      }
-    } catch (error) {
-      ElMessage.error(error.response?.data?.message || '创建聊天失败')
-    } finally {
-      emit('friendChatOpened', null)
-    }
+  function handleFriendClick (friend) {
+    // 点击好友只展示好友详情，不直接打开聊天
+    emit('showFriendDetail', friend)
   }
 
   async function selectRoom (room) {

@@ -15,3 +15,9 @@ export const searchUsers = (keyword) => request.get('/api/user/search', { params
 // 处理好友请求
 export const handleFriendRequest = (data) => request.post('/api/friends/handle', data)
 
+// 更新好友备注
+export const updateFriendRemark = (data) => request.put('/api/friends/remark', data)
+
+// 删除好友
+export const deleteFriend = (data) => request.delete('/api/friends/friend', { data })
+
