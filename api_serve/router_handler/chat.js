@@ -1,18 +1,41 @@
 const {conMysql} = require('../db')
 
 exports.history = async (req, res, next) => {
-  const { roomId, page = 1, pageSize = 30 } = req.query
+  const { roomId, page = 1, pageSize = 20 } = req.query
   const offset = (page - 1) * pageSize
   try {
+    // 获取消息数据
     const rows = await conMysql(
       `SELECT m.id, m.user_id, u.username, m.content, m.content_text, m.created_at
        FROM messages m
        JOIN users u ON m.user_id = u.id
        WHERE m.room_id = ?
        ORDER BY m.created_at DESC
-       LIMIT ? OFFSET ?`, [roomId, +pageSize, +offset]
+       LIMIT ? OFFSET ?`, [roomId, +pageSize + 1, +offset] // 多取一条来判断是否有更多数据
     )
-    res.cc(true, 'success', 200, rows.reverse())
+
+    // 获取总数
+    const countResult = await conMysql(
+      `SELECT COUNT(*) as total FROM messages WHERE room_id = ?`, [roomId]
+    )
+    const total = countResult[0]?.total || 0
+    const totalPages = Math.ceil(total / pageSize)
+
+    // 判断是否还有更多数据
+    const hasMore = rows.length > pageSize
+    // 如果有多取的一条数据，移除它
+    const list = hasMore ? rows.slice(0, -1) : rows
+
+    res.cc(true, '获取聊天记录成功', 200, {
+      list: list.reverse(),
+      pagination: {
+        total,
+        totalPages,
+        currentPage: parseInt(page),
+        pageSize: parseInt(pageSize),
+        hasMore
+      }
+    })
   } catch (e) { next(e) }
 }
 

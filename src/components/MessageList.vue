@@ -97,10 +97,26 @@
         <p>还没有消息，开始聊天吧~</p>
       </div>
 
+      <!-- 加载更多消息指示器 -->
+      <div v-if="loadingMoreMessages" class="loading-more-container">
+        <el-icon class="is-loading">
+          <Loading />
+        </el-icon>
+        <span>加载更多消息...</span>
+      </div>
+
+      <!-- 没有更多消息提示 -->
+      <div v-else-if="!hasMoreMessages && messages.length > 0" class="no-more-messages">
+        <el-icon>
+          <InfoFilled />
+        </el-icon>
+        <span>没有更多消息了</span>
+      </div>
+
       <!-- 消息列表 -->
-      <div v-else class="messages-list">
+      <div class="messages-list">
         <div
-          v-for="(message, messageIndex) in messages"
+          v-for="(message, messageIndex) in displayedMessages"
           :key="message.id"
           :class="['message-item', {
             'own-message': isOwnMessage(message.user_id),
@@ -308,10 +324,11 @@
 </template>
 
 <script setup>
-  import { ref, computed, watch, nextTick, onMounted } from 'vue'
+  import { ref, computed, watch, nextTick, onMounted, defineExpose } from 'vue'
   import { Loading, Check, CircleCheck, InfoFilled, Back, Search, Close, ArrowUp, ArrowDown, DocumentCopy, Download, Delete, Document, Select } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import RichTextEditor from './RichTextEditor.vue'
+  import { throttle, debounce } from '@/utils/throttleDebounce'
 
   // eslint-disable-next-line no-undef
   const props = defineProps({
@@ -352,7 +369,8 @@
     'send-image',
     'send-file',
     'delete-message',
-    'multi-operation'
+    'multi-operation',
+    'load-more-messages'
   ])
 
   const richTextEditorRef = ref(null)
@@ -366,6 +384,9 @@
   const currentSearchIndex = ref(-1)
   const multiSelectMode = ref(false)
   const selectedMessageIds = ref(new Set())
+  const loadedMessageCount = ref(20) // 默认加载最新的20条消息
+  const loadingMoreMessages = ref(false) // 加载更多消息的状态
+  const hasMoreMessages = ref(true) // 是否还有更多消息可以加载
 
   // 获取当前房间信息
   const currentRoom = computed(() => {
@@ -441,9 +462,10 @@
   // 滚动到底部
   function scrollToBottom () {
     if (messagesContainerRef.value) {
-      nextTick(() => {
+      // 使用 setTimeout 确保DOM完全渲染
+      setTimeout(() => {
         messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
-      })
+      }, 50)
     }
   }
 
@@ -603,6 +625,11 @@
 
   const selectedCount = computed(() => selectedMessageIds.value.size)
 
+  // 显示的消息（直接显示所有传入的消息）
+  const displayedMessages = computed(() => {
+    return props.messages
+  })
+
   function deleteSingleMessage (message) {
     emit('delete-message', [message.id])
     menuVisible.value = false
@@ -618,8 +645,8 @@
     }
   }
 
-  // 执行搜索
-  function performSearch () {
+  // 执行搜索（防抖处理）
+  const performSearch = debounce(() => {
     if (!searchQuery.value.trim()) {
       searchResults.value = []
       currentSearchIndex.value = -1
@@ -643,7 +670,7 @@
     if (results.length > 0) {
       scrollToMessage(results[0].index)
     }
-  }
+  }, 300)
 
   // 从HTML内容中提取纯文本
   function extractPlainText (html) {
@@ -686,31 +713,128 @@
     currentSearchIndex.value = -1
   }
 
+  // 处理滚动事件，检查是否需要加载更多消息（节流处理）
+  const handleScroll = throttle(() => {
+    if (!messagesContainerRef.value || loadingMoreMessages.value || !hasMoreMessages.value) {
+      return
+    }
+
+    const container = messagesContainerRef.value
+    const scrollTop = container.scrollTop
+
+    // 当滚动到距离顶部100px以内时，加载更多消息
+    if (scrollTop <= 100) {
+      loadMoreMessages()
+    }
+  }, 200)
+
+  // 加载更多消息
+  function loadMoreMessages () {
+    if (loadingMoreMessages.value || !hasMoreMessages.value) return
+
+    loadingMoreMessages.value = true
+
+    // 记录当前滚动位置，用于加载完成后保持位置
+    const container = messagesContainerRef.value
+    const scrollHeight = container.scrollHeight
+
+    // 通知父组件加载更多消息，一次加载20条
+    emit('load-more-messages', {
+      roomId: props.activeRoomId,
+      currentLoadedCount: props.messages.length,
+      loadCount: 20,
+      scrollHeight: scrollHeight
+    })
+  }
+
+  // 完成加载更多消息（由父组件调用）
+  function finishLoadMoreMessages (scrollHeightBeforeLoad, newMessageCount = 0, hasMore = false) {
+    loadingMoreMessages.value = false
+    hasMoreMessages.value = hasMore
+
+    // 保持滚动位置，避免页面跳动
+    nextTick(() => {
+      const container = messagesContainerRef.value
+      if (container) {
+        const newScrollHeight = container.scrollHeight
+        const scrollDiff = newScrollHeight - scrollHeightBeforeLoad
+
+        // 只有当确实有新的内容高度变化时才调整滚动位置
+        if (scrollDiff > 0) {
+          container.scrollTop += scrollDiff
+        }
+      }
+    })
+  }
+
   // 检查消息是否为搜索结果
   function isSearchResult (messageIndex) {
     return searchResults.value.some(result => result.index === messageIndex)
   }
 
-  // 监听消息变化，自动滚动到底部
-  watch(() => props.messages.length, () => {
-    scrollToBottom()
+  // 监听消息变化，只有在发送新消息时才滚动到底部
+  watch(() => props.messages.length, (newLength, oldLength) => {
+    // 只有在非加载状态、有消息且消息数量增加（发送新消息）时才滚动到底部
+    // 不包括加载历史消息的情况
+    if (!props.loadingMessages && newLength > oldLength && props.messages.length > 0 && !loadingMoreMessages.value) {
+      scrollToBottom()
+    }
+  })
+
+  // 监听房间变化，重置加载计数
+  watch(() => props.activeRoomId, () => {
+    loadedMessageCount.value = 20 // 重置为默认20条
+    loadingMoreMessages.value = false
+    hasMoreMessages.value = true // 重置为true，因为新房间可能有更多消息
+  })
+
+  // 监听消息数量变化，更新loadedMessageCount
+  watch(() => props.messages.length, (newLength) => {
+    // 如果消息数量发生变化，更新loadedMessageCount
+    if (newLength > loadedMessageCount.value) {
+      loadedMessageCount.value = newLength
+    }
   })
 
   // 监听房间变化，滚动到底部
   watch(() => props.activeRoomId, () => {
+    // 当切换房间时，等待DOM更新
     nextTick(() => {
-      scrollToBottom()
+      // 如果消息已经加载完成，直接滚动
+      if (!props.loadingMessages && props.messages.length > 0) {
+        scrollToBottom()
+      }
     })
+  })
+
+  // 监听消息加载状态，当从加载中变为加载完成时滚动到底部
+  watch(() => props.loadingMessages, (newVal, oldVal) => {
+    // 从加载中变为加载完成时，滚动到底部
+    if (oldVal && !newVal && props.messages.length > 0) {
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
   })
 
   onMounted(() => {
     scrollToBottom()
+
+    // 添加滚动事件监听
+    if (messagesContainerRef.value) {
+      messagesContainerRef.value.addEventListener('scroll', handleScroll)
+    }
 
     // 全局键盘快捷键
     const handleKeydown = (event) => {
       // 预留快捷键位
     }
     document.addEventListener('keydown', handleKeydown)
+  })
+
+  // 暴露方法给父组件
+  defineExpose({
+    finishLoadMoreMessages
   })
 </script>
 
@@ -799,6 +923,30 @@
   justify-content: center;
   gap: 12px;
   color: var(--text-color-secondary, #818384);
+}
+
+.loading-more-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-color-secondary, #818384);
+  font-size: 12px;
+}
+
+.no-more-messages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-color-secondary, #818384);
+  font-size: 12px;
+  border-top: 1px solid var(--border-color, #343536);
+  margin-top: 16px;
 }
 
 .empty-messages {

@@ -224,6 +224,7 @@
           <!-- 聊天消息视图 -->
           <MessageList
             v-if="currentView === 'chat' && activeRoomId"
+            ref="messageListRef"
             :messages="messages"
             :loading-messages="loadingMessages"
             :sending-message="sendingMessage"
@@ -237,6 +238,7 @@
             @send-file="handleSendFile"
             @delete-message="handleDeleteMessages"
             @multi-operation="handleMultiOperation"
+            @load-more-messages="handleLoadMoreMessages"
           />
 
           <div v-else-if="currentView === 'chat'" class="chat-main-empty">
@@ -309,6 +311,7 @@
   import { getRoomList, createRoom, getChatHistory } from '@/axios/chat'
   import { getFriendList, addFriend, searchUsers, updateFriendRemark, deleteFriend } from '@/axios/friend'
   import { useUserStore } from '@/stores/user'
+  import { throttle, debounce } from '@/utils/throttleDebounce'
   import { gsap } from 'gsap'
   import { Draggable } from 'gsap/Draggable'
   import NotificationList from './NotificationList.vue'
@@ -361,6 +364,7 @@
   const addingFriendIds = ref(new Set())
   const messagesContainer = ref(null)
   const chatWindowRef = ref(null)
+  const messageListRef = ref(null)
   const draggableInstance = ref(null)
   const selectedFriend = ref(null)
 
@@ -373,6 +377,28 @@
 
 
   const friendIdSet = computed(() => new Set(friends.value.map(f => Number(f.id))))
+
+  // 创建防抖版本的搜索用户函数
+  const debouncedSearchUsers = debounce(async (keyword) => {
+    if (!keyword.trim()) {
+      searchResults.value = []
+      return
+    }
+    searchingUsers.value = true
+    try {
+      const res = await searchUsers(keyword.trim())
+      if (res.success) {
+        searchResults.value = res.data || []
+      } else {
+        searchResults.value = []
+      }
+    } catch (error) {
+      ElMessage.error(error.response?.data?.message || '搜索用户失败')
+      searchResults.value = []
+    } finally {
+      searchingUsers.value = false
+    }
+  }, 500)
 
   // 监听可见性变化，重新初始化拖拽
   watch(isVisible, (newVal) => {
@@ -705,9 +731,9 @@
   async function loadMessages (roomId) {
     loadingMessages.value = true
     try {
-      const res = await getChatHistory({ roomId, page: 1, pageSize: 50 })
-      if (res.success) {
-        messages.value = (res.data || []).map(msg => ({
+      const res = await getChatHistory({ roomId, page: 1, pageSize: 20 })
+      if (res.success && res.data) {
+        messages.value = (res.data.list || []).map(msg => ({
           ...msg,
           messageType: msg.messageType || msg.message_type || 'text',
           content_text: msg.content_text || extractPlainText(msg.content || ''), // 确保有纯文本字段
@@ -838,6 +864,56 @@
         })
       }
     }
+  }
+
+  // 处理加载更多消息（节流保护）
+  const throttledLoadMoreMessages = throttle(async (payload) => {
+    const { roomId, currentLoadedCount, loadCount, scrollHeight } = payload
+
+    if (!roomId) return
+
+    try {
+      // 计算需要加载的页码
+      // 假设每页20条，第一页是最新消息，后续页码递增加载历史消息
+      const page = Math.ceil((currentLoadedCount + loadCount) / 20)
+
+      const res = await getChatHistory({
+        roomId,
+        page,
+        pageSize: 20  // 每次加载20条消息
+      })
+
+      if (res.success && res.data && res.data.list && res.data.list.length > 0) {
+        // 将新消息添加到消息列表的开头（历史消息）
+        const newMessages = res.data.list.map(msg => ({
+          ...msg,
+          messageType: msg.messageType || msg.message_type || 'text',
+          content_text: msg.content_text || extractPlainText(msg.content || ''),
+          status: msg.user_id === currentUserId.value ? 'sent' : 'read'
+        }))
+
+        // 将新消息插入到开头
+        messages.value.unshift(...newMessages)
+
+        // 等待DOM更新后调整滚动位置
+        await nextTick()
+        await nextTick() // 多等一个tick确保DOM完全更新
+        messageListRef.value?.finishLoadMoreMessages(scrollHeight, newMessages.length, res.data.pagination?.hasMore || false)
+      } else {
+        // 没有更多消息了
+        messageListRef.value?.finishLoadMoreMessages(scrollHeight, 0, false)
+      }
+    } catch (error) {
+      console.error('加载更多消息失败:', error)
+      ElMessage.error('加载更多消息失败')
+      // 即使失败也要调用finishLoadMoreMessages来隐藏加载状态
+      messageListRef.value?.finishLoadMoreMessages(scrollHeight)
+    }
+  }, 1000) // 1秒内只允许一次加载更多请求
+
+  // 处理加载更多消息
+  function handleLoadMoreMessages (payload) {
+    throttledLoadMoreMessages(payload)
   }
 
   // 处理发送图片消息
@@ -994,25 +1070,13 @@
     switchView('addFriend')
   }
 
-  async function performUserSearch () {
+  function performUserSearch () {
     if (!searchUserKeyword.value.trim()) {
       ElMessage.warning('请输入用户名')
+      searchResults.value = []
       return
     }
-    searchingUsers.value = true
-    try {
-      const res = await searchUsers(searchUserKeyword.value.trim())
-      if (res.success) {
-        searchResults.value = res.data || []
-      } else {
-        searchResults.value = []
-      }
-    } catch (error) {
-      ElMessage.error(error.response?.data?.message || '搜索用户失败')
-      searchResults.value = []
-    } finally {
-      searchingUsers.value = false
-    }
+    debouncedSearchUsers(searchUserKeyword.value.trim())
   }
 
   function isAlreadyFriend (userId) {
@@ -1268,12 +1332,17 @@
     }
   }
 
-  function scrollToBottom () {
+  // 节流版本的滚动到底部函数
+  const throttledScrollToBottom = throttle(() => {
     if (messagesContainer.value) {
       nextTick(() => {
         messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
       })
     }
+  }, 100)
+
+  function scrollToBottom () {
+    throttledScrollToBottom()
   }
 
 
