@@ -37,7 +37,7 @@
       </el-tabs>
 
       <div class="content-area">
-        <div
+        <!-- <div
           v-if="activeTab === 'overview'"
           class="overview-content"
         >
@@ -68,8 +68,8 @@
               />
             </div>
           </div>
-        </div>
-        <router-view v-else />
+        </div> -->
+        <router-view />
       </div>
     </div>
 

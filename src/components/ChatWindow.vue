@@ -237,8 +237,11 @@
             @send-image="handleSendImage"
             @send-file="handleSendFile"
             @delete-message="handleDeleteMessages"
+            @local-delete-message="handleLocalDeleteMessages"
             @multi-operation="handleMultiOperation"
             @load-more-messages="handleLoadMoreMessages"
+            @message-copied="handleMessageCopied"
+            @message-copy-error="handleMessageCopyError"
           />
 
           <div v-else-if="currentView === 'chat'" class="chat-main-empty">
@@ -308,7 +311,7 @@
   } from '@element-plus/icons-vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { initSocket } from '@/utils/socket'
-  import { getRoomList, createRoom, getChatHistory } from '@/axios/chat'
+  import { getRoomList, createRoom, getChatHistory, deleteMessage, hideMessage } from '@/axios/chat'
   import { getFriendList, addFriend, searchUsers, updateFriendRemark, deleteFriend } from '@/axios/friend'
   import { useUserStore } from '@/stores/user'
   import { throttle, debounce } from '@/utils/throttleDebounce'
@@ -367,6 +370,7 @@
   const messageListRef = ref(null)
   const draggableInstance = ref(null)
   const selectedFriend = ref(null)
+
 
   // 消息通知相关状态
   const notifications = ref([])
@@ -448,6 +452,7 @@
     if (!socket.value) return
 
     socket.value.on('chatMessage', (data) => {
+      console.log('chatMessage', data)
       // 确保 roomId 类型一致（都转为数字或字符串）
       const receivedRoomId = Number(data.roomId)
       const currentRoomId = Number(activeRoomId.value)
@@ -458,7 +463,7 @@
         if (!isOwnMessage) {
           // 只添加其他人发送的消息（自己的消息已经在发送时添加了）
           messages.value.push({
-            id: Date.now(),
+            id: data.id, // 使用服务器发送的真实数据库ID
             user_id: data.userId,
             username: data.user,
             content: data.content,
@@ -473,7 +478,7 @@
           // 如果是自己的消息，更新最后一条临时消息的ID和状态
           const lastMsg = messages.value[messages.value.length - 1]
           if (lastMsg && lastMsg.user_id === currentUserId.value && lastMsg.content === data.content && lastMsg.status === 'sending') {
-            lastMsg.id = Date.now() // 更新为服务器返回的ID
+            lastMsg.id = data.id // 更新为服务器返回的真实数据库ID
             lastMsg.status = 'sent' // 更新状态为已发送
             lastMsg.content_text = data.content_text || extractPlainText(data.content || '') // 更新纯文本
           }
@@ -838,10 +843,23 @@
     }
   }
 
-  // 删除消息（本地删除，可根据需要接入后端接口）
-  function handleDeleteMessages (ids) {
-    if (!Array.isArray(ids)) return
-    messages.value = messages.value.filter(msg => !ids.includes(msg.id))
+  // 删除消息（调用后端API）
+  async function handleDeleteMessages (ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return
+
+    try {
+      // 逐个删除消息
+      for (const messageId of ids) {
+        await deleteMessage({ messageId })
+      }
+
+      // 从本地消息列表中移除已删除的消息
+      messages.value = messages.value.filter(msg => !ids.includes(msg.id))
+
+      ElMessage.success('消息删除成功')
+    } catch (error) {
+      ElMessage.error(error.response?.data?.message || '删除消息失败')
+    }
   }
 
   // 处理多选操作
@@ -915,6 +933,37 @@
   function handleLoadMoreMessages (payload) {
     throttledLoadMoreMessages(payload)
   }
+
+  // 处理消息复制成功
+  function handleMessageCopied (text) {
+    ElMessage.success('已复制到剪贴板')
+  }
+
+  // 处理消息复制失败
+  function handleMessageCopyError (error) {
+    ElMessage.error('复制失败，请手动选择文本')
+  }
+
+  // 隐藏消息（对当前用户不可见）
+  async function handleLocalDeleteMessages (ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return
+
+    try {
+      // 逐个隐藏消息
+      for (const messageId of ids) {
+        await hideMessage({ messageId })
+      }
+
+      // 从本地消息列表中移除已隐藏的消息
+      messages.value = messages.value.filter(msg => !ids.includes(msg.id))
+
+      ElMessage.success('消息已隐藏')
+    } catch (error) {
+      ElMessage.error(error.response?.data?.message || '隐藏消息失败')
+    }
+  }
+
+  // 显示消息菜单
 
   // 处理发送图片消息
   async function handleSendImage (payload) {
@@ -1861,6 +1910,7 @@
 .messages-container::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
 }
+
 
 /* 响应式设计 */
 @media (max-width: 768px) {

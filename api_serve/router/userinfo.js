@@ -5,6 +5,7 @@ const path = require('path')
 
 // 导入用户信息处理函数模块
 const userinfo_handler = require('../router_handler/userinfo')
+const userTheme_handler = require('../router_handler/userTheme')
 
 // 验证规则和中间件
 const expressJoi = require('@escook/express-joi')
@@ -12,6 +13,10 @@ const {
   update_userinfo_schema,
   update_password_schema,
 } = require('../schema/user')
+const {
+  update_theme_schema,
+  apply_preset_schema,
+} = require('../schema/userTheme')
 
 // 配置multer用于头像上传
 const storage = multer.diskStorage({
@@ -50,5 +55,17 @@ router.post('/updatepwd', expressJoi( update_password_schema ), userinfo_handler
 
 // 更新用户头像（支持文件上传）
 router.post('/update-avatar', upload.single('avatar'), userinfo_handler.updateAvatar)
+
+// 获取用户主题设置
+router.get('/theme', userTheme_handler.getUserTheme)
+
+// 更新用户主题设置
+router.post('/theme', expressJoi(update_theme_schema), userTheme_handler.updateUserTheme)
+
+// 重置为默认主题设置
+router.post('/theme/reset', userTheme_handler.resetUserTheme)
+
+// 应用预置主题
+router.post('/theme/preset', expressJoi(apply_preset_schema), userTheme_handler.applyPresetTheme)
 
 module.exports = router

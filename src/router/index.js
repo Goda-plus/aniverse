@@ -112,7 +112,7 @@ const routes = [
     path: '/profile',
     name: 'profile',
     component: () => import('../views/ProfileView.vue'),
-    redirect: '/profile/posts',
+    redirect: '/profile/overview',
     children: [
       {
         path: 'overview',

@@ -94,12 +94,16 @@ module.exports = function initSocket (server) {
       }
 
       try {
-        await conMysql(
+        // 插入消息并获取插入的ID
+        const result = await conMysql(
           'INSERT INTO messages (room_id, user_id, content, content_text, created_at) VALUES (?,?,?,?,NOW())',
           [msg.room_id, msg.user_id, msg.content, msg.content_text]
         )
+        // 获取插入消息的ID（使用 LAST_INSERT_ID()）
+        const messageId = result.insertId
 
         io.to(roomId).emit('chatMessage', {
+          id: messageId,
           roomId: roomId,
           user: msg.username,
           userId: msg.user_id,

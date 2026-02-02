@@ -12,3 +12,9 @@ export const clearAllHistory = (data) => request.delete('/api/browse/clear', dat
 // 获取浏览列表（带分页，返回完整帖子信息）
 export const getBrowseHistory = (data) => request.get('/api/browse/list', { params: data })
 
+// 获取用户活动历史
+export const getUserActivities = (data) => request.get('/api/browse/activities', { params: data })
+
+// 获取用户统计数据
+export const getUserStatistics = () => request.get('/api/browse/statistics')
+

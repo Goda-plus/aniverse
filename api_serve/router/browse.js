@@ -16,4 +16,10 @@ router.delete('/delete', expressJoi(delete_history_schema), browseHandler.delete
 // 清空所有历史
 router.delete('/clear', browseHandler.clearAllHistory)
 
+// 获取用户活动历史
+router.get('/activities', browseHandler.getUserActivities)
+
+// 获取用户统计数据
+router.get('/statistics', browseHandler.getUserStatistics)
+
 module.exports = router

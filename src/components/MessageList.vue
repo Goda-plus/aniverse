@@ -134,10 +134,10 @@
           </el-avatar>
           <div class="message-content-wrapper">
             <!-- 多选勾选框 -->
-            <div v-if="multiSelectMode" class="message-select-checkbox">
+            <div v-if="multiSelectMode" class="message-select-checkbox" @click.stop>
               <el-checkbox
                 :model-value="isMessageSelected(message.id)"
-                @change.stop="toggleMessageSelection(message)"
+                @change="(value) => handleCheckboxChange(value, message)"
               />
             </div>
             <div
@@ -186,52 +186,6 @@
               </div>
               <!-- 其他消息（包括图片和文本）都用HTML渲染 -->
               <div v-else v-html="message.content" />
-              <!-- 消息菜单 -->
-              <div
-                v-if="menuVisible && selectedMessage?.id === message.id"
-                class="message-menu"
-                :style="{ left: menuPosition.x + 'px', top: menuPosition.y + 'px' }"
-                @click.stop
-              >
-                <div
-                  v-if="canCopyMessage(message)"
-                  class="menu-item"
-                  @click="copyMessage(message)"
-                >
-                  <el-icon><DocumentCopy /></el-icon>
-                  <span>复制</span>
-                </div>
-                <div
-                  v-if="canDownloadMessage(message)"
-                  class="menu-item"
-                  @click="downloadMessageFile(message)"
-                >
-                  <el-icon><Download /></el-icon>
-                  <span>下载</span>
-                </div>
-                <div
-                  v-if="canRecallMessage(message)"
-                  class="menu-item"
-                  @click="recallMessage(message)"
-                >
-                  <el-icon><Back /></el-icon>
-                  <span>撤回消息</span>
-                </div>
-                <div
-                  class="menu-item"
-                  @click="enterMultiSelectFromMessage(message)"
-                >
-                  <el-icon><Select /></el-icon>
-                  <span>多选</span>
-                </div>
-                <div
-                  class="menu-item"
-                  @click="deleteSingleMessage(message)"
-                >
-                  <el-icon><Delete /></el-icon>
-                  <span>删除</span>
-                </div>
-              </div>
             </div>
             <div v-if="!message.recalled" class="message-meta">
               <div class="message-time">
@@ -264,6 +218,22 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 消息右键菜单容器 -->
+    <div ref="menuContainerRef" class="message-menu-container">
+      <MessageContextMenu
+        :visible="menuVisible"
+        :message="selectedMessage"
+        :position="menuPosition"
+        :current-user-id="currentUserId"
+        @copy="handleMenuCopy"
+        @download="handleMenuDownload"
+        @recall="handleMenuRecall"
+        @multi-select="handleMenuMultiSelect"
+        @local-delete="handleMenuLocalDelete"
+        @close="handleMenuClose"
+      />
     </div>
 
     <!-- 多选操作条（固定在输入框上方） -->
@@ -325,9 +295,10 @@
 
 <script setup>
   import { ref, computed, watch, nextTick, onMounted, defineExpose } from 'vue'
-  import { Loading, Check, CircleCheck, InfoFilled, Back, Search, Close, ArrowUp, ArrowDown, DocumentCopy, Download, Delete, Document, Select } from '@element-plus/icons-vue'
+  import { Loading, Check, CircleCheck, InfoFilled, Search, Close, ArrowUp, ArrowDown, DocumentCopy, Download, Delete, Document, Select } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import RichTextEditor from './RichTextEditor.vue'
+  import MessageContextMenu from './MessageContextMenu.vue'
   import { throttle, debounce } from '@/utils/throttleDebounce'
 
   // eslint-disable-next-line no-undef
@@ -369,15 +340,16 @@
     'send-image',
     'send-file',
     'delete-message',
+    'local-delete-message',
     'multi-operation',
-    'load-more-messages'
+    'load-more-messages',
+    'message-copied',
+    'message-copy-error'
   ])
 
   const richTextEditorRef = ref(null)
   const messagesContainerRef = ref(null)
-  const menuVisible = ref(false)
-  const selectedMessage = ref(null)
-  const menuPosition = ref({ x: 0, y: 0 })
+  const menuContainerRef = ref(null)
   const showSearch = ref(false)
   const searchQuery = ref('')
   const searchResults = ref([])
@@ -387,6 +359,11 @@
   const loadedMessageCount = ref(20) // 默认加载最新的20条消息
   const loadingMoreMessages = ref(false) // 加载更多消息的状态
   const hasMoreMessages = ref(true) // 是否还有更多消息可以加载
+
+  // 消息菜单相关状态
+  const menuVisible = ref(false)
+  const selectedMessage = ref(null)
+  const menuPosition = ref({ x: 0, y: 0 })
 
   // 获取当前房间信息
   const currentRoom = computed(() => {
@@ -506,13 +483,24 @@
   // 显示消息菜单
   function showMessageMenu (event, message) {
     event.preventDefault()
-    if (!isOwnMessage(message.user_id)) return // 只允许操作自己的消息
 
     selectedMessage.value = message
-    menuPosition.value = {
-      x: event.clientX,
-      y: event.clientY
+
+    // 计算相对于 MessageList 容器的位置
+    if (menuContainerRef.value) {
+      const containerRect = menuContainerRef.value.getBoundingClientRect()
+      menuPosition.value = {
+        x: event.clientX - containerRect.left,
+        y: event.clientY - containerRect.top
+      }
+    } else {
+      // 如果容器还没准备好，使用视口坐标作为后备
+      menuPosition.value = {
+        x: event.clientX,
+        y: event.clientY
+      }
     }
+
     menuVisible.value = true
 
     // 点击其他地方关闭菜单
@@ -523,47 +511,22 @@
     document.addEventListener('click', closeMenu)
   }
 
-  // 判断是否可以撤回消息
-  function canRecallMessage (message) {
-    if (!isOwnMessage(message.user_id)) return false
-    const messageTime = new Date(message.created_at)
-    const now = new Date()
-    const diffMinutes = (now - messageTime) / (1000 * 60)
-    return diffMinutes <= 5 // 5分钟内可以撤回
-  }
-
-  // 撤回消息
-  function recallMessage (message) {
-    emit('recall-message', message.id)
-    menuVisible.value = false
-  }
-
-  // 复制消息
-  function canCopyMessage (message) {
-    return !message.recalled && (!message.messageType || message.messageType === 'text')
-  }
-
-  async function copyMessage (message) {
-    if (!canCopyMessage(message)) return
+  // 处理菜单事件
+  async function handleMenuCopy (message) {
+    if (!message || message.recalled || (message.messageType && message.messageType !== 'text')) return
     // 优先使用 content_text，如果没有则从 content 中提取纯文本
     const textToCopy = message.content_text || extractPlainText(message.content || '')
     if (!textToCopy) return
     try {
       await navigator.clipboard.writeText(textToCopy)
-      ElMessage.success('已复制到剪贴板')
+      // 这里可以 emit 一个成功事件给父组件显示提示
+      emit('message-copied', textToCopy)
     } catch (e) {
-      ElMessage.error('复制失败，请手动选择文本')
-    } finally {
-      menuVisible.value = false
+      emit('message-copy-error', e.message)
     }
   }
 
-  // 文件下载/打开
-  function canDownloadMessage (message) {
-    return ['image', 'video', 'audio', 'file'].includes(message.messageType) && (message.imageUrl || message.fileUrl)
-  }
-
-  function downloadMessageFile (message) {
+  function handleMenuDownload (message) {
     const url = message.imageUrl || message.fileUrl
     if (!url) return
     const a = document.createElement('a')
@@ -572,8 +535,24 @@
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
+  }
+
+  function handleMenuRecall (message) {
+    emit('delete-message', [message.id])
+  }
+
+  function handleMenuMultiSelect (message) {
+    enterMultiSelectFromMessage(message)
+  }
+
+  function handleMenuLocalDelete (message) {
+    emit('local-delete-message', [message.id])
+  }
+
+  function handleMenuClose () {
     menuVisible.value = false
   }
+
 
   function openFile (message) {
     if (!message.fileUrl) return
@@ -605,7 +584,11 @@
   function enterMultiSelectFromMessage (message) {
     multiSelectMode.value = true
     selectedMessageIds.value = new Set([message.id])
-    menuVisible.value = false
+  }
+
+  function handleCheckboxChange (value, message) {
+    // Element Plus checkbox 的 @change 事件传递的是值（boolean），不是事件对象
+    toggleMessageSelection(message)
   }
 
   function toggleMessageSelection (message) {
@@ -632,7 +615,6 @@
 
   function deleteSingleMessage (message) {
     emit('delete-message', [message.id])
-    menuVisible.value = false
   }
 
   function handleMultiOperation (action) {
@@ -845,6 +827,15 @@
   height: 100%;
   flex-direction: column;
   background: var(--bg-color, #1a1a1b);
+  position: relative;
+}
+
+.message-menu-container {
+  position: relative;
+  width: 100%;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
 }
 
 .messages-header {
@@ -1429,3 +1420,4 @@
   }
 }
 </style>
+
