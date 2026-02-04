@@ -117,6 +117,9 @@ app.use(
         { url: /^\/api\/scene-moments\/media\/\d+$/, methods: ['GET'] },
         { url: /^\/api\/scene-moments\/\d+$/, methods: ['GET'] },
         { url: /^\/api\/scene-moments\/\d+\/comments$/, methods: ['GET'] },
+        // 同好匹配公开接口（GET）
+        { url: /^\/api\/user\/recommendations$/, methods: ['GET'] },
+        { url: /^\/api\/user\/similarity\/\d+$/, methods: ['GET'] },
         /^\/uploads(\/.*)?$/
       ]
     })
@@ -222,6 +225,10 @@ const socketInstance = initSocket(server)
 
 // 将 socket 实例挂载到全局，这样其他模块可以访问
 global.socketInstance = socketInstance
+
+// 初始化定时任务调度器
+const { initScheduler } = require('./scheduler')
+initScheduler()
 
 // 调用 app.listen 方法，指定端口号并启动web服务器
 server.listen(3000, () => {

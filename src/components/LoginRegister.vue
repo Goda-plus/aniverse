@@ -229,9 +229,25 @@
         })
 
         if (result.success) {
-          ElMessage.success(result.message || '注册成功，请登录')
-          // 切换到登录模式
-          toggleMode()
+          // 注册成功后自动登录
+          const loginResult = await userStore.login({
+            username: formData.username,
+            password: formData.password,
+            remember: true
+          })
+
+          if (loginResult.success) {
+            ElMessage.success(result.message || '注册成功，已为你自动登录')
+            // 设置标记，让 App.vue 显示新用户引导
+            const storage = userStore.remember ? localStorage : sessionStorage
+            storage.setItem('showNewUserOnboarding', 'true')
+            // 跳转到首页或之前访问的页面
+            const redirect = router.currentRoute.value.query.redirect || '/'
+            router.push(redirect)
+          } else {
+            ElMessage.success(result.message || '注册成功，请登录')
+            toggleMode()
+          }
         } else {
           ElMessage.error(result.message || '注册失败')
         }
@@ -348,4 +364,5 @@
   border-color: #ff4500;
 }
 </style>
+
 

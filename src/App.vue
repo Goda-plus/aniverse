@@ -300,13 +300,20 @@
 
       <!-- 悬浮按钮 -->
       <FloatingActionButtons v-if="isMallPage" />
+      
+      <!-- 新用户引导对话框 -->
+      <NewUserOnboarding
+        v-model:visible="showNewUserOnboarding"
+        @completed="handleOnboardingCompleted"
+        @skipped="handleOnboardingSkipped"
+      />
     </template>
   </div>
   <AvatarEditor v-model="showAvatarEditor" />
 </template>
 
 <script setup>
-  import { computed, ref, onMounted, defineAsyncComponent, shallowRef } from 'vue'
+  import { computed, ref, onMounted, watch, defineAsyncComponent, shallowRef } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useThemeStore } from '@/stores/theme'
   import { useUserStore } from '@/stores/user'
@@ -315,6 +322,7 @@
   import CreateCommunityDialog from '@/components/CreateCommunityDialog.vue'
   import FloatingActionButtons from '@/components/FloatingActionButtons.vue'
   import AvatarEditor from '@/components/AvatarEditor.vue'
+  import NewUserOnboarding from '@/components/NewUserOnboarding.vue'
   
   // 条件导入聊天窗口组件，只在用户登录后加载
   const ChatWindow = shallowRef(null)
@@ -369,6 +377,7 @@
     }
   })
   const showAvatarEditor = ref(false)
+  const showNewUserOnboarding = ref(false)
   // 判断是否是认证页面（登录/注册），这些页面不显示导航栏和侧边栏
   const isAuthPage = computed(() => {
     return route.path === '/login' || route.path === '/register'
@@ -459,10 +468,48 @@
     themeStore.setMode(val ? 'dark' : 'light')
   }
 
+  // 检查是否需要显示新用户引导
+  function checkNewUserOnboarding () {
+    if (!userStore.isLoggedIn) {
+      return
+    }
+    
+    const storage = userStore.remember ? localStorage : sessionStorage
+    const shouldShow = storage.getItem('showNewUserOnboarding') === 'true'
+    
+    if (shouldShow) {
+      showNewUserOnboarding.value = true
+      // 清除标记，避免重复显示
+      storage.removeItem('showNewUserOnboarding')
+    }
+  }
+
+  // 新用户引导完成
+  function handleOnboardingCompleted () {
+    showNewUserOnboarding.value = false
+  }
+
+  // 新用户引导跳过
+  function handleOnboardingSkipped () {
+    showNewUserOnboarding.value = false
+  }
+
+  // 监听登录状态和路由变化，检查是否需要显示新用户引导
+  watch(
+    [() => userStore.isLoggedIn, () => route.path],
+    () => {
+      if (userStore.isLoggedIn && !isAuthPage.value) {
+        checkNewUserOnboarding()
+      }
+    },
+    { immediate: true }
+  )
+
   onMounted(() => {
     themeStore.initTheme()
     themeStore.initSettings()
     userStore.init()
+    
     // 每分钟检查一次时间（如果模式是 auto）
     setInterval(() => {
       if (themeStore.mode === 'auto') {

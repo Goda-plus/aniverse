@@ -2,48 +2,64 @@ const { conMysql } = require('../db/index')
 
 /**
  * 计算两个用户的静态相似度（基于兴趣标签，Jaccard相似度）
- * @param {number} user_id_1 
- * @param {number} user_id_2 
+ * @param {number} user_id_1
+ * @param {number} user_id_2
  * @returns {Promise<{similarity: number, commonTags: Array}>}
  */
 async function calculateStaticSimilarity (user_id_1, user_id_2) {
-  const sql = `
-    SELECT 
-      ui1.tag_id,
-      t.name AS tag_name,
-      t.category AS tag_category
-    FROM user_interests ui1
-    INNER JOIN user_interests ui2 ON ui1.tag_id = ui2.tag_id
-    LEFT JOIN tags t ON ui1.tag_id = t.id
-    WHERE ui1.user_id = ? AND ui2.user_id = ?
-  `
-  
-  const commonTags = await conMysql(sql, [user_id_1, user_id_2])
-  
-  // 获取两个用户各自的标签数
-  const [user1Tags] = await conMysql(
-    'SELECT COUNT(*) as count FROM user_interests WHERE user_id = ?',
+  // 获取两个用户的兴趣记录
+  const [user1Interest] = await conMysql(
+    'SELECT tags FROM user_interests WHERE user_id = ?',
     [user_id_1]
   )
-  const [user2Tags] = await conMysql(
-    'SELECT COUNT(*) as count FROM user_interests WHERE user_id = ?',
+  const [user2Interest] = await conMysql(
+    'SELECT tags FROM user_interests WHERE user_id = ?',
     [user_id_2]
   )
-  
-  const user1Count = user1Tags.count
-  const user2Count = user2Tags.count
-  const commonCount = commonTags.length
-  
-  // Jaccard相似度 = 交集 / 并集
+
+  if (!user1Interest || !user2Interest) {
+    return {
+      similarity: 0,
+      commonTags: []
+    }
+  }
+
+  const user1Tags = JSON.parse(user1Interest.tags || '[]')
+  const user2Tags = JSON.parse(user2Interest.tags || '[]')
+
+  // 计算交集
+  const commonTagIds = user1Tags.filter(tagId => user2Tags.includes(tagId))
+
+  if (commonTagIds.length === 0) {
+    return {
+      similarity: 0,
+      commonTags: []
+    }
+  }
+
+  // 获取共同标签的详细信息
+  const placeholders = commonTagIds.map(() => '?').join(',')
+  const tagSql = `
+    SELECT id, name, category
+    FROM tags
+    WHERE id IN (${placeholders})
+    ORDER BY FIELD(id, ${placeholders})
+  `
+  const commonTags = await conMysql(tagSql, [...commonTagIds, ...commonTagIds])
+
+  // 计算Jaccard相似度
+  const user1Count = user1Tags.length
+  const user2Count = user2Tags.length
+  const commonCount = commonTagIds.length
   const unionCount = user1Count + user2Count - commonCount
   const similarity = unionCount > 0 ? commonCount / unionCount : 0
-  
+
   return {
     similarity: parseFloat(similarity.toFixed(4)),
     commonTags: commonTags.map(t => ({
-      id: t.tag_id,
-      name: t.tag_name,
-      category: t.tag_category
+      id: t.id,
+      name: t.name,
+      category: t.category
     }))
   }
 }
@@ -246,8 +262,8 @@ function generateRecommendationReason (staticData, behaviorData) {
 
 /**
  * 计算并保存用户相似度
- * @param {number} user_id_1 
- * @param {number} user_id_2 
+ * @param {number} user_id_1
+ * @param {number} user_id_2
  * @returns {Promise<Object>}
  */
 async function calculateAndSaveSimilarity (user_id_1, user_id_2) {
@@ -575,4 +591,49 @@ exports.getUserSimilarity = async (req, res, next) => {
     next(err)
   }
 }
+
+/**
+ * 手动执行相似度计算（管理员接口）
+ */
+exports.manualSimilarityCalculation = async (req, res, next) => {
+  try {
+    // 简单的管理员验证（可以根据需要改进）
+    const { isFullUpdate = false, userLimit = 100 } = req.body
+
+    console.log(`管理员手动触发${isFullUpdate ? '全量' : '增量'}相似度计算，用户限制: ${userLimit}`)
+
+    // 动态导入以避免循环依赖
+    const { manualSimilarityCalculation } = require('../scheduler')
+    await manualSimilarityCalculation(isFullUpdate, parseInt(userLimit))
+
+    res.cc(true, `${isFullUpdate ? '全量' : '增量'}相似度计算完成`, 200)
+  } catch (err) {
+    console.error('手动相似度计算失败:', err)
+    next(err)
+  }
+}
+
+/**
+ * 手动更新推荐列表（管理员接口）
+ */
+exports.manualRecommendationUpdate = async (req, res, next) => {
+  try {
+    const { userLimit = 200 } = req.body
+
+    console.log(`管理员手动触发推荐列表更新，用户限制: ${userLimit}`)
+
+    // 动态导入以避免循环依赖
+    const { manualRecommendationUpdate } = require('../scheduler')
+    await manualRecommendationUpdate(parseInt(userLimit))
+
+    res.cc(true, '推荐列表更新完成', 200)
+  } catch (err) {
+    console.error('手动推荐列表更新失败:', err)
+    next(err)
+  }
+}
+
+// 导出内部函数供定时任务使用
+module.exports.calculateAndSaveSimilarity = calculateAndSaveSimilarity
+module.exports.generateRecommendations = generateRecommendations
 
