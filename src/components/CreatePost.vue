@@ -56,6 +56,73 @@
           />
         </div>
 
+        <!-- 话题标签 -->
+        <div class="form-item">
+          <label class="form-label">
+            话题标签（最多5个）
+            <span v-if="formData.tags?.length > 0" class="tag-count">
+              已选 {{ formData.tags.length }}/5
+            </span>
+          </label>
+          <el-select
+            ref="tagSelectRef"
+            v-model="formData.tags"
+            class="form-select tag-select"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            filterable
+            reserve-keyword
+            :filter-method="handleTagFilter"
+            :loading="loadingTags"
+            :multiple-limit="5"
+            :disabled="submitting"
+            value-key="id"
+            placeholder="输入标签名称搜索标签"
+            clearable
+            @change="handleTagChange"
+          >
+            <el-option
+              v-for="tag in tagOptions"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag"
+            >
+              <div class="tag-option">
+                <span class="tag-name">{{ tag.name }}</span>
+                <span v-if="tag.category" class="tag-category">{{ tag.category }}</span>
+              </div>
+            </el-option>
+            <div
+              v-if="tagOptions.length === 0 && !loadingTags && hasSearchedTags"
+              class="no-data"
+            >
+              <el-icon><InfoFilled /></el-icon>
+              <span>未找到匹配的标签</span>
+            </div>
+            <div
+              v-if="hasSearchedTags && tagTotalPages > 1"
+              class="tag-pagination"
+            >
+              <el-pagination
+                small
+                background
+                layout="prev, pager, next"
+                :current-page="tagPage"
+                :page-size="tagPageSize"
+                :total="tagTotal"
+                @current-change="handleTagPageChange"
+              />
+            </div>
+          </el-select>
+          <div
+            v-if="!loadingTags && hasSearchedTags"
+            class="tag-hint"
+          >
+            输入至少 {{ MIN_SEARCH_LENGTH }} 个字符可搜索标签
+          </div>
+        </div>
+
         <!-- 富文本编辑器 -->
         <div class="form-item">
           <label class="form-label">内容</label>
@@ -98,10 +165,11 @@
   import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, defineEmits, defineExpose, nextTick } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Close, Loading } from '@element-plus/icons-vue'
+  import { Close, Loading, InfoFilled } from '@element-plus/icons-vue'
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
   import { getAllSubreddits, uploadPostImage, uploadPostVideo, searchSubreddits } from '@/axios/api'
+  import { getTagsList } from '@/axios/tags'
   import { createPost, updatePost } from '@/axios/post'
 
   const router = useRouter()
@@ -113,6 +181,7 @@
   const formData = reactive({
     subreddit: '',
     title: '',
+    tags: [],
     content: ''
   })
   
@@ -289,8 +358,161 @@
   // 社区列表
   const subreddits = ref([])
 
+  // 标签搜索（使用 filter-method + 分页器）
+  const tagOptions = ref([])
+  const loadingTags = ref(false)
+  const hasSearchedTags = ref(false)
+
+  const MIN_SEARCH_LENGTH = 2
+
+  const tagPage = ref(1)
+  const tagPageSize = 20
+  const tagTotal = ref(0)
+  const tagTotalPages = ref(0)
+  const currentTagKeyword = ref('')
+
+  const tagSelectRef = ref(null)
+
   // 提交状态
   const submitting = ref(false)
+
+  const parseTags = (raw) => {
+    if (!raw) return []
+    try {
+      const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
+      if (!Array.isArray(arr)) return []
+      return arr
+        .filter(Boolean)
+        .map(t => ({ id: Number(t.id), name: String(t.name || '').trim() }))
+        .filter(t => Number.isFinite(t.id) && t.id > 0 && t.name)
+        .slice(0, 5)
+    } catch (e) {
+      return []
+    }
+  }
+
+  // 根据关键字和页码请求标签列表
+  const fetchTags = async (keyword, page = 1, append = false) => {
+    const q = (keyword || '').trim()
+    hasSearchedTags.value = true
+
+    // 关键字为空时重置状态
+    if (!q) {
+      tagOptions.value = []
+      tagPage.value = 1
+      tagTotal.value = 0
+      tagTotalPages.value = 0
+      currentTagKeyword.value = ''
+      return
+    }
+
+    // 最少字符校验
+    if (q.length < MIN_SEARCH_LENGTH) {
+      if (!append) {
+        ElMessage.warning(`搜索关键词至少需要 ${MIN_SEARCH_LENGTH} 个字符`)
+        tagOptions.value = []
+        tagPage.value = 1
+        tagTotal.value = 0
+        tagTotalPages.value = 0
+        currentTagKeyword.value = ''
+      }
+      return
+    }
+
+    if (loadingTags.value) return
+
+    loadingTags.value = true
+    try {
+      const res = await getTagsList({
+        search: q,
+        page,
+        pageSize: tagPageSize
+      })
+
+      const list = res?.data?.list || []
+      const pagination = res?.data?.pagination || {}
+
+      const formatted = list
+        .filter(tag => tag && tag.id && tag.name)
+        .map(tag => ({
+          id: Number(tag.id),
+          name: String(tag.name).trim(),
+          category: tag.category || null
+        }))
+
+      // 更新分页信息
+      const total = Number(pagination.total) || 0
+      const totalPages = Number(pagination.totalPages) || (total ? Math.ceil(total / tagPageSize) : 0)
+      tagTotal.value = total
+      tagTotalPages.value = totalPages
+      currentTagKeyword.value = q
+      tagPage.value = page
+
+      if (append && page > 1) {
+        const existingIds = new Set(tagOptions.value.map(t => t.id))
+        const newTags = formatted.filter(t => !existingIds.has(t.id))
+        tagOptions.value = [...tagOptions.value, ...newTags]
+      } else {
+        tagOptions.value = formatted
+      }
+
+      if (!formatted.length && page === 1) {
+        ElMessage.info('未找到匹配的标签')
+      }
+    } catch (error) {
+      console.error('搜索标签失败:', error)
+      if (!append) {
+        ElMessage.error(error?.response?.data?.message || '搜索标签失败，请稍后重试')
+        tagOptions.value = []
+        tagPage.value = 1
+        tagTotal.value = 0
+        tagTotalPages.value = 0
+      }
+    } finally {
+      loadingTags.value = false
+    }
+  }
+
+  // 合并已选标签到选项中
+  const mergeSelectedTagsIntoOptions = () => {
+    const selected = Array.isArray(formData.tags) ? formData.tags : []
+    if (!selected.length) return
+
+    const map = new Map()
+
+    // 添加当前搜索结果
+    tagOptions.value.forEach(tag => {
+      if (tag?.id) {
+        map.set(tag.id, tag)
+      }
+    })
+
+    // 添加已选标签
+    selected.forEach(tag => {
+      if (tag?.id && tag?.name && !map.has(tag.id)) {
+        map.set(tag.id, {
+          id: Number(tag.id),
+          name: String(tag.name).trim(),
+          category: tag.category || null
+        })
+      }
+    })
+
+    tagOptions.value = Array.from(map.values())
+  }
+
+  // el-select 的 filter-method：根据输入关键字搜索标签（第一页）
+  const handleTagFilter = (query) => {
+    // 每次输入重置到第一页
+    tagPage.value = 1
+    fetchTags(query, 1, false)
+  }
+
+  // 分页器切换页码
+  const handleTagPageChange = (page) => {
+    if (!currentTagKeyword.value) return
+    fetchTags(currentTagKeyword.value, page, false)
+  }
 
   // 初始化编辑器
   const handleEditorCreated = (editor) => {
@@ -433,6 +655,13 @@
     formData.subreddit = value
   }
 
+  // 标签选择变化
+  const handleTagChange = (value) => {
+    formData.tags = value || []
+    // 合并已选标签到选项中，确保显示已选标签
+    mergeSelectedTagsIntoOptions()
+  }
+
   // 格式化成员数
   const formatMemberCount = (count) => {
     if (count >= 1000000) {
@@ -474,6 +703,7 @@
           title: formData.title,
           content_html: finalEditorContent,
           content_text: finalTextContent,
+          tags: formData.tags?.length ? JSON.stringify(formData.tags) : null,
           image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
           is_draft: 0  // 0表示已发布
         }
@@ -489,6 +719,7 @@
         // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
         formData.subreddit = ''
         formData.title = ''
+        formData.tags = []
         formData.content = ''
         imageUrl.value = [] // 重置图片 URL 数组
         
@@ -501,6 +732,7 @@
           title: formData.title,
           content_html: finalEditorContent,
           content_text: finalTextContent,
+          tags: formData.tags?.length ? JSON.stringify(formData.tags) : null,
           image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
           is_draft: 0  // 0表示已发布
         }
@@ -511,6 +743,7 @@
         // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
         formData.subreddit = ''
         formData.title = ''
+        formData.tags = []
         formData.content = ''
         imageUrl.value = [] // 重置图片 URL 数组
         
@@ -541,6 +774,7 @@
         title: formData.title || '无标题',
         content_html: finalEditorContent || '<p></p>',
         content_text: finalTextContent || '',
+        tags: formData.tags?.length ? JSON.stringify(formData.tags) : null,
         image_url: imageUrl.value.length > 0 ? JSON.stringify(imageUrl.value) : null,
         is_draft: 1  // 1表示草稿
       }
@@ -591,6 +825,8 @@
     // 填充表单数据
     formData.subreddit = draft.subreddit_id || ''
     formData.title = draft.title || ''
+    formData.tags = parseTags(draft.tags)
+    mergeSelectedTagsIntoOptions()
     
     // 如果有图片URL，解析并添加到imageUrl数组
     if (draft.image_url) {
@@ -661,6 +897,8 @@
           // 填充表单数据
           formData.title = editData.title || ''
           formData.subreddit = editData.subreddit_id || ''
+          formData.tags = parseTags(editData.tags)
+          mergeSelectedTagsIntoOptions()
           
           // 处理图片 URL
           if (editData.image_url) {
@@ -722,7 +960,7 @@
     
     // 先加载社区列表
     await loadSubreddits()
-  
+ 
     // 如果路由中有社区参数，自动填充
     if (route.params.community) {
       formData.subreddit = route.params.community
@@ -850,6 +1088,62 @@
 .subreddit-members {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.tag-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.tag-select {
+  position: relative;
+}
+
+.tag-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.tag-name {
+  font-weight: 500;
+}
+
+.tag-category {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-left: auto;
+}
+
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text-secondary);
+  gap: 8px;
+}
+
+.tag-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  padding-left: 4px;
+}
+
+.tag-pagination {
+  padding: 8px 12px 4px;
+  border-top: 1px solid var(--card-border);
+  display: flex;
+  justify-content: center;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-tertiary);
 }
 
 .editor-wrapper {

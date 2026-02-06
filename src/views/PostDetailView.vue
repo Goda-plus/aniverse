@@ -124,9 +124,11 @@
         let postData = null
         if (response.data?.post) {
           postData = response.data.post
+          postData.tags = JSON.parse(response.data.post.tags)
         } else if (response.data && !response.data.comments) {
           // 如果 data 直接是 post 对象
           postData = response.data
+          postData.tags = JSON.parse(response.data.post.tags)
         } else if (response.data) {
           // getGuestPostDetail 返回 { post, vote_count, comments }
           postData = response.data.post
@@ -142,6 +144,7 @@
           // 确保有默认值
           postData.voted = postData.voted || false
           postData.vote_type = postData.vote_type || null
+          postData.tags = JSON.parse(response.data.post.tags)
         }
       
         if (postData) {

@@ -196,11 +196,29 @@ function initScheduler () {
     timezone: 'Asia/Shanghai'
   })
 
+  // 每小时更新热门帖子热度评分（增量更新）
+  cron.schedule('0 * * * *', async () => {
+    console.log('执行定时任务：热门帖子热度更新')
+    await updateHotPostsHeatScores()
+  }, {
+    timezone: 'Asia/Shanghai'
+  })
+
+  // 每周日凌晨5点全量更新所有帖子热度评分
+  cron.schedule('0 5 * * 0', async () => {
+    console.log('执行定时任务：全量热度评分更新')
+    await updateAllHeatScores(2000)
+  }, {
+    timezone: 'Asia/Shanghai'
+  })
+
   console.log('同好匹配定时任务初始化完成')
   console.log('定时任务时间表:')
   console.log('- 增量相似度计算：每天凌晨2:00')
   console.log('- 全量相似度计算：每周日凌晨3:00')
   console.log('- 推荐列表更新：每天凌晨4:00')
+  console.log('- 热门帖子热度更新：每小时')
+  console.log('- 全量热度评分更新：每周日凌晨5:00')
 }
 
 /**
@@ -221,6 +239,76 @@ async function  manualSimilarityCalculation (isFullUpdate = false, userLimit = 1
   } catch (error) {
     console.error('手动相似度计算失败:', error)
     throw error
+  }
+}
+
+/**
+ * 更新所有帖子的热度评分
+ * @param {number} batchSize - 批次大小
+ */
+async function updateAllHeatScores (batchSize = 1000) {
+  try {
+    console.log('开始更新所有帖子热度评分')
+
+    // 动态导入热度计算器
+    const HeatCalculator = require('./utils/heatCalculator')
+
+    const result = await HeatCalculator.updateAllHeatScores(batchSize)
+    console.log(`热度评分更新完成。总计: ${result.total}, 成功: ${result.updated}, 失败: ${result.errors}`)
+  } catch (error) {
+    console.error('更新热度评分失败:', error)
+  }
+}
+
+/**
+ * 更新热门帖子的热度评分（增量更新）
+ * 只更新最近有互动的帖子
+ */
+async function updateHotPostsHeatScores () {
+  try {
+    console.log('开始增量更新热门帖子热度评分')
+
+    // 动态导入热度计算器
+    const HeatCalculator = require('./utils/heatCalculator')
+
+    // 获取最近24小时有互动的帖子
+    const sql = `
+      SELECT DISTINCT p.id
+      FROM posts p
+      LEFT JOIN votes v ON v.post_id = p.id
+      LEFT JOIN comments c ON c.post_id = p.id
+      LEFT JOIN favorites f ON f.target_id = p.id AND f.target_type = 'post'
+      WHERE p.is_draft != 1
+      AND (
+        v.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        OR c.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        OR f.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        OR p.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      )
+      LIMIT 1000
+    `
+
+    const { conMysql } = require('./db/index')
+    const posts = await conMysql(sql)
+
+    console.log(`找到 ${posts.length} 个需要更新热度的帖子`)
+
+    let successCount = 0
+    let errorCount = 0
+
+    for (const post of posts) {
+      try {
+        await HeatCalculator.updatePostHeatScore(post.id)
+        successCount++
+      } catch (error) {
+        console.error(`更新帖子 ${post.id} 热度失败:`, error.message)
+        errorCount++
+      }
+    }
+
+    console.log(`热门帖子热度更新完成。成功: ${successCount}, 失败: ${errorCount}`)
+  } catch (error) {
+    console.error('增量更新热度评分失败:', error)
   }
 }
 
@@ -266,5 +354,7 @@ module.exports = {
   manualRecommendationUpdate,
   incrementalSimilarityCalculation,
   fullSimilarityCalculation,
-  dailyRecommendationUpdate
+  dailyRecommendationUpdate,
+  updateAllHeatScores,
+  updateHotPostsHeatScores
 }

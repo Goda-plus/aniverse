@@ -14,33 +14,43 @@ exports.getUserTheme = async (req, res, next) => {
       // 如果没有主题设置，创建默认设置
       const defaultTheme = {
         user_id: userId,
-        preset_theme: 'light',
-        primary_color: '#409EFF',
-        background_color: '#FFFFFF',
-        text_color: '#303133',
-        layout_density: 'comfortable',
-        font_size: 'medium',
-        border_radius: 'medium',
-        animation_enabled: true,
-        sound_enabled: true
+        preset_theme: 'dark',
+        background_pattern: null,
+        background_opacity: 1.0,
+        bg_primary: '#030303',
+        bg_secondary: '#1a1a1b',
+        bg_tertiary: '#272729',
+        bg_hover: '#343536',
+        text_primary: '#d7dadc',
+        text_secondary: '#818384',
+        border_color: '#343536',
+        card_bg: '#1a1a1b',
+        card_border: '#343536',
+        setting_blur: '15px',
+        setting_opacity: '100%'
       }
 
       const insertSql = `
         INSERT INTO user_theme_settings
-        (user_id, preset_theme, primary_color, background_color, text_color, layout_density, font_size, border_radius, animation_enabled, sound_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, preset_theme, background_pattern, background_opacity, bg_primary, bg_secondary, bg_tertiary, bg_hover, text_primary, text_secondary, border_color, card_bg, card_border, setting_blur, setting_opacity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
       await conMysql(insertSql, [
         defaultTheme.user_id,
         defaultTheme.preset_theme,
-        defaultTheme.primary_color,
-        defaultTheme.background_color,
-        defaultTheme.text_color,
-        defaultTheme.layout_density,
-        defaultTheme.font_size,
-        defaultTheme.border_radius,
-        defaultTheme.animation_enabled,
-        defaultTheme.sound_enabled
+        defaultTheme.background_pattern,
+        defaultTheme.background_opacity,
+        defaultTheme.bg_primary,
+        defaultTheme.bg_secondary,
+        defaultTheme.bg_tertiary,
+        defaultTheme.bg_hover,
+        defaultTheme.text_primary,
+        defaultTheme.text_secondary,
+        defaultTheme.border_color,
+        defaultTheme.card_bg,
+        defaultTheme.card_border,
+        defaultTheme.setting_blur,
+        defaultTheme.setting_opacity
       ])
 
       res.cc(true, '获取主题设置成功', 200, defaultTheme)
@@ -60,43 +70,34 @@ exports.updateUserTheme = async (req, res, next) => {
     const userId = req.user.id
     const {
       preset_theme,
-      primary_color,
-      background_color,
-      text_color,
       background_pattern,
       background_opacity,
-      layout_density,
-      font_size,
-      border_radius,
-      animation_enabled,
-      sound_enabled
+      bg_primary,
+      bg_secondary,
+      bg_tertiary,
+      bg_hover,
+      text_primary,
+      text_secondary,
+      border_color,
+      card_bg,
+      card_border,
+      setting_blur,
+      setting_opacity
     } = req.body
 
     // 验证必需的枚举值
     const validEnums = {
-      preset_theme: ['light', 'dark', 'eye_protection'],
-      layout_density: ['compact', 'comfortable', 'spacious'],
-      font_size: ['small', 'medium', 'large'],
-      border_radius: ['none', 'small', 'medium', 'large']
+      preset_theme: ['light', 'dark', 'auto', 'customer']
     }
 
     // 验证枚举值
     if (preset_theme && !validEnums.preset_theme.includes(preset_theme)) {
       return res.cc(false, '无效的预置主题值', 400)
     }
-    if (layout_density && !validEnums.layout_density.includes(layout_density)) {
-      return res.cc(false, '无效的布局密度值', 400)
-    }
-    if (font_size && !validEnums.font_size.includes(font_size)) {
-      return res.cc(false, '无效的字体大小值', 400)
-    }
-    if (border_radius && !validEnums.border_radius.includes(border_radius)) {
-      return res.cc(false, '无效的圆角大小值', 400)
-    }
 
     // 验证颜色格式 (HEX格式)
     const colorRegex = /^#[0-9A-Fa-f]{6}$/
-    const colorsToCheck = { primary_color, background_color, text_color }
+    const colorsToCheck = { bg_primary, bg_secondary, bg_tertiary, bg_hover, text_primary, text_secondary, border_color, card_bg, card_border }
     for (const [key, value] of Object.entries(colorsToCheck)) {
       if (value && !colorRegex.test(value)) {
         return res.cc(false, `${key}必须是有效的HEX颜色格式`, 400)
@@ -108,14 +109,25 @@ exports.updateUserTheme = async (req, res, next) => {
       return res.cc(false, '背景透明度必须在0-1之间', 400)
     }
 
+    // 验证setting_blur格式 (如15px)
+    if (setting_blur && !/^\d+px$/.test(setting_blur)) {
+      return res.cc(false, 'setting_blur必须是有效的px格式', 400)
+    }
+
+    // 验证setting_opacity格式 (如100%)
+    if (setting_opacity && !/^\d+%$/.test(setting_opacity)) {
+      return res.cc(false, 'setting_opacity必须是有效的百分比格式', 400)
+    }
+
     // 构建更新语句
     const updateFields = []
     const updateValues = []
 
     const fields = {
-      preset_theme, primary_color, background_color, text_color,
-      background_pattern, background_opacity, layout_density,
-      font_size, border_radius, animation_enabled, sound_enabled
+      preset_theme, background_pattern, background_opacity,
+      bg_primary, bg_secondary, bg_tertiary, bg_hover,
+      text_primary, text_secondary, border_color,
+      card_bg, card_border, setting_blur, setting_opacity
     }
 
     Object.entries(fields).forEach(([key, value]) => {
@@ -155,17 +167,20 @@ exports.resetUserTheme = async (req, res, next) => {
     const userId = req.user.id
 
     const defaultTheme = {
-      preset_theme: 'light',
-      primary_color: '#409EFF',
-      background_color: '#FFFFFF',
-      text_color: '#303133',
+      preset_theme: 'dark',
       background_pattern: null,
       background_opacity: 1.0,
-      layout_density: 'comfortable',
-      font_size: 'medium',
-      border_radius: 'medium',
-      animation_enabled: true,
-      sound_enabled: true
+      bg_primary: '#030303',
+      bg_secondary: '#1a1a1b',
+      bg_tertiary: '#272729',
+      bg_hover: '#343536',
+      text_primary: '#d7dadc',
+      text_secondary: '#818384',
+      border_color: '#343536',
+      card_bg: '#1a1a1b',
+      card_border: '#343536',
+      setting_blur: '15px',
+      setting_opacity: '100%'
     }
 
     const updateFields = Object.keys(defaultTheme).map(key => `${key} = ?`)
@@ -193,7 +208,7 @@ exports.applyPresetTheme = async (req, res, next) => {
     const userId = req.user.id
     const { preset } = req.body
 
-    if (!['light', 'dark', 'eye_protection'].includes(preset)) {
+    if (!['light', 'dark', 'auto'].includes(preset)) {
       return res.cc(false, '无效的预置主题', 400)
     }
 
@@ -201,21 +216,30 @@ exports.applyPresetTheme = async (req, res, next) => {
     const presetConfigs = {
       light: {
         preset_theme: 'light',
-        primary_color: '#409EFF',
-        background_color: '#FFFFFF',
-        text_color: '#303133'
+        bg_primary: '#ffffff',
+        bg_secondary: '#f8f9fa',
+        bg_tertiary: '#e9ecef',
+        bg_hover: '#dee2e6',
+        text_primary: '#212529',
+        text_secondary: '#6c757d',
+        border_color: '#dee2e6',
+        card_bg: '#ffffff',
+        card_border: '#dee2e6'
       },
       dark: {
         preset_theme: 'dark',
-        primary_color: '#409EFF',
-        background_color: '#1D1E1F',
-        text_color: '#FFFFFF'
+        bg_primary: '#030303',
+        bg_secondary: '#1a1a1b',
+        bg_tertiary: '#272729',
+        bg_hover: '#343536',
+        text_primary: '#d7dadc',
+        text_secondary: '#818384',
+        border_color: '#343536',
+        card_bg: '#1a1a1b',
+        card_border: '#343536'
       },
-      eye_protection: {
-        preset_theme: 'eye_protection',
-        primary_color: '#1989FA',
-        background_color: '#F7F3E9',
-        text_color: '#4A4A4A'
+      auto: {
+        preset_theme: 'auto'
       }
     }
 
@@ -239,6 +263,7 @@ exports.applyPresetTheme = async (req, res, next) => {
     next(err)
   }
 }
+
 
 
 

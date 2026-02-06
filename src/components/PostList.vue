@@ -117,6 +117,9 @@
               <span v-if="post.subreddit" class="post-subreddit">r/{{ post.subreddit }}</span>
               <span v-if="post.subreddit" class="post-separator">·</span>
               <span class="post-time">{{ formatTime(post.createdAt) }}</span>
+              <span v-if="post.heat_score" class="post-heat-score" :title="'热度评分: ' + post.heat_score">
+                🔥 {{ parseFloat(post.heat_score).toFixed(2) }}
+              </span>
               <span v-if="post.recommended" class="post-recommended">为你推荐</span>
             </div>
           </div>
@@ -295,6 +298,8 @@
 
   const handleSortChange = (command) => {
     currentSort.value = sortMap[command] || '最佳'
+    // 向父组件发出排序变化事件
+    emit('sort-change', command)
   }
 
   const handleViewModeChange = (command) => {
@@ -438,10 +443,13 @@
     if (props.posts && props.posts.length > 0) {
       checkFavoritesStatus()
     }
-  }, { immediate: true, deep: true })
+  }, { deep: true })
 
   onMounted(() => {
-    checkFavoritesStatus()
+    // 只在组件挂载时检查一次收藏状态
+    if (props.posts && props.posts.length > 0) {
+      checkFavoritesStatus()
+    }
   })
 
   const formatVoteCount = (count) => {
@@ -888,6 +896,14 @@
 
 .post-time {
   color: var(--text-secondary);
+}
+
+.post-heat-score {
+  color: #ff6b35;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 8px;
+  cursor: help;
 }
 
 .post-recommended {

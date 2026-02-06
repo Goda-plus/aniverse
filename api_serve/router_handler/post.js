@@ -1,11 +1,50 @@
 const { conMysql } = require('../db/index')
+const moderationService = require('../utils/moderationService')
+
+function normalizeTags (input) {
+  if (input === undefined) return undefined
+  if (input === null) return null
+  // 前端可能传 '' / 'null'
+  if (typeof input === 'string') {
+    const s = input.trim()
+    if (!s || s === 'null') return null
+    try {
+      const parsed = JSON.parse(s)
+      if (!Array.isArray(parsed)) return null
+      const cleaned = parsed
+        .filter(Boolean)
+        .map(t => ({
+          id: Number(t.id),
+          name: String(t.name || '').trim()
+        }))
+        .filter(t => Number.isFinite(t.id) && t.id > 0 && t.name)
+        .slice(0, 5)
+      return cleaned.length ? JSON.stringify(cleaned) : null
+    } catch (e) {
+      return null
+    }
+  }
+  if (Array.isArray(input)) {
+    const cleaned = input
+      .filter(Boolean)
+      .map(t => ({
+        id: Number(t.id),
+        name: String(t.name || '').trim()
+      }))
+      .filter(t => Number.isFinite(t.id) && t.id > 0 && t.name)
+      .slice(0, 5)
+    return cleaned.length ? JSON.stringify(cleaned) : null
+  }
+  return null
+}
 
 // 创建帖子（支持独立发布或发布到板块）
 exports.createPost = async (req, res, next) => {
   try {
-    const { title, content_html, content_text, image_url, subreddit_id, subreddit, is_draft } = req.body
+    const { title, content_html, content_text, image_url, subreddit_id, subreddit, is_draft, tags } = req.body
     const user_id = req.user.id
     const draftStatus = is_draft === 1 ? 1 : 0  // 默认为0（已发布）
+    const tagsJson = normalizeTags(tags)
 
     let subId = null
 
@@ -30,8 +69,8 @@ exports.createPost = async (req, res, next) => {
     }
 
     const sql = `
-      INSERT INTO posts (user_id, subreddit_id, title, content_html, content_text, image_url, is_draft)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO posts (user_id, subreddit_id, title, content_html, content_text, image_url, is_draft, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(sql, [
       user_id,
@@ -40,15 +79,78 @@ exports.createPost = async (req, res, next) => {
       content_html,
       content_text || null,
       image_url || null,
-      draftStatus
+      draftStatus,
+      tagsJson
     ])
 
     if (result.affectedRows !== 1) {
       return res.cc(false, '帖子创建失败', 500)
     }
 
-    const message = draftStatus === 1 ? '草稿保存成功' : '帖子发布成功'
-    res.cc(true, message, 200, { post_id: result.insertId, is_draft: draftStatus })
+    const postId = result.insertId
+
+    // 如果是草稿，不进行审核
+    if (draftStatus === 1) {
+      const message = '草稿保存成功'
+      res.cc(true, message, 200, { post_id: postId, is_draft: draftStatus })
+      return
+    }
+
+    // 对已发布的帖子进行内容审核
+    const contentToModerate = {
+      id: postId,
+      title: title || '',
+      content_text: content_text || '',
+      content_html: content_html || ''
+    }
+
+    const moderationResult = await moderationService.moderateContent(contentToModerate, 'post', user_id)
+
+    // 更新帖子的审核状态
+    let moderationStatus = 'approved'
+    let moderatedBy = null
+    let violationReason = null
+
+    if (moderationResult.status === 'rejected') {
+      moderationStatus = 'rejected'
+      violationReason = moderationResult.violations.map(v => v.reason).join('; ')
+      moderatedBy = 0 // 0表示自动审核
+    } else if (moderationResult.status === 'pending') {
+      moderationStatus = 'pending'
+      // 添加到人工审核队列
+      await addToModerationQueue(postId, 'post', user_id, contentToModerate, moderationResult)
+    }
+
+    // 更新帖子审核状态
+    const updateSql = `
+      UPDATE posts
+      SET moderation_status = ?, moderation_score = ?, moderated_at = NOW(), moderated_by = ?, violation_reason = ?
+      WHERE id = ?
+    `
+    await conMysql(updateSql, [
+      moderationStatus,
+      moderationResult.score,
+      moderatedBy,
+      violationReason,
+      postId
+    ])
+
+    // 更新用户审核统计
+    await moderationService.updateUserModerationStats(user_id, moderationResult.action, moderationResult.score)
+
+    let message = '帖子发布成功'
+    if (moderationResult.status === 'rejected') {
+      message = '帖子因违反社区准则已被拒绝发布'
+    } else if (moderationResult.status === 'pending') {
+      message = '帖子已提交，正在等待人工审核'
+    }
+
+    res.cc(true, message, 200, {
+      post_id: postId,
+      is_draft: draftStatus,
+      moderation_status: moderationStatus,
+      moderation_score: moderationResult.score
+    })
   } catch (err) {
     next(err)
   }
@@ -62,17 +164,22 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
   const subreddit_id = req.query.subreddit_id || null
   const page = parseInt(req.query.page) || 1
   const pageSize = parseInt(req.query.pageSize) || 10
+  const sortType = req.query.sort || 'best' // 支持: best, hot, top, new, rising
   const offset = (page - 1) * pageSize
+
+  const orderByClause = buildOrderByClause(sortType)
 
   try {
     // 基础查询语句，不带任何 WHERE / GROUP / ORDER / LIMIT
     let sql = `
-      SELECT 
+      SELECT
         posts.id AS post_id,
         posts.title,
         posts.content_html,
         posts.content_text,
         posts.image_url,
+        posts.tags,
+        posts.heat_score,
         posts.created_at,
         posts.updated_at,
         users.id AS user_id,
@@ -92,16 +199,16 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
 
     // 如果有 subreddit_id，则按社区筛选
     if (subreddit_id) {
-      sql += ' WHERE posts.subreddit_id = ? AND (posts.is_draft IS NULL OR posts.is_draft = 0) '
+      sql += ' WHERE posts.subreddit_id = ? AND (posts.is_draft IS NULL OR posts.is_draft = 0) AND posts.moderation_status = "approved" '
       params.push(subreddit_id)
     } else {
-      sql += ' WHERE (posts.is_draft IS NULL OR posts.is_draft = 0) '
+      sql += ' WHERE (posts.is_draft IS NULL OR posts.is_draft = 0) AND posts.moderation_status = "approved" AND posts.moderation_status = "approved" '
     }
 
     // 统一追加分组、排序和分页
     sql += `
-      GROUP BY posts.id, users.id
-      ORDER BY posts.created_at DESC
+      GROUP BY posts.id, users.id, posts.tags
+      ORDER BY ${orderByClause}
       LIMIT ? OFFSET ?
     `
 
@@ -112,33 +219,60 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
     // 计算净点赞数
     const postsWithNetVotes = result.map(post => ({
       ...post,
-      net_votes: Number(post.upvotes - post.downvotes) > 0 
-        ? Number(post.upvotes - post.downvotes) : Number(post.downvotes - post.upvotes) > 0 
+      net_votes: Number(post.upvotes - post.downvotes) > 0
+        ? Number(post.upvotes - post.downvotes) : Number(post.downvotes - post.upvotes) > 0
           ? -Number(post.downvotes - post.upvotes) : 0
     }))
 
     res.cc(true, '获取帖子成功', 200, postsWithNetVotes)
 
   } catch (err) {
-    console.error(err)
+    console.error('获取帖子失败:', err)
     res.cc(false, err.message, 500, null)
   }
 }
 
 
 
+// 构建排序SQL的辅助函数
+function buildOrderByClause(sortType) {
+  switch (sortType) {
+    case 'hot':
+      // 热门：基于热度评分排序
+      return 'posts.heat_score DESC, posts.created_at DESC'
+    case 'top':
+      // 最热：基于净投票数排序
+      return '(COUNT(DISTINCT CASE WHEN votes.vote_type = \'up\' THEN votes.id END) - COUNT(DISTINCT CASE WHEN votes.vote_type = \'down\' THEN votes.id END)) DESC, posts.created_at DESC'
+    case 'new':
+      // 最新：按创建时间倒序
+      return 'posts.created_at DESC'
+    case 'rising':
+      // 上升：基于最近的互动排序（这里简化为按热度评分和时间结合）
+      return 'posts.heat_score DESC, posts.created_at DESC'
+    case 'best':
+    default:
+      // 最佳：默认按热度评分排序
+      return 'posts.heat_score DESC, posts.created_at DESC'
+  }
+}
+
 exports.getAllPostsWithUserAndStats = async (req, res) => {
   const page = parseInt(req.query.page) || 1
   const pageSize = parseInt(req.query.pageSize) || 10
+  const sortType = req.query.sort || 'best' // 支持: best, hot, top, new, rising
   const offset = (page - 1) * pageSize
 
+  const orderByClause = buildOrderByClause(sortType)
+
   const sql = `
-    SELECT 
+    SELECT
   posts.id AS post_id,
   posts.title,
   posts.content_html,
   posts.content_text,
   posts.image_url,
+  posts.tags,
+  posts.heat_score,
   posts.created_at,
   posts.updated_at,
   users.id AS user_id,
@@ -154,26 +288,26 @@ JOIN users ON posts.user_id = users.id
 LEFT JOIN subreddits ON posts.subreddit_id = subreddits.id
 LEFT JOIN comments ON comments.post_id = posts.id
 LEFT JOIN votes ON votes.post_id = posts.id
-WHERE (posts.is_draft IS NULL OR posts.is_draft = 0)
-GROUP BY posts.id, users.id, subreddits.id
-ORDER BY posts.created_at DESC
+WHERE (posts.is_draft IS NULL OR posts.is_draft = 0) AND posts.moderation_status = "approved"
+GROUP BY posts.id, users.id, subreddits.id, posts.tags
+ORDER BY ${orderByClause}
     LIMIT ? OFFSET ?
   `
 
   try {
     const result = await conMysql(sql, [pageSize, offset])
-    console.log('result', result)
+
     // 计算净点赞数
     const postsWithNetVotes = result.map(post => ({
       ...post,
-      net_votes: Number(post.upvotes - post.downvotes) > 0 
-        ? Number(post.upvotes - post.downvotes) : Number(post.downvotes - post.upvotes) > 0 
+      net_votes: Number(post.upvotes - post.downvotes) > 0
+        ? Number(post.upvotes - post.downvotes) : Number(post.downvotes - post.upvotes) > 0
           ? -Number(post.downvotes - post.upvotes) : 0
-    })) 
-    
+    }))
+
     res.cc(true, '获取帖子成功', 200, postsWithNetVotes)
   } catch (err) {
-    console.error(err)
+    console.error('获取帖子失败:', err)
     res.cc(false, '获取帖子失败', 500, null)
   }
 }
@@ -196,6 +330,7 @@ exports.getUserPostDetail = async (req, res, next) => {
         p.content_html,
         p.content_text,
         p.image_url,
+        p.tags,
         p.created_at,
         p.updated_at,
         p.is_draft,
@@ -212,7 +347,7 @@ exports.getUserPostDetail = async (req, res, next) => {
       LEFT JOIN comments c ON c.post_id = p.id
       LEFT JOIN votes v ON v.post_id = p.id
       WHERE p.id = ? AND (p.user_id = ? OR (p.is_draft IS NULL OR p.is_draft = 0))
-      GROUP BY p.id, u.id, s.id
+      GROUP BY p.id, u.id, s.id, p.tags
     `
     const [post] = await conMysql(detailSql, [post_id, user_id])
 
@@ -250,6 +385,7 @@ exports.getGuestPostDetail = async (req, res, next) => {
         p.content_html,
         p.content_text,
         p.image_url,
+        p.tags,
         p.created_at,
         p.updated_at,
         u.id AS user_id,
@@ -265,7 +401,7 @@ exports.getGuestPostDetail = async (req, res, next) => {
       LEFT JOIN comments c ON c.post_id = p.id
       LEFT JOIN votes v ON v.post_id = p.id
       WHERE p.id = ? AND (p.is_draft IS NULL OR p.is_draft = 0)
-      GROUP BY p.id, u.id, s.id
+      GROUP BY p.id, u.id, s.id, p.tags
     `
     const [post] = await conMysql(postSql, [post_id])
     if (!post) return res.cc(false, '帖子不存在', 404)
@@ -328,7 +464,7 @@ exports.getCurrentUserPosts = async (req, res, next) => {
       whereCondition += ' AND p.is_draft = ?'
       params.push(draftValue)
     } else {
-      // 默认只显示已发布的帖子
+      // 默认只显示已发布的帖子（包括审核中和被拒绝的）
       whereCondition += ' AND (p.is_draft IS NULL OR p.is_draft = 0)'
     }
 
@@ -583,7 +719,7 @@ exports.getCommentedPosts = async (req, res, next) => {
 // 更新帖子（用于更新草稿或发布草稿）
 exports.updatePost = async (req, res, next) => {
   try {
-    const { post_id, title, content_html, content_text, image_url, subreddit_id, is_draft } = req.body
+    const { post_id, title, content_html, content_text, image_url, subreddit_id, is_draft, tags } = req.body
     const user_id = req.user.id
 
     if (!post_id) return res.cc(false, '缺少 post_id', 400)
@@ -627,6 +763,10 @@ exports.updatePost = async (req, res, next) => {
     if (is_draft !== undefined) {
       updateFields.push('is_draft = ?')
       updateValues.push(is_draft === 1 ? 1 : 0)
+    }
+    if (tags !== undefined) {
+      updateFields.push('tags = ?')
+      updateValues.push(normalizeTags(tags))
     }
 
     // 更新更新时间
@@ -717,12 +857,12 @@ exports.deletePost = async (req, res, next) => {
     // 2. 删除帖子的所有评论（评论的投票会在删除评论时自动处理）
     // 先获取所有评论ID
     const comments = await conMysql('SELECT id FROM comments WHERE post_id = ?', [post_id])
-    
+
     // 删除每个评论的投票记录
     for (const comment of comments) {
       await conMysql('DELETE FROM votes WHERE comment_id = ?', [comment.id])
     }
-    
+
     // 删除所有评论
     await conMysql('DELETE FROM comments WHERE post_id = ?', [post_id])
 
@@ -735,4 +875,30 @@ exports.deletePost = async (req, res, next) => {
   } catch (err) {
     next(err)
   }
+}
+
+// 添加内容到人工审核队列
+const addToModerationQueue = async (contentId, contentType, userId, content, moderationResult) => {
+  const contentText = contentType === 'post'
+    ? `${content.title}\n\n${content.content_text}`.substring(0, 500)
+    : content.content_text || content.content_html || ''
+
+  const sql = `
+    INSERT INTO moderation_queue
+    (content_type, content_id, user_id, content_text, content_html, moderation_reason, severity_score, priority)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `
+
+  const reason = moderationResult.violations.map(v => v.reason).join('; ')
+
+  await conMysql(sql, [
+    contentType,
+    contentId,
+    userId,
+    contentText,
+    content.content_html || null,
+    reason,
+    moderationResult.score,
+    moderationResult.score > 50 ? 'high' : moderationResult.score > 20 ? 'normal' : 'low'
+  ])
 }

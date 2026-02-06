@@ -157,6 +157,10 @@ app.use('/api/post', postRouter)
 const commentRouter = require('./router/comment')
 app.use('/api/comment', commentRouter)
 
+//导入审核模块
+const moderationRouter = require('./router/moderation')
+app.use('/api/moderation', moderationRouter)
+
 //导入vote
 const voteRouter = require('./router/votes')
 app.use('/api/vote',voteRouter)

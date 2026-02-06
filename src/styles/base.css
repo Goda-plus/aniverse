@@ -51,6 +51,21 @@
   --setting-opacity: 100%;
 }
 
+/* 自定义主题变量 - 使用JavaScript动态设置的变量作为默认值 */
+.theme-customer {
+  --bg-primary: #030303;
+  --bg-secondary: #1a1a1b;
+  --bg-tertiary: #272729;
+  --bg-hover: #343536;
+  --text-primary: #d7dadc;
+  --text-secondary: #818384;
+  --border-color: #343536;
+  --card-bg: #1a1a1b;
+  --card-border: #343536;
+  --setting-blur: 15px;
+  --setting-opacity: 100%;
+}
+
 /* Element Plus 组件主题样式已抽离到 element-plus.css */
 
 /* 确保所有文本元素使用主题颜色 */
@@ -77,7 +92,8 @@
   color: var(--text-primary);
 }
 
-.theme-dark a {
+.theme-dark a,
+.theme-customer a {
   color: var(--text-primary);
 }
 
@@ -87,7 +103,8 @@
   opacity: 0.6;
 }
 
-.theme-dark .el-input__inner::placeholder {
+.theme-dark .el-input__inner::placeholder,
+.theme-customer .el-input__inner::placeholder {
   color: var(--text-secondary);
   opacity: 0.6;
 }
@@ -102,6 +119,7 @@ body {
   /* 背景色固定为深色，不再随主题切换改变 */
   background: var(--bg-primary);
   color: var(--text-primary);
+  font-size: var(--ui-font-size-base, 14px);
   font-weight: 400;
   transition: color 0.3s ease;
   position: relative;
@@ -161,7 +179,9 @@ body::before {
 
 /* 确保所有文本元素继承主题颜色 */
 .theme-dark,
-.theme-dark * {
+.theme-dark *,
+.theme-customer,
+.theme-customer * {
   color: inherit;
 }
 
@@ -184,7 +204,7 @@ a {
 
 .card {
   background: var(--card-bg);
-  border-radius: 4px;
+  border-radius: var(--card-border-radius, 4px);
   border: 1px solid var(--card-border);
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
@@ -250,4 +270,10 @@ a {
 .theme-light .setting-control {
   --setting-bg-rgb: 245, 245, 245;
   border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 自定义主题下的 setting-control 背景色 RGB 和边框 */
+.theme-customer .setting-control {
+  --setting-bg-rgb: 26, 26, 27;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }

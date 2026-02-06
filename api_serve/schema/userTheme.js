@@ -1,52 +1,50 @@
 const joi = require('joi')
 
-// 预置主题验证
-const preset_theme = joi.string().valid('light', 'dark', 'eye_protection').optional()
+// 预置主题验证（支持自定义 customer 模式）
+const preset_theme = joi.string().valid('light', 'dark', 'auto', 'customer').optional()
 
 // 颜色验证（HEX格式）
 const color = joi.string().pattern(/^#[0-9A-Fa-f]{6}$/).optional().allow('', null)
 
 // 背景图案验证
-const background_pattern = joi.string().max(100).optional().allow('', null)
+const background_pattern = joi.string().max(500).optional().allow('', null)
 
 // 背景透明度验证
 const background_opacity = joi.number().min(0).max(1).optional()
 
-// 布局密度验证
-const layout_density = joi.string().valid('compact', 'comfortable', 'spacious').optional()
+// 设置模糊度验证（如15px）
+const setting_blur = joi.string().pattern(/^\d+px$/).optional().allow('', null)
 
-// 字体大小验证
-const font_size = joi.string().valid('small', 'medium', 'large').optional()
-
-// 圆角大小验证
-const border_radius = joi.string().valid('none', 'small', 'medium', 'large').optional()
-
-// 布尔值验证
-const boolean_setting = joi.boolean().optional()
+// 设置透明度验证（如100%）
+const setting_opacity = joi.string().pattern(/^\d+%$/).optional().allow('', null)
 
 /**
  * 更新主题设置验证规则
  */
 exports.update_theme_schema = joi.object({
   preset_theme,
-  primary_color: color,
-  background_color: color,
-  text_color: color,
   background_pattern,
   background_opacity,
-  layout_density,
-  font_size,
-  border_radius,
-  animation_enabled: boolean_setting,
-  sound_enabled: boolean_setting,
+  bg_primary: color,
+  bg_secondary: color,
+  bg_tertiary: color,
+  bg_hover: color,
+  text_primary: color,
+  text_secondary: color,
+  border_color: color,
+  card_bg: color,
+  card_border: color,
+  setting_blur,
+  setting_opacity,
 })
 
 /**
  * 应用预置主题验证规则
  */
 exports.apply_preset_schema = joi.object({
-  preset: joi.string().valid('light', 'dark', 'eye_protection').required(),
+  preset: joi.string().valid('light', 'dark', 'auto').required(),
 })
+
 
 
 

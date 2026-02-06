@@ -38,6 +38,13 @@
               >
                 <el-icon><Refresh /></el-icon>
               </div>
+              <div
+                class="mode-icon"
+                :class="{ active: themeStore.mode === 'customer' }"
+                @click="handleModeChange('customer')"
+              >
+                <el-icon><Brush /></el-icon>
+              </div>
             </div>
           </div>
 
@@ -81,6 +88,71 @@
                     @change="handleOpacityChange"
                   />
                   <span class="slider-value">{{ opacityValue }}%</span>
+                </div>
+              </div>
+              <div class="option-item">
+                <div class="option-label">
+                  <el-icon><Brush /></el-icon>
+                  <span>卡片圆角</span>
+                </div>
+                <div class="option-control">
+                  <el-select
+                    v-model="borderRadiusPreset"
+                    placeholder="选择圆角大小"
+                    style="width: 160px;"
+                    @change="handleBorderRadiusChange"
+                  >
+                    <el-option
+                      v-for="item in borderRadiusOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </div>
+              </div>
+              <div class="option-item">
+                <div class="option-label">
+                  <el-icon><Brush /></el-icon>
+                  <span>全局字体大小</span>
+                </div>
+                <div class="option-control">
+                  <el-select
+                    v-model="fontSizePreset"
+                    placeholder="选择字体大小"
+                    style="width: 160px;"
+                    @change="handleFontSizeChange"
+                  >
+                    <el-option
+                      v-for="item in fontSizeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </div>
+              </div>
+              <div class="option-item color-grid">
+                <div class="option-label">
+                  <el-icon><Brush /></el-icon>
+                  <span>自定义色调</span>
+                </div>
+                <div class="color-grid-list">
+                  <div
+                    v-for="item in colorItems"
+                    :key="item.key"
+                    class="color-grid-item"
+                  >
+                    <span class="color-grid-label">{{ item.label }}</span>
+                    <div class="color-picker-control">
+                      <el-color-picker
+                        v-model="colorValues[item.key]"
+                        :predefine="predefineColors"
+                        @change="(val) => handleColorChange(item.key, val)"
+                      />
+                      <span class="color-value">{{ colorValues[item.key] }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -180,6 +252,22 @@
             </div>
           </div>
 
+          <!-- 应用方案按钮 -->
+          <div class="settings-section">
+            <div class="apply-section">
+              <el-button
+                type="primary"
+                class="apply-button"
+                @click="handleApplyScheme"
+              >
+                应用方案
+              </el-button>
+              <span v-if="hasUnsavedChanges" class="unsaved-indicator">
+                有未保存的修改
+              </span>
+            </div>
+          </div>
+
           <!-- 恢复默认按钮 -->
           <div class="settings-section">
             <el-button
@@ -211,13 +299,16 @@
 <script setup>
   import { ref, watch, onMounted, computed, nextTick } from 'vue'
   import { defineProps, defineEmits } from 'vue'
+  import { ElMessage } from 'element-plus'
   import { useThemeStore } from '@/stores/theme'
+  import { uploadPostImage } from '@/axios/post'
   import {
     Sunny,
     Moon,
     Refresh,
     LightBulb,
     View,
+    Brush,
     UserFilled,
     Check,
     Close,
@@ -237,8 +328,32 @@
   const visible = ref(props.modelValue)
   const blurValue = ref(themeStore.blurAmount)
   const opacityValue = ref(themeStore.opacityAmount)
+  const colorValues = ref({ ...themeStore.colorSettings })
+  const initialColorValues = ref({ ...themeStore.colorSettings })
+  const borderRadiusPreset = ref(themeStore.borderRadiusPreset || 'medium')
+  const fontSizePreset = ref(themeStore.fontSizePreset || 'medium')
   const showAmber = ref(false)
   const nsfwMode = ref(false)
+  
+  const colorItems = [
+    { key: 'bg_primary', label: '主背景色' },
+    { key: 'bg_secondary', label: '次背景色' },
+    { key: 'bg_tertiary', label: '第三背景色' },
+    { key: 'bg_hover', label: '悬停背景色' },
+    { key: 'text_primary', label: '主文字色' },
+    { key: 'text_secondary', label: '次文字色' },
+    { key: 'border_color', label: '边框色' },
+    { key: 'card_bg', label: '卡片背景' },
+    { key: 'card_border', label: '卡片边框' }
+  ]
+  
+  // 预设颜色列表
+  const predefineColors = ref([
+    '#030303', '#1a1a1b', '#272729', '#343536',
+    '#d7dadc', '#818384', '#ffffff', '#e0e0e0',
+    '#409EFF', '#67C23A', '#E6A23C', '#F56C6C',
+    '#909399', '#ff4500', '#38bdf8', '#22d3ee'
+  ])
   
   // 背景设置
   const backgroundsPerPage = 4
@@ -246,6 +361,19 @@
   const showCustomInput = ref(false)
   const customBackgroundUrl = ref('')
   const fileInput = ref(null)
+
+  const borderRadiusOptions = [
+    { value: 'none', label: '无圆角' },
+    { value: 'small', label: '小圆角' },
+    { value: 'medium', label: '中等圆角' },
+    { value: 'large', label: '大圆角' }
+  ]
+
+  const fontSizeOptions = [
+    { value: 'small', label: '小号字体' },
+    { value: 'medium', label: '中号字体' },
+    { value: 'large', label: '大号字体' }
+  ]
   
   // 预设背景图列表（使用占位图，实际使用时可以替换为真实图片）
   const presetBackgrounds = ref([
@@ -280,6 +408,11 @@
     const end = start + backgroundsPerPage
     return presetBackgrounds.value.slice(start, end)
   })
+
+  // 检查是否有未保存的颜色修改
+  const hasUnsavedChanges = computed(() => {
+    return JSON.stringify(colorValues.value) !== JSON.stringify(initialColorValues.value)
+  })
   
   const handlePageChange = (page) => {
     currentPage.value = page
@@ -304,6 +437,9 @@
         bodyEl.style.height = 'calc(500px - 80px)'
         bodyEl.style.maxHeight = 'calc(500px - 80px)'
       }
+      // 更新初始颜色状态
+      initialColorValues.value = { ...themeStore.colorSettings }
+      colorValues.value = { ...themeStore.colorSettings }
     }
   })
 
@@ -315,6 +451,18 @@
     opacityValue.value = val
   })
 
+  watch(() => themeStore.colorSettings, (val) => {
+    colorValues.value = { ...val }
+  }, { deep: true })
+
+  watch(() => themeStore.borderRadiusPreset, (val) => {
+    if (val) borderRadiusPreset.value = val
+  })
+
+  watch(() => themeStore.fontSizePreset, (val) => {
+    if (val) fontSizePreset.value = val
+  })
+
   watch(() => themeStore.backgroundImage, () => {
     // 背景图变化时，确保 UI 更新
   })
@@ -324,21 +472,64 @@
   })
 
   const handleModeChange = (mode) => {
-    themeStore.setMode(mode)
+    // 自定义模式仅切换前端状态，不立即调用更新接口，真正保存交给“应用方案”按钮
+    if (mode === 'customer') {
+      themeStore.setMode(mode, false)
+    } else {
+      themeStore.setMode(mode)
+    }
   }
 
   const handleBlurChange = (value) => {
-    themeStore.setBlurAmount(value)
+    themeStore.setBlurAmount(value, false) // 不保存到数据库
   }
 
   const handleOpacityChange = (value) => {
-    themeStore.setOpacityAmount(value)
+    themeStore.setOpacityAmount(value, false) // 不保存到数据库
+  }
+
+  const handleBorderRadiusChange = (value) => {
+    if (!value) return
+    borderRadiusPreset.value = value
+    themeStore.setBorderRadiusPreset(value)
+  }
+
+  const handleFontSizeChange = (value) => {
+    if (!value) return
+    fontSizePreset.value = value
+    themeStore.setFontSizePreset(value)
+  }
+
+  const handleColorChange = (key, value) => {
+    if (!value) return
+    const normalized = normalizeColor(value)
+    // 更新本地显示值
+    colorValues.value[key] = normalized
+    // 使用 store 提供的方法统一更新（会处理 localStorage 和已登录时的 DB 持久化）
+    themeStore.setColorSetting(key, normalized)
+  }
+
+  // 将 rgba/hex 统一转换为 hex 格式
+  function normalizeColor (color) {
+    if (!color) return ''
+    if (color.startsWith('#')) {
+      return color.slice(0, 7)
+    }
+    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+    if (match) {
+      const r = parseInt(match[1]).toString(16).padStart(2, '0')
+      const g = parseInt(match[2]).toString(16).padStart(2, '0')
+      const b = parseInt(match[3]).toString(16).padStart(2, '0')
+      return `#${r}${g}${b}`
+    }
+    return color
   }
 
   const handleReset = () => {
     themeStore.resetSettings()
     blurValue.value = themeStore.blurAmount
     opacityValue.value = themeStore.opacityAmount
+    colorValues.value = { ...themeStore.colorSettings }
     showAmber.value = false
     nsfwMode.value = false
     showCustomInput.value = false
@@ -347,7 +538,7 @@
   
   // 背景设置相关方法
   const handleBackgroundSelect = (url) => {
-    themeStore.setBackgroundImage(url)
+    themeStore.setBackgroundImage(url, false) // 不保存到数据库
   }
   
   const handleBackgroundReset = () => {
@@ -365,21 +556,43 @@
     fileInput.value?.click()
   }
   
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        customBackgroundUrl.value = e.target?.result || ''
+      try {
+        ElMessage.info('正在上传图片...')
+        const response = await uploadPostImage(file)
+        if (response.success && response.code === 200 && response.data?.url) {
+          customBackgroundUrl.value = response.data.url
+          ElMessage.success('图片上传成功')
+        } else {
+          ElMessage.error(response.message || '图片上传失败')
+        }
+      } catch (error) {
+        console.error('Upload failed:', error)
+        ElMessage.error('图片上传失败')
       }
-      reader.readAsDataURL(file)
     }
   }
   
   const handleCustomBackgroundApply = () => {
     if (customBackgroundUrl.value) {
-      themeStore.setBackgroundImage(customBackgroundUrl.value)
+      themeStore.setBackgroundImage(customBackgroundUrl.value, false) // 不保存到数据库
       showCustomInput.value = false
+      customBackgroundUrl.value = ''
+      ElMessage.success('背景图片已应用')
+    }
+  }
+
+  const handleApplyScheme = async () => {
+    try {
+      await themeStore.saveThemeToDB()
+      // 更新初始状态为当前状态
+      initialColorValues.value = { ...colorValues.value }
+      ElMessage.success('主题方案已应用')
+    } catch (error) {
+      console.error('应用主题方案失败:', error)
+      ElMessage.error('应用主题方案失败')
     }
   }
 </script>
@@ -507,6 +720,48 @@
   margin-left: 16px;
 }
 
+.color-grid {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-grid-list {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.color-grid-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.color-grid-label {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.color-picker-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.color-value {
+  min-width: 80px;
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: monospace;
+}
+
 .option-control ::v-deep(.el-slider) {
   flex: 1;
 }
@@ -524,6 +779,23 @@
 
 .toggle-item {
   padding: 16px 12px;
+}
+
+.apply-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.apply-button {
+  flex: 1;
+  background-color: var(--primary);
+}
+
+.unsaved-indicator {
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 500;
 }
 
 .reset-button {

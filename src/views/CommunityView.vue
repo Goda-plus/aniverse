@@ -213,10 +213,13 @@
     if (store.feed && store.feed.length > 0) {
       checkFavoritesStatus()
     }
-  }, { immediate: true, deep: true })
+  }, { deep: true })
 
   onMounted(() => {
-    checkFavoritesStatus()
+    // 只在组件挂载时检查一次收藏状态
+    if (store.feed && store.feed.length > 0) {
+      checkFavoritesStatus()
+    }
   })
 </script>
 

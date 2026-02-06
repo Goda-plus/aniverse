@@ -1,8 +1,10 @@
 <template>
   <el-drawer
     v-model="visible"
+    append-to-body
     :title="scene?.title || '名场面详情'"
     size="560px"
+    height="100%"
     :with-header="true"
   >
     <div v-if="loading" class="loading">

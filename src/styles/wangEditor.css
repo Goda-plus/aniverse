@@ -271,3 +271,8 @@ div[class*="w-e-"][class*="code"] [class*="dropdown"] {
   background: var(--bg-secondary) !important;
   color: var(--text-primary) !important;
 }
+
+.theme-customer .w-e-text-container{
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}

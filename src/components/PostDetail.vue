@@ -51,9 +51,22 @@
     </div>
 
     <!-- 帖子标题 -->
-    <h1 class="post-title">
-      {{ post.title }}
-    </h1>
+    <div class="post-title-section">
+      <h1 class="post-title">
+        {{ post.title }}
+      </h1>
+
+      <!-- 话题标签 -->
+      <div v-if="post.tags && post.tags.length > 0" class="post-tags">
+        <span
+          v-for="tag in post.tags"
+          :key="tag"
+          class="tag-item"
+        >
+          #{{ tag.name }}
+        </span>
+      </div>
+    </div>
 
     <!-- 帖子内容区域 - 使用 wangeditor 只读编辑器渲染 content_html -->
     <div class="post-content-wrapper">
@@ -307,6 +320,7 @@
       content_html: props.post.content_html,
       subreddit_id: props.post.subreddit_id,
       subreddit_name: props.post.subreddit_name,
+      tags: props.post.tags,
       image_url: props.post.image_url
     }
     sessionStorage.setItem('editingPost', JSON.stringify(editData))
@@ -621,14 +635,45 @@
   color: var(--text-secondary, #818384);
 }
 
-/* 帖子标题 */
+/* 帖子标题区域 */
+.post-title-section {
+  margin-bottom: 16px;
+}
+
 .post-title {
   font-size: 20px;
   font-weight: 600;
   color: var(--text-primary, #d7dadc);
-  margin: 0 0 16px 0;
+  margin: 0 0 8px 0;
   line-height: 1.4;
   transition: color 0.3s ease;
+}
+
+/* 话题标签 */
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: var(--bg-secondary, #272729);
+  border: 1px solid var(--card-border, #343536);
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #818384);
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.tag-item:hover {
+  background: var(--bg-hover, #343536);
+  color: var(--text-primary, #d7dadc);
+  border-color: var(--text-primary, #d7dadc);
 }
 
 /* 帖子内容区域 */

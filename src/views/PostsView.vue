@@ -80,9 +80,9 @@
         </div>
 
         <!-- 帖子列表 -->
-        <PostList 
+        <PostList
           v-else
-          :posts="posts" 
+          :posts="posts"
           :show-recommendation="showRecommendation"
           @vote="handleVote"
           @comment="handleComment"
@@ -91,6 +91,7 @@
           @hide="handleHide"
           @report="handleReport"
           @click="handlePostClick"
+          @sort-change="handleSortChange"
         />
 
         <!-- 加载更多状态 -->
@@ -232,6 +233,9 @@
   const loadingMore = ref(false)
   let scrollTimer = null
 
+  // 排序相关
+  const currentSort = ref('best') // best, hot, top, new, rising
+
   // 转换 API 数据格式为组件需要的格式
   const transformPostData = (apiPost) => {
     // 解析 image_url（可能是 JSON 字符串）
@@ -268,6 +272,7 @@
       rewardCount: 0,
       userVote: 0, // 需要根据实际投票状态设置
       createdAt: new Date(apiPost.created_at).getTime(),
+      heat_score: apiPost.heat_score || 0,
       recommended: false
     }
   }
@@ -293,13 +298,15 @@
         response = await getPostsBySubreddit({
           subreddit_id: subredditId,
           page,
-          pageSize: pageSize.value
+          pageSize: pageSize.value,
+          sort: currentSort.value
         })
       } else {
         // 加载全部帖子
         response = await getAllPostsWithUser({
           page,
-          pageSize: pageSize.value
+          pageSize: pageSize.value,
+          sort: currentSort.value
         })
       }
 
@@ -329,12 +336,32 @@
     }
   }
 
+  // 处理PostList的排序变化
+  const handleSortChange = (sortType) => {
+    // 映射前端排序选项到后端参数
+    const sortMapping = {
+      'best': 'best',
+      'hot': 'hot',
+      'top': 'top',
+      'new': 'new',
+      'rising': 'rising'
+    }
+
+    const newSort = sortMapping[sortType] || 'best'
+
+    if (newSort !== currentSort.value) {
+      currentSort.value = newSort
+      // 重新加载第一页
+      loadPosts(1, false)
+    }
+  }
+
   // 滚动加载处理（使用节流优化性能）
   const handleScroll = () => {
     if (scrollTimer) {
       clearTimeout(scrollTimer)
     }
-    
+
     scrollTimer = setTimeout(() => {
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop
       const windowHeight = window.innerHeight

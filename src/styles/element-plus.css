@@ -401,3 +401,201 @@
 .theme-light .el-dropdown-menu__item.is-divided {
   border-top-color: var(--card-border);
 }
+
+/* 自定义主题 (theme-customer) 对 Element Plus 组件的适配 */
+.theme-customer .el-card {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}
+
+.theme-customer .el-input__wrapper {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.theme-customer .el-input__inner {
+  color: var(--text-primary);
+}
+
+.theme-customer .el-button.is-text {
+  color: var(--text-primary);
+}
+
+.theme-customer .el-drawer,
+.theme-customer .el-dialog {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.theme-customer .el-dialog__header,
+.theme-customer .el-drawer__header {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+.theme-customer .el-tag {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.theme-customer .el-timeline-item__timestamp {
+  color: var(--text-secondary);
+}
+
+.theme-customer .el-timeline-item__content,
+.theme-customer .el-timeline-item__wrapper .el-timeline-item__content {
+  color: var(--text-primary);
+}
+
+.theme-customer .el-avatar {
+  background-color: var(--bg-tertiary);
+}
+
+/* 更多通用文本与交互元素 */
+.theme-customer .el-link,
+.theme-customer .el-radio__label,
+.theme-customer .el-checkbox__label {
+  color: var(--text-primary);
+}
+
+/* 按钮 */
+.theme-customer .el-button--primary {
+  color: #ffffff;
+}
+
+.theme-customer .el-button {
+  font-weight: 400;
+}
+
+/* 卡片内部文本和结构 */
+.theme-customer .el-card p,
+.theme-customer .el-card span,
+.theme-customer .el-card div {
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.theme-customer .el-card__body,
+.theme-customer .el-card__body * {
+  font-weight: 400;
+}
+
+.theme-customer .el-card__body,
+.theme-customer .el-card__header {
+  color: var(--text-primary);
+}
+
+/* 表格 */
+.theme-customer .el-table {
+  color: var(--text-primary);
+  background-color: var(--card-bg);
+}
+
+.theme-customer .el-table th,
+.theme-customer .el-table td {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+/* Descriptions 描述列表 */
+.theme-customer .el-descriptions {
+  background-color: var(--card-bg);
+}
+
+.theme-customer .el-descriptions__header {
+  color: var(--text-primary);
+}
+
+.theme-customer .el-descriptions__body {
+  background-color: var(--table-bg, var(--card-bg));
+}
+
+.theme-customer .el-descriptions__label.el-descriptions__cell {
+  background-color: var(--table-label-bg, var(--bg-tertiary));
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.theme-customer .el-descriptions__content.el-descriptions__cell {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+}
+
+.theme-customer .el-descriptions__body .el-descriptions__table.is-bordered .el-descriptions__cell {
+  border-color: var(--el-text-color-regular);
+  color: var(--text-primary);
+}
+
+/* Select / Input / Textarea */
+.theme-customer .el-select__wrapper {
+  background-color: var(--bg-tertiary);
+  border-color: var(--card-border);
+}
+
+.theme-customer .el-input .el-input__count .el-input__count-inner,
+.theme-customer .el-textarea .el-input__count {
+  background: none;
+}
+
+.theme-customer .el-textarea__inner {
+  background: var(--bg-tertiary);
+}
+
+/* Select 下拉框 */
+.theme-customer .el-select-dropdown__wrap {
+  background: var(--bg-tertiary);
+}
+
+.theme-customer .el-select-dropdown__item.is-hovering {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.theme-customer .el-popper.is-pure.is-light.el-tooltip.el-select__popper {
+  border-color: var(--card-border);
+}
+
+/* Input Number */
+.theme-customer .el-input-number .el-input-number__decrease,
+.theme-customer .el-input-number .el-input-number__increase {
+  background: var(--bg-tertiary);
+  border-color: var(--card-border);
+  color: var(--text-primary);
+}
+
+/* 分页组件 */
+.theme-customer .el-pagination.is-background .btn-next,
+.theme-customer .el-pagination.is-background .btn-prev {
+  background-color: var(--bg-tertiary);
+}
+
+.theme-customer .el-pagination.is-background .el-pager li {
+  background-color: var(--bg-secondary);
+}
+
+.theme-customer .el-pagination.is-background .el-pager li.is-active {
+  color: var(--el-pagination-hover-color);
+}
+
+/* 下拉菜单 */
+.theme-customer .el-dropdown-menu {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+}
+
+.theme-customer .el-dropdown-menu__item {
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+}
+
+.theme-customer .el-dropdown-menu__item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.theme-customer .el-dropdown-menu__item.is-divided {
+  border-top-color: var(--card-border);
+}
