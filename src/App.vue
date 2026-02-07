@@ -86,6 +86,10 @@
                     <el-icon><Plus /></el-icon>
                     <span>创建帖子</span>
                   </div>
+                  <div class="menu-item" @click="handleUserCommand('create-scene-moment')">
+                    <el-icon><PictureRounded /></el-icon>
+                    <span>贡献名场面</span>
+                  </div>
                   <div class="menu-item" @click="handleUserCommand('create-post')">
                     <el-icon><Document /></el-icon>
                     <span>草稿</span>
@@ -307,6 +311,11 @@
         @completed="handleOnboardingCompleted"
         @skipped="handleOnboardingSkipped"
       />
+      
+      <!-- 创建名场面对话框 -->
+      <SceneMomentCreateDialog
+        v-model="showSceneMomentCreateDialog"
+      />
     </template>
   </div>
   <AvatarEditor v-model="showAvatarEditor" />
@@ -323,6 +332,7 @@
   import FloatingActionButtons from '@/components/FloatingActionButtons.vue'
   import AvatarEditor from '@/components/AvatarEditor.vue'
   import NewUserOnboarding from '@/components/NewUserOnboarding.vue'
+  import SceneMomentCreateDialog from '@/components/sceneMoment/SceneMomentCreateDialog.vue'
   
   // 条件导入聊天窗口组件，只在用户登录后加载
   const ChatWindow = shallowRef(null)
@@ -356,7 +366,8 @@
     ShoppingCartFull,
     Collection,
     ChatDotRound,
-    Coin
+    Coin,
+    PictureRounded
   } from '@element-plus/icons-vue'
 
   const route = useRoute()
@@ -378,6 +389,7 @@
   })
   const showAvatarEditor = ref(false)
   const showNewUserOnboarding = ref(false)
+  const showSceneMomentCreateDialog = ref(false)
   // 判断是否是认证页面（登录/注册），这些页面不显示导航栏和侧边栏
   const isAuthPage = computed(() => {
     return route.path === '/login' || route.path === '/register'
@@ -428,6 +440,9 @@
       showUserMenu.value = false
     } else if (command === 'create-post') {
       router.push('/create-post')
+      showUserMenu.value = false
+    } else if (command === 'create-scene-moment') {
+      showSceneMomentCreateDialog.value = true
       showUserMenu.value = false
     } else if (command === 'drafts') {
       // TODO: 实现草稿功能

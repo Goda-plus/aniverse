@@ -1,6 +1,7 @@
 const { conMysql } = require('../db/index')
+const moderationService = require('../utils/moderationService')
 
-function buildCommentTree(list) {
+function buildCommentTree (list) {
   const byId = new Map()
   const roots = []
   list.forEach((c) => {
@@ -25,7 +26,7 @@ exports.listByMedia = async (req, res, next) => {
     const {
       page = 1,
       pageSize = 20,
-      status = 'approved',
+      moderation_status = 'approved',
       is_public = 'true',
       sort = 'created_at',
       order = 'DESC'
@@ -41,9 +42,9 @@ exports.listByMedia = async (req, res, next) => {
     const where = ['sm.media_id = ?']
     const params = [mediaId]
 
-    if (status) {
-      where.push('sm.status = ?')
-      params.push(status)
+    if (moderation_status) {
+      where.push('sm.moderation_status = ?')
+      params.push(moderation_status)
     }
     if (String(is_public) === 'true') {
       where.push('sm.is_public = TRUE')
@@ -173,7 +174,7 @@ exports.getDetail = async (req, res, next) => {
   }
 }
 
-// 创建名场面（默认 pending，等待审核；这里先直接 pending）
+// 创建名场面（集成自动审核机制）
 exports.create = async (req, res, next) => {
   try {
     const submitterId = req.user?.id
@@ -195,10 +196,35 @@ exports.create = async (req, res, next) => {
       character_ids = []
     } = req.body
 
+    // 准备内容审核数据
+    const contentForModeration = {
+      title: title || '',
+      quote_text: quote_text || '',
+      description: description || '',
+      content_text: `${title || ''} ${quote_text || ''} ${description || ''}`.trim(),
+      user_id: submitterId,
+      submitter_id: submitterId
+    }
+
+    // 执行自动审核
+    const moderationResult = await moderationService.moderateContent(contentForModeration, 'scene_moment', submitterId)
+
+    // 根据审核结果确定初始状态
+    let initialModerationStatus = 'pending'
+    let reviewMessage = '提交成功，等待审核'
+
+    if (moderationResult.status === 'approved') {
+      initialModerationStatus = 'approved'
+      reviewMessage = '发布成功'
+    } else if (moderationResult.status === 'rejected') {
+      initialModerationStatus = 'rejected'
+      reviewMessage = '内容未通过审核'
+    }
+
     const insertSql = `
       INSERT INTO scene_moments
-      (media_id, title, episode, time_position, image_url, quote_text, description, season, part, main_character_id, submitter_id, status, is_public)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+      (media_id, title, episode, time_position, image_url, quote_text, description, season, part, main_character_id, submitter_id, moderation_status, moderation_score, is_public)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(insertSql, [
       media_id,
@@ -212,6 +238,8 @@ exports.create = async (req, res, next) => {
       part || null,
       main_character_id ?? null,
       submitterId,
+      initialModerationStatus,
+      moderationResult.score,
       is_public ? 1 : 0
     ])
 
@@ -238,10 +266,52 @@ exports.create = async (req, res, next) => {
       await conMysql(`INSERT IGNORE INTO scene_moment_characters (scene_id, character_id) VALUES ${placeholders}`, params)
     }
 
-    res.cc(true, '提交成功，等待审核', 200, { id: sceneId })
+    // 如果需要人工审核，添加到审核队列
+    if (initialModerationStatus === 'pending') {
+      await this.addToModerationQueue(sceneId, submitterId, moderationResult)
+    }
+
+    // 更新用户审核统计
+    await moderationService.updateUserModerationStats(submitterId, moderationResult.status, moderationResult.score)
+
+    res.cc(true, reviewMessage, 200, {
+      id: sceneId,
+      moderation_status: initialModerationStatus,
+      moderation_score: moderationResult.score,
+      moderation_result: moderationResult
+    })
   } catch (err) {
     next(err)
   }
+}
+
+// 添加到审核队列
+exports.addToModerationQueue = async (sceneId, userId, moderationResult) => {
+  const insertQueueSql = `
+    INSERT INTO moderation_queue
+    (content_type, content_id, user_id, priority, reason, auto_moderation_score, triggered_rules)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `
+
+  // 根据违规严重程度确定优先级
+  let priority = 'normal'
+  if (moderationResult.score >= 20) {
+    priority = 'high'
+  } else if (moderationResult.score >= 10) {
+    priority = 'urgent'
+  }
+
+  const reason = moderationResult.violations.map(v => v.reason).join('; ')
+
+  await conMysql(insertQueueSql, [
+    'scene_moment',
+    sceneId,
+    userId,
+    priority,
+    reason || '自动审核标记为待人工审核',
+    moderationResult.score,
+    JSON.stringify(moderationResult.triggeredRules)
+  ])
 }
 
 // 点赞/取消点赞
@@ -327,6 +397,172 @@ exports.createComment = async (req, res, next) => {
     await conMysql('UPDATE scene_moments SET comments_count = comments_count + 1 WHERE id = ?', [sceneId])
 
     res.cc(true, '评论成功', 200, { id: result.insertId })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 上传媒体文件（图片或GIF）
+exports.uploadMedia = (req, res) => {
+  if (!req.file) {
+    return res.cc(false, '没有上传文件', 400)
+  }
+
+  // 验证文件类型
+  const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  if (!allowedImageTypes.includes(req.file.mimetype)) {
+    return res.cc(false, '不支持的文件格式，仅支持 JPEG、PNG、GIF、WebP', 400)
+  }
+
+  // 验证文件大小（图片5MB，GIF 10MB）
+  const maxSize = req.file.mimetype === 'image/gif' ? 10 * 1024 * 1024 : 5 * 1024 * 1024
+  if (req.file.size > maxSize) {
+    const typeName = req.file.mimetype === 'image/gif' ? 'GIF' : '图片'
+    const maxSizeText = req.file.mimetype === 'image/gif' ? '10MB' : '5MB'
+    return res.cc(false, `${typeName}文件大小不能超过${maxSizeText}`, 400)
+  }
+
+  // 返回文件的访问URL
+  const url = `http://localhost:3000/uploads/${req.file.filename}`
+  const fileType = req.file.mimetype === 'image/gif' ? 'gif' : 'image'
+
+  res.cc(true, '上传成功', 200, {
+    url,
+    fileType,
+    filename: req.file.filename,
+    originalName: req.file.originalname,
+    size: req.file.size
+  })
+}
+
+// 搜索名场面
+exports.search = async (req, res, next) => {
+  try {
+    const {
+      q = '', // 搜索关键词
+      work_name, // 作品名称
+      character_name, // 角色名称
+      tag_name, // 标签名称
+      episode, // 集数
+      sort = 'created_at',
+      order = 'DESC',
+      page = 1,
+      pageSize = 20
+    } = req.query
+
+    const offset = (parseInt(page) - 1) * parseInt(pageSize)
+    const limit = parseInt(pageSize)
+
+    const validSort = ['created_at', 'likes_count', 'favourites_count', 'comments_count', 'views']
+    const sortField = validSort.includes(sort) ? sort : 'created_at'
+    const sortOrder = String(order).toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
+
+    // 构建搜索条件
+    const where = ['sm.moderation_status = "approved"', 'sm.is_public = TRUE']
+    const params = []
+
+    // 全文搜索
+    if (q && q.trim()) {
+      const searchTerm = `%${q.trim()}%`
+      where.push('(sm.title LIKE ? OR sm.quote_text LIKE ? OR sm.description LIKE ?)')
+      params.push(searchTerm, searchTerm, searchTerm)
+    }
+
+    // 作品名称搜索
+    if (work_name && work_name.trim()) {
+      where.push('m.title LIKE ? OR m.title_native LIKE ?')
+      const workTerm = `%${work_name.trim()}%`
+      params.push(workTerm, workTerm)
+    }
+
+    // 角色名称搜索
+    if (character_name && character_name.trim()) {
+      where.push('EXISTS (SELECT 1 FROM scene_moment_characters smc JOIN characters c ON smc.character_id = c.id WHERE smc.scene_id = sm.id AND (c.name_native LIKE ? OR c.name_alternative LIKE ?))')
+      const charTerm = `%${character_name.trim()}%`
+      params.push(charTerm, charTerm)
+    }
+
+    // 标签搜索
+    if (tag_name && tag_name.trim()) {
+      where.push('EXISTS (SELECT 1 FROM scene_moment_tags smt JOIN tags t ON smt.tag_id = t.id WHERE smt.scene_id = sm.id AND t.name LIKE ?)')
+      const tagTerm = `%${tag_name.trim()}%`
+      params.push(tagTerm)
+    }
+
+    // 集数搜索
+    if (episode && episode.trim()) {
+      where.push('sm.episode LIKE ?')
+      params.push(`%${episode.trim()}%`)
+    }
+
+    const userId = req.user?.id || null
+
+    const listSql = `
+      SELECT
+        sm.*,
+        m.title as media_title,
+        m.title_native as media_title_native,
+        u.username AS submitter_username,
+        u.avatar_url AS submitter_avatar,
+        (SELECT GROUP_CONCAT(t.name)
+          FROM scene_moment_tags smt
+          JOIN tags t ON smt.tag_id = t.id
+          WHERE smt.scene_id = sm.id
+        ) AS tag_names,
+        ${userId ? '(SELECT 1 FROM scene_moment_likes sml WHERE sml.scene_id = sm.id AND sml.user_id = ? LIMIT 1) AS liked,' : 'NULL AS liked,'}
+        ${userId ? "(SELECT 1 FROM favorites f WHERE f.target_type = 'scene_moment' AND f.target_id = sm.id AND f.user_id = ? LIMIT 1) AS favorited" : 'NULL AS favorited'}
+      FROM scene_moments sm
+      LEFT JOIN media m ON sm.media_id = m.id
+      LEFT JOIN users u ON sm.submitter_id = u.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY sm.${sortField} ${sortOrder}
+      LIMIT ? OFFSET ?
+    `
+
+    const listParams = [...params]
+    if (userId) listParams.splice(0, 0, userId, userId) // liked + favorited 子查询参数
+    listParams.push(limit, offset)
+
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM scene_moments sm
+      LEFT JOIN media m ON sm.media_id = m.id
+      WHERE ${where.join(' AND ')}
+    `
+
+    const [list, countResult] = await Promise.all([
+      conMysql(listSql, listParams),
+      conMysql(countSql, params)
+    ])
+
+    const total = countResult[0]?.total || 0
+    const totalPages = Math.ceil(total / limit)
+
+    const formatted = list.map((row) => ({
+      ...row,
+      liked: row.liked ? true : false,
+      favorited: row.favorited ? true : false,
+      tag_names: row.tag_names ? String(row.tag_names).split(',') : []
+    }))
+
+    res.cc(true, '搜索成功', 200, {
+      list: formatted,
+      pagination: {
+        total,
+        totalPages,
+        currentPage: parseInt(page),
+        pageSize: limit
+      },
+      search: {
+        query: q,
+        filters: {
+          work_name,
+          character_name,
+          tag_name,
+          episode
+        }
+      }
+    })
   } catch (err) {
     next(err)
   }

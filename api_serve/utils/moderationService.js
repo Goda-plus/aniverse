@@ -186,12 +186,12 @@ class ModerationService {
     const result = { triggered: false, reason: '' }
     const { check_recent_posts = 10, violation_threshold = 3, time_window_hours = 24 } = rule.config
 
-    if (contentType !== 'post') return result // 暂时只对帖子进行行为分析
+    if (!['post', 'scene_moment'].includes(contentType)) return result // 对帖子和名场面进行行为分析
 
     try {
-      const userId = content.user_id || content.userId
+      const userId = content.user_id || content.userId || content.submitter_id
 
-      // 检查用户近期被拒的帖子数量
+      // 检查用户近期被拒的内容数量
       const recentViolations = await conMysql(`
         SELECT COUNT(*) as violation_count
         FROM moderation_logs

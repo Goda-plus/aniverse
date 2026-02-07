@@ -30,6 +30,7 @@ exports.getModerationQueue = async (req, res, next) => {
         CASE
           WHEN mq.content_type = 'post' THEN p.title
           WHEN mq.content_type = 'comment' THEN CONCAT('Comment on post ', c.post_id)
+          WHEN mq.content_type = 'scene_moment' THEN sm.title
           ELSE 'Unknown content'
         END as content_title,
         CASE
@@ -41,6 +42,7 @@ exports.getModerationQueue = async (req, res, next) => {
       LEFT JOIN users um ON mq.assigned_moderator_id = um.id
       LEFT JOIN posts p ON mq.content_type = 'post' AND mq.content_id = p.id
       LEFT JOIN comments c ON mq.content_type = 'comment' AND mq.content_id = c.id
+      LEFT JOIN scene_moments sm ON mq.content_type = 'scene_moment' AND mq.content_id = sm.id
       WHERE ${whereClause}
       ORDER BY
         CASE mq.priority
@@ -93,22 +95,26 @@ exports.getModerationQueueDetail = async (req, res, next) => {
         CASE
           WHEN mq.content_type = 'post' THEN p.title
           WHEN mq.content_type = 'comment' THEN CONCAT('Comment on post ', c.post_id)
+          WHEN mq.content_type = 'scene_moment' THEN sm.title
           ELSE 'Unknown content'
         END as content_title,
         CASE
           WHEN mq.content_type = 'post' THEN p.content_html
           WHEN mq.content_type = 'comment' THEN c.content_html
+          WHEN mq.content_type = 'scene_moment' THEN CONCAT('名场面: ', COALESCE(sm.quote_text, ''), ' | ', COALESCE(sm.description, ''))
           ELSE NULL
         END as full_content_html,
         CASE
           WHEN mq.content_type = 'post' THEN p.content_text
           WHEN mq.content_type = 'comment' THEN c.content_text
+          WHEN mq.content_type = 'scene_moment' THEN CONCAT('名场面: ', COALESCE(sm.quote_text, ''), ' | ', COALESCE(sm.description, ''))
           ELSE NULL
         END as full_content_text
       FROM moderation_queue mq
       LEFT JOIN users u ON mq.user_id = u.id
       LEFT JOIN posts p ON mq.content_type = 'post' AND mq.content_id = p.id
       LEFT JOIN comments c ON mq.content_type = 'comment' AND mq.content_id = c.id
+      LEFT JOIN scene_moments sm ON mq.content_type = 'scene_moment' AND mq.content_id = sm.id
       WHERE mq.id = ?
     `
 
@@ -173,6 +179,9 @@ exports.reviewContent = async (req, res, next) => {
       } else if (queueItem.content_type === 'comment') {
         const updateSql = `UPDATE comments SET ${updateFields.join(', ')} WHERE id = ?`
         await connection.execute(updateSql, [...updateValues, queueItem.content_id])
+      } else if (queueItem.content_type === 'scene_moment') {
+        const updateSql = 'UPDATE scene_moments SET moderation_status = ?, reviewer_id = ?, review_time = NOW(), review_comment = ? WHERE id = ?'
+        await connection.execute(updateSql, [newStatus, moderator_id, reason || null, queueItem.content_id])
       }
 
       // 更新审核队列状态

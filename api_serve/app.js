@@ -117,6 +117,9 @@ app.use(
         { url: /^\/api\/scene-moments\/media\/\d+$/, methods: ['GET'] },
         { url: /^\/api\/scene-moments\/\d+$/, methods: ['GET'] },
         { url: /^\/api\/scene-moments\/\d+\/comments$/, methods: ['GET'] },
+        { url: /^\/api\/scene-moments\/search$/, methods: ['GET'] },
+        // 名场面上传接口（POST，需要登录）
+        { url: /^\/api\/scene-moments\/upload$/, methods: ['POST'] },
         // 同好匹配公开接口（GET）
         { url: /^\/api\/user\/recommendations$/, methods: ['GET'] },
         { url: /^\/api\/user\/similarity\/\d+$/, methods: ['GET'] },

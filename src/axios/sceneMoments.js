@@ -24,4 +24,19 @@ export const getSceneMomentComments = (id) =>
 export const createSceneMomentComment = (id, data) =>
   request.post(`/api/scene-moments/${id}/comments`, data)
 
+// 上传媒体文件
+export const uploadSceneMedia = (file) => {
+  const formData = new FormData()
+  formData.append('media', file)
+  return request.post('/api/scene-moments/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+// 搜索名场面
+export const searchSceneMoments = (params) =>
+  request.get('/api/scene-moments/search', { params })
+
 
