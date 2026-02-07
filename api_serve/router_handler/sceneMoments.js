@@ -89,12 +89,27 @@ exports.listByMedia = async (req, res, next) => {
     const total = countResult[0]?.total || 0
     const totalPages = Math.ceil(total / limit)
 
-    const formatted = list.map((row) => ({
-      ...row,
-      liked: row.liked ? true : false,
-      favorited: row.favorited ? true : false,
-      tag_names: row.tag_names ? String(row.tag_names).split(',') : []
-    }))
+    const formatted = list.map((row) => {
+      // 解析 image_url JSON 数组
+      let imageUrls = []
+      if (row.image_url) {
+        try {
+          const parsed = JSON.parse(row.image_url)
+          imageUrls = Array.isArray(parsed) ? parsed : [row.image_url]
+        } catch (e) {
+          // 如果不是 JSON，当作单个 URL 处理（兼容旧数据）
+          imageUrls = [row.image_url]
+        }
+      }
+      
+      return {
+        ...row,
+        image_url: imageUrls, // 返回数组格式
+        liked: row.liked ? true : false,
+        favorited: row.favorited ? true : false,
+        tag_names: row.tag_names ? String(row.tag_names).split(',') : []
+      }
+    })
 
     res.cc(true, '获取名场面成功', 200, {
       list: formatted,
@@ -141,6 +156,18 @@ exports.getDetail = async (req, res, next) => {
       return res.cc(false, '该名场面不可见', 403)
     }
 
+    // 解析 image_url JSON 数组
+    let imageUrls = []
+    if (scene.image_url) {
+      try {
+        const parsed = JSON.parse(scene.image_url)
+        imageUrls = Array.isArray(parsed) ? parsed : [scene.image_url]
+      } catch (e) {
+        // 如果不是 JSON，当作单个 URL 处理（兼容旧数据）
+        imageUrls = [scene.image_url]
+      }
+    }
+
     // tags
     const tagsSql = `
       SELECT t.id, t.name, t.description, t.category
@@ -164,6 +191,7 @@ exports.getDetail = async (req, res, next) => {
 
     res.cc(true, '获取名场面详情成功', 200, {
       ...scene,
+      image_url: imageUrls, // 返回数组格式
       liked: scene.liked ? true : false,
       favorited: scene.favorited ? true : false,
       tags,
@@ -185,7 +213,7 @@ exports.create = async (req, res, next) => {
       title,
       episode,
       time_position,
-      image_url,
+      image_url, // 可能是字符串或数组
       quote_text,
       description,
       season,
@@ -195,6 +223,38 @@ exports.create = async (req, res, next) => {
       tag_ids = [],
       character_ids = []
     } = req.body
+
+    // 处理 image_url：如果是数组，转换为 JSON 字符串；如果是字符串，检查是否为 JSON 数组
+    let imageUrlJson = null
+    if (image_url) {
+      if (Array.isArray(image_url)) {
+        // 确保数组不为空且每个元素都是字符串
+        if (image_url.length > 0 && image_url.every(url => typeof url === 'string')) {
+          imageUrlJson = JSON.stringify(image_url)
+        } else {
+          return res.cc(false, '图片地址数组格式不正确', 400)
+        }
+      } else if (typeof image_url === 'string') {
+        // 兼容旧格式：如果是单个 URL，转换为数组
+        try {
+          // 尝试解析 JSON
+          const parsed = JSON.parse(image_url)
+          if (Array.isArray(parsed)) {
+            imageUrlJson = image_url
+          } else {
+            // 单个 URL，转换为数组
+            imageUrlJson = JSON.stringify([image_url])
+          }
+        } catch (e) {
+          // 不是 JSON，当作单个 URL 处理
+          imageUrlJson = JSON.stringify([image_url])
+        }
+      } else {
+        return res.cc(false, '图片地址格式不正确', 400)
+      }
+    } else {
+      return res.cc(false, '请至少上传一张图片', 400)
+    }
 
     // 准备内容审核数据
     const contentForModeration = {
@@ -231,7 +291,7 @@ exports.create = async (req, res, next) => {
       title,
       episode || null,
       time_position ?? null,
-      image_url,
+      imageUrlJson,
       quote_text || null,
       description || null,
       season ?? null,
@@ -538,12 +598,27 @@ exports.search = async (req, res, next) => {
     const total = countResult[0]?.total || 0
     const totalPages = Math.ceil(total / limit)
 
-    const formatted = list.map((row) => ({
-      ...row,
-      liked: row.liked ? true : false,
-      favorited: row.favorited ? true : false,
-      tag_names: row.tag_names ? String(row.tag_names).split(',') : []
-    }))
+    const formatted = list.map((row) => {
+      // 解析 image_url JSON 数组
+      let imageUrls = []
+      if (row.image_url) {
+        try {
+          const parsed = JSON.parse(row.image_url)
+          imageUrls = Array.isArray(parsed) ? parsed : [row.image_url]
+        } catch (e) {
+          // 如果不是 JSON，当作单个 URL 处理（兼容旧数据）
+          imageUrls = [row.image_url]
+        }
+      }
+      
+      return {
+        ...row,
+        image_url: imageUrls, // 返回数组格式
+        liked: row.liked ? true : false,
+        favorited: row.favorited ? true : false,
+        tag_names: row.tag_names ? String(row.tag_names).split(',') : []
+      }
+    })
 
     res.cc(true, '搜索成功', 200, {
       list: formatted,

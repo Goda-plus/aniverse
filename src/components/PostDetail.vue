@@ -251,7 +251,11 @@
   const editorConfig = {
     placeholder: '',
     readOnly: true,
-    autoFocus: false
+    autoFocus: false,
+    // 禁用自动调整高度，避免 ResizeObserver 循环
+    autoHeight: false,
+    // 禁用滚动同步
+    scroll: false
   }
 
   // 初始化编辑器

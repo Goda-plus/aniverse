@@ -599,3 +599,72 @@
 .theme-customer .el-dropdown-menu__item.is-divided {
   border-top-color: var(--card-border);
 }
+
+.action-btn {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  &:hover {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+  }
+}
+
+.theme-dark .el-upload-dragger {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  &:hover {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+  }
+}
+
+.theme-light .el-upload-dragger {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  &:hover {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+  }
+}
+
+.theme-customer .el-upload-dragger{
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  &:hover {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+  }
+}
+
+
+.el-select-dropdown__empty{
+  color: var(--text-primary) !important;
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--card-border) !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  &:hover {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+  }
+}
+
+.el-popper.is-light>.el-popper__arrow:before{
+  background: var(--bg-tertiary) !important;
+  border: var(--card-border) !important;
+}

@@ -13,7 +13,21 @@
 
     <div v-else-if="scene" class="detail">
       <div class="image">
-        <img :src="scene.image_url || '/placeholder.jpg'" alt="">
+        <div v-if="imageUrls && imageUrls.length > 0" class="image-grid">
+          <el-image
+            v-for="(url, index) in imageUrls"
+            :key="index"
+            :src="url"
+            :preview-src-list="imageUrls"
+            :initial-index="index"
+            fit="cover"
+            class="grid-image"
+            :preview-teleported="true"
+          />
+        </div>
+        <div v-else class="image-placeholder">
+          <img src="/placeholder.jpg" alt="">
+        </div>
       </div>
 
       <div class="meta">
@@ -138,6 +152,18 @@
     return `${mm}:${ss}`
   })
 
+  // 处理 image_url：可能是数组或字符串
+  const imageUrls = computed(() => {
+    const img = scene.value?.image_url
+    if (Array.isArray(img) && img.length > 0) {
+      return img
+    }
+    if (typeof img === 'string' && img) {
+      return [img]
+    }
+    return []
+  })
+
   const fetchDetail = async () => {
     if (!props.sceneId) return
     loading.value = true
@@ -239,9 +265,34 @@
   border: 1px solid rgba(31, 41, 55, 0.9);
 }
 
-.detail .image img {
+.detail .image {
+  display: flex;
+  flex-direction: column;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.grid-image {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.image-placeholder {
   width: 100%;
   max-height: 260px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.image-placeholder img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
 }

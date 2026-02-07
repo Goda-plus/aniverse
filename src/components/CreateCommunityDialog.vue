@@ -21,7 +21,7 @@
       <!-- 步骤1: 选择主题 -->
       <div v-if="currentStep === 1" class="step-content">
         <div class="step-subtitle">
-          请选择主题,帮助 Reddit 用户发现你的社区
+          请选择主题,帮助 aniverse 用户发现你的社区
         </div>
         <div class="categories-grid">
           <div
@@ -135,7 +135,7 @@
           </el-link>
           并确认已了解
           <el-link type="primary" :underline="false">
-            Reddit 规则
+            aniverse 规则
           </el-link>。
         </div>
       </div>

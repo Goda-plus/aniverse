@@ -83,7 +83,7 @@
             >
               <el-card class="scene-card" shadow="hover" @click="openSceneDetail(scene)">
                 <div class="scene-cover">
-                  <img :src="scene.image_url" :alt="scene.title" class="cover-image">
+                  <img :src="getSceneImageUrl(scene)" :alt="scene.title" class="cover-image">
                   <div class="scene-overlay">
                     <div class="scene-stats">
                       <span><el-icon><View /></el-icon> {{ scene.views }}</span>
@@ -413,6 +413,18 @@
   const openSceneDetail = (scene) => {
     selectedSceneId.value = scene.id
     showDetailDrawer.value = true
+  }
+
+  // 获取名场面图片URL（支持数组格式）
+  const getSceneImageUrl = (scene) => {
+    const img = scene.image_url
+    if (Array.isArray(img) && img.length > 0) {
+      return img[0]
+    }
+    if (typeof img === 'string' && img) {
+      return img
+    }
+    return '/placeholder.jpg'
   }
 
   // 创建成功回调

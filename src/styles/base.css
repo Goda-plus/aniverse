@@ -1,5 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=M+PLUS+Rounded+1c:wght@500;700&display=swap');
 
+/* 减少可能导致 ResizeObserver 循环的动画 */
+* {
+  /* 减少动画对性能的影响 */
+  animation-duration: 0.2s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0.2s !important;
+  transition-delay: 0s !important;
+}
+
+/* 针对低性能设备优化 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 :root {
   /* 二次元偏马卡龙 + 霓虹的主色系 */
   --bg: #050816;

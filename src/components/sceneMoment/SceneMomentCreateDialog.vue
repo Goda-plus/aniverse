@@ -73,9 +73,6 @@
       <!-- 第二步：上传媒体 -->
       <div v-if="activeStep === 1" class="step-content">
         <div class="media-upload">
-          <h3 class="step-title">
-            上传媒体文件
-          </h3>
           <p class="step-desc">
             上传名场面的截图或GIF动图
           </p>
@@ -88,6 +85,9 @@
               :show-file-list="false"
               :before-upload="handleBeforeUpload"
               :auto-upload="false"
+              :on-change="handleFileChange"
+              :multiple="true"
+              :limit="9"
             >
               <div class="upload-placeholder">
                 <el-icon class="upload-icon">
@@ -97,21 +97,43 @@
                   <p>拖拽文件到此处，或 <em>点击上传</em></p>
                   <p class="upload-hint">
                     支持 JPEG、PNG、GIF 格式，图片最大 5MB，GIF 最大 10MB
+                    <br>
+                    最多可上传 9 张图片
                   </p>
                 </div>
               </div>
             </el-upload>
           </div>
 
-          <div v-if="form.image_url" class="preview-section">
-            <h4>预览</h4>
-            <div class="preview-container">
-              <img :src="form.image_url" alt="预览" class="preview-image">
-              <div class="preview-actions">
-                <el-button size="small" @click="removeImage">
-                  重新上传
-                </el-button>
+          <div v-if="form.image_files && form.image_files.length > 0" class="preview-section">
+            <h4>预览 ({{ form.image_files.length }}/9)</h4>
+            <div class="image-grid">
+              <div
+                v-for="(file, index) in form.image_files"
+                :key="index"
+                class="image-item"
+              >
+                <el-image
+                  :src="form.image_urls[index]"
+                  :preview-src-list="form.image_urls"
+                  :initial-index="index"
+                  fit="cover"
+                  class="grid-image"
+                  :preview-teleported="true"
+                />
+                <div class="image-overlay">
+                  <el-button
+                    type="danger"
+                    :icon="Delete"
+                    circle
+                    size="small"
+                    @click="removeImage(index)"
+                  />
+                </div>
               </div>
+            </div>
+            <div v-if="form.image_files.length < 9" class="upload-hint-text">
+              还可以上传 {{ 9 - form.image_files.length }} 张图片
             </div>
           </div>
         </div>
@@ -120,9 +142,6 @@
       <!-- 第三步：填写信息 -->
       <div v-if="activeStep === 2" class="step-content">
         <div class="annotation-form">
-          <h3 class="step-title">
-            标注信息
-          </h3>
           <p class="step-desc">
             为名场面添加详细的标注信息
           </p>
@@ -196,16 +215,27 @@
       <!-- 第四步：预览确认 -->
       <div v-if="activeStep === 3" class="step-content">
         <div class="preview-confirm">
-          <h3 class="step-title">
-            预览确认
-          </h3>
           <p class="step-desc">
             请检查标注信息是否正确
           </p>
 
           <div class="preview-card">
             <div class="preview-media">
-              <img :src="form.image_url" alt="名场面" class="preview-image">
+              <div v-if="form.image_files && form.image_files.length > 0" class="preview-image-grid">
+                <el-image
+                  v-for="(file, index) in form.image_files"
+                  :key="index"
+                  :src="form.image_urls[index]"
+                  :preview-src-list="form.image_urls"
+                  :initial-index="index"
+                  fit="cover"
+                  class="preview-grid-image"
+                  :preview-teleported="true"
+                />
+              </div>
+              <div v-else class="preview-placeholder">
+                暂无图片
+              </div>
             </div>
             <div class="preview-info">
               <h4>{{ form.title }}</h4>
@@ -303,7 +333,7 @@
 <script setup>
   import { computed, reactive, ref, watch, defineProps, defineEmits } from 'vue'
   import { ElMessage } from 'element-plus'
-  import { Search, Check, Plus, Picture, Loading } from '@element-plus/icons-vue'
+  import { Search, Check, Plus, Picture, Loading, Delete } from '@element-plus/icons-vue'
   import { uploadSceneMedia, createSceneMoment } from '@/axios/sceneMoments'
   import { getTagsList } from '@/axios/tags'
   import { getMediaList, createMedia, getMediaDetail } from '@/axios/media'
@@ -346,7 +376,8 @@
     title: '',
     episode: '',
     time_position: null,
-    image_url: '',
+    image_files: [], // 存储 File 对象，替代 image_urls
+    image_urls: [], // 存储预览 URL（base64 或 blob URL）
     quote_text: '',
     description: '',
     tag_ids: [],
@@ -357,7 +388,13 @@
 
   const rules = {
     title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
-    image_url: [{ required: true, message: '请上传图片或填写URL', trigger: 'blur' }],
+    image_files: [{ required: true, message: '请至少上传一张图片', trigger: 'change', validator: (rule, value, callback) => {
+      if (!value || value.length === 0) {
+        callback(new Error('请至少上传一张图片'))
+      } else {
+        callback()
+      }
+    } }],
     description: [{ required: true, message: '请输入场景描述', trigger: 'blur' }]
   }
 
@@ -382,7 +419,7 @@
   const canProceed = computed(() => {
     switch (activeStep.value) {
       case 0: return !!selectedWork.value
-      case 1: return !!form.image_url
+      case 1: return form.image_files && form.image_files.length > 0
       case 2: return form.title && form.description
       case 3: return true
       default: return false
@@ -523,8 +560,22 @@
   }
 
   // 移除图片
-  const removeImage = () => {
-    form.image_url = ''
+  const removeImage = (index) => {
+    if (typeof index === 'number') {
+      // 释放 blob URL
+      if (form.image_urls[index]) {
+        URL.revokeObjectURL(form.image_urls[index])
+      }
+      form.image_files.splice(index, 1)
+      form.image_urls.splice(index, 1)
+    } else {
+      // 移除所有图片
+      form.image_urls.forEach(url => {
+        URL.revokeObjectURL(url)
+      })
+      form.image_files = []
+      form.image_urls = []
+    }
   }
 
   const remoteSearchTags = async (kw) => {
@@ -620,10 +671,15 @@
         activeStep.value = 0
         selectedWork.value = null
         workSearch.value = ''
+        // 清理 blob URLs
+        form.image_urls.forEach(url => {
+          URL.revokeObjectURL(url)
+        })
         form.title = ''
         form.episode = ''
         form.time_position = null
-        form.image_url = ''
+        form.image_files = []
+        form.image_urls = []
         form.quote_text = ''
         form.description = ''
         form.tag_ids = []
@@ -634,19 +690,71 @@
     }
   )
 
-  const handleBeforeUpload = async (file) => {
-    try {
-      const resp = await uploadSceneMedia(file)
-      if (resp.code === 200) {
-        form.image_url = resp.data.url
-        ElMessage.success('上传成功')
-      } else {
-        ElMessage.error(resp.message || '上传失败')
-      }
-    } catch (e) {
-      ElMessage.error(e?.response?.data?.message || '上传失败')
+  const handleBeforeUpload = (file) => {
+    // 验证文件类型
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif']
+    const isImage = validTypes.includes(file.type)
+    if (!isImage) {
+      ElMessage.error('只支持 JPEG、PNG、GIF 格式的图片')
+      return false
     }
-    return false // 阻止 el-upload 自动上传
+
+    // 验证文件大小
+    const isJPGOrPNG = file.type === 'image/jpeg' || file.type === 'image/png'
+    const isGIF = file.type === 'image/gif'
+    const maxSize = isGIF ? 10 * 1024 * 1024 : 5 * 1024 * 1024 // GIF 10MB，其他 5MB
+    
+    if (file.size > maxSize) {
+      ElMessage.error(isGIF ? 'GIF 文件大小不能超过 10MB' : '图片大小不能超过 5MB')
+      return false
+    }
+
+    return true
+  }
+
+  const handleFileChange = async (file, fileList) => {
+    // 检查是否已达到上限
+    if (form.image_files.length >= 9) {
+      ElMessage.warning('最多只能上传 9 张图片')
+      return
+    }
+
+    // 处理多个文件
+    const filesToProcess = fileList.filter(f => f.raw && !f.processed).slice(0, 9 - form.image_files.length)
+
+    for (const fileItem of filesToProcess) {
+      if (!fileItem.raw) continue
+
+      // 验证文件类型
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif']
+      const isImage = validTypes.includes(fileItem.raw.type)
+      if (!isImage) {
+        ElMessage.error(`${fileItem.name}: 只支持 JPEG、PNG、GIF 格式的图片`)
+        continue
+      }
+
+      // 验证文件大小
+      const isGIF = fileItem.raw.type === 'image/gif'
+      const maxSize = isGIF ? 10 * 1024 * 1024 : 5 * 1024 * 1024 // GIF 10MB，其他 5MB
+
+      if (fileItem.raw.size > maxSize) {
+        ElMessage.error(`${fileItem.name}: ${isGIF ? 'GIF 文件大小不能超过 10MB' : '图片大小不能超过 5MB'}`)
+        continue
+      }
+
+      // 创建预览 URL
+      const previewUrl = URL.createObjectURL(fileItem.raw)
+
+      // 将文件和预览 URL 存储到表单中
+      form.image_files.push(fileItem.raw)
+      form.image_urls.push(previewUrl)
+
+      fileItem.processed = true
+    }
+
+    if (filesToProcess.length > 0 && form.image_files.length > 0) {
+      ElMessage.success(`成功添加 ${filesToProcess.length} 张图片到预览`)
+    }
   }
 
   const handleSubmit = async () => {
@@ -657,12 +765,29 @@
 
     submitting.value = true
     try {
+      // 先批量上传图片
+      const uploadedUrls = []
+      for (const file of form.image_files) {
+        try {
+          const resp = await uploadSceneMedia(file)
+          if (resp.code === 200) {
+            uploadedUrls.push(resp.data.url)
+          } else {
+            throw new Error(resp.message || '上传失败')
+          }
+        } catch (e) {
+          ElMessage.error(`图片上传失败: ${e?.response?.data?.message || e.message}`)
+          return
+        }
+      }
+
+      // 上传成功后创建场景时刻
       const resp = await createSceneMoment({
         media_id: Number(selectedWork.value.id),
         title: form.title,
         episode: form.episode || null,
         time_position: form.time_position === null ? null : Number(form.time_position),
-        image_url: form.image_url,
+        image_url: uploadedUrls, // 使用上传后的 URL 数组
         quote_text: form.quote_text || null,
         description: form.description || null,
         tag_ids: form.tag_ids,
@@ -847,6 +972,58 @@
   right: 8px;
 }
 
+/* 图片网格布局 */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.image-item:hover {
+  transform: scale(1.02);
+}
+
+.image-item:hover .image-overlay {
+  opacity: 1;
+}
+
+.grid-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.upload-hint-text {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 /* 第三步：标注表单 */
 .annotation-form {
   max-width: 600px;
@@ -878,11 +1055,34 @@
   flex-shrink: 0;
 }
 
-.preview-media .preview-image {
+.preview-media {
+  min-width: 200px;
+}
+
+.preview-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 200px;
+}
+
+.preview-grid-image {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.preview-placeholder {
   width: 200px;
   height: 120px;
-  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
   border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .preview-info {

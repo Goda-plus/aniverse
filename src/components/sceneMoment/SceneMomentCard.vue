@@ -2,7 +2,7 @@
   <el-card class="scene-card" shadow="hover" @click="emit('open', scene)">
     <div class="card-inner">
       <div class="thumb">
-        <img :src="scene.image_url || '/placeholder.jpg'" alt="">
+        <img :src="firstImageUrl || '/placeholder.jpg'" alt="">
       </div>
 
       <div class="body" @click.stop>
@@ -37,14 +37,14 @@
             <span class="stat">💬 {{ scene.comments_count || 0 }}</span>
           </div> -->
 
-          <div class="btns">
-            <el-button size="small" :type="scene.liked ? 'primary' : 'default'" @click="emit('like', scene)">
+          <div class="theme-settings btns">
+            <el-button size="small" class="action-btn" :type="scene.liked ? 'primary' : 'default'" @click="emit('like', scene)">
               {{ scene.liked ? '已赞' : '点赞' }}
             </el-button>
-            <el-button size="small" :type="scene.favorited ? 'warning' : 'default'" @click="emit('favorite', scene)">
+            <el-button size="small" class="action-btn" :type="scene.favorited ? 'warning' : 'default'" @click="emit('favorite', scene)">
               {{ scene.favorited ? '已收藏' : '收藏' }}
             </el-button>
-            <el-button size="small" @click="emit('open', scene)">
+            <el-button size="small" class="action-btn" @click="emit('open', scene)">
               详情
             </el-button>
           </div>
@@ -79,6 +79,18 @@
     const mm = String(Math.floor(s / 60)).padStart(2, '0')
     const ss = String(Math.floor(s % 60)).padStart(2, '0')
     return `${mm}:${ss}`
+  })
+
+  // 处理 image_url：可能是数组或字符串
+  const firstImageUrl = computed(() => {
+    const img = props.scene.image_url
+    if (Array.isArray(img) && img.length > 0) {
+      return img[0]
+    }
+    if (typeof img === 'string' && img) {
+      return img
+    }
+    return null
   })
 </script>
 

@@ -220,7 +220,7 @@
 </template>
 
 <script setup>
-  import { ref, onMounted, computed, nextTick } from 'vue'
+  import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { ChatLineRound, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
@@ -445,21 +445,51 @@
     canScrollRight.value = scrollLeft < scrollWidth - clientWidth - 1
   }
   
+  // 节流函数
+  const throttle = (func, delay) => {
+    let timeoutId
+    let lastExecTime = 0
+    return function (...args) {
+      const currentTime = Date.now()
+
+      if (currentTime - lastExecTime > delay) {
+        func.apply(this, args)
+        lastExecTime = currentTime
+      } else {
+        clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => {
+          func.apply(this, args)
+          lastExecTime = Date.now()
+        }, delay - (currentTime - lastExecTime))
+      }
+    }
+  }
+
+  // 节流的更新滚动按钮函数
+  const throttledUpdateScrollButtons = throttle(updateScrollButtons, 100)
+
   // 初始化
   onMounted(async () => {
     await loadGenres()
     loadCommunities()
-    
+
     // 等待DOM更新后检查滚动状态
     await nextTick()
     updateScrollButtons()
-    
+
     // 监听滚动事件
     if (categoriesScrollRef.value) {
       categoriesScrollRef.value.addEventListener('scroll', updateScrollButtons)
-      
-      // 监听窗口大小变化
-      window.addEventListener('resize', updateScrollButtons)
+
+      // 移除窗口 resize 监听器，避免 ResizeObserver 循环
+      // 滚动按钮状态会在需要时通过其他方式更新
+    }
+  })
+
+  // 组件卸载时清理事件监听器
+  onBeforeUnmount(() => {
+    if (categoriesScrollRef.value) {
+      categoriesScrollRef.value.removeEventListener('scroll', updateScrollButtons)
     }
   })
 </script>
