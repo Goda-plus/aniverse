@@ -205,6 +205,7 @@
       @reply="handleCommentReply"
       @delete="handleCommentDelete"
       @comment-count-change="handleCommentCountChange"
+      @create-comment="handleCreateComment"
     />
   </div>
 </template>
@@ -450,6 +451,50 @@
   const handleCommentCountChange = (count) => {
     // 可以在这里更新帖子的评论数
     // props.post.comment_count = count
+  }
+
+  // 处理 CommentList 的创建评论事件
+  const handleCreateComment = async ({ content, parent_comment_id, onSuccess }) => {
+    if (!content || !content.trim()) {
+      ElMessage.warning('评论内容不能为空')
+      return
+    }
+
+    if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录')
+      return
+    }
+
+    try {
+      const response = await createComment({
+        post_id: props.post.post_id,
+        user_id: userStore.userId,
+        content: content.trim(),
+        parent_comment_id: parent_comment_id || null
+      })
+      
+      if (response.success) {
+        ElMessage.success(parent_comment_id ? '回复成功' : '评论发布成功')
+        
+        // 调用成功回调
+        if (onSuccess) {
+          onSuccess()
+        }
+        
+        // 刷新评论列表
+        if (commentListRef.value) {
+          commentListRef.value.refresh()
+        }
+        
+        // 通知父组件更新评论数
+        emit('comment', props.post)
+      } else {
+        ElMessage.error(response.message || '发布失败')
+      }
+    } catch (error) {
+      console.error('发布评论失败:', error)
+      ElMessage.error(error.response?.data?.message || error.message || '发布评论失败，请稍后重试')
+    }
   }
 
   // 暴露方法供父组件调用

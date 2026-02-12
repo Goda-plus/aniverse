@@ -58,12 +58,42 @@
 
             <!-- 商品信息 -->
             <div class="product-info">
+              <!-- 店铺信息 -->
+              <div v-if="shop" class="shop-info" @click="goToShop">
+                <div class="shop-logo">
+                  <img :src="shop.logo || '/default-shop-logo.png'" :alt="shop.shop_name">
+                </div>
+                <div class="shop-details">
+                  <span class="shop-name">{{ shop.shop_name }}</span>
+                  <div class="shop-stats">
+                    <el-rate :value="shop.rating" disabled size="small" />
+                    <span class="rating-text">{{ shop.rating }}分</span>
+                    <span class="sales">销量 {{ shop.total_sales }}</span>
+                  </div>
+                </div>
+                <el-button type="primary" size="small">
+                  进店逛逛
+                </el-button>
+              </div>
+
               <h1 class="product-name">
                 {{ product.name }}
               </h1>
               <p v-if="product.description" class="product-description">
                 {{ product.description }}
               </p>
+
+              <!-- 商品标签 -->
+              <div v-if="product.tags" class="product-tags">
+                <el-tag
+                  v-for="tag in product.tags.split(',')"
+                  :key="tag"
+                  size="small"
+                  type="info"
+                >
+                  {{ tag.trim() }}
+                </el-tag>
+              </div>
 
               <!-- 价格和评分 -->
               <div class="price-section">
@@ -86,6 +116,34 @@
                   <span class="rating-text">
                     {{ rating.toFixed(1) }} ({{ product.review_count || 0 }}条评价)
                   </span>
+                </div>
+              </div>
+
+              <!-- 商品规格 -->
+              <div v-if="specifications && Object.keys(specifications).length > 0" class="specs-section">
+                <div
+                  v-for="(value, key) in specifications"
+                  :key="key"
+                  class="spec-item"
+                >
+                  <span class="spec-label">{{ key }}：</span>
+                  <span class="spec-value">{{ value }}</span>
+                </div>
+              </div>
+
+              <!-- 商品参数 -->
+              <div class="params-section">
+                <div v-if="product.material" class="param-item">
+                  <span class="param-label">材质：</span>
+                  <span class="param-value">{{ product.material }}</span>
+                </div>
+                <div v-if="product.dimensions" class="param-item">
+                  <span class="param-label">尺寸：</span>
+                  <span class="param-value">{{ product.dimensions }}</span>
+                </div>
+                <div v-if="product.weight" class="param-item">
+                  <span class="param-label">重量：</span>
+                  <span class="param-value">{{ product.weight }}kg</span>
                 </div>
               </div>
 
@@ -183,13 +241,16 @@
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import ProductReviews from '@/components/ProductReviews.vue'
   import { getProductDetail, addToCart } from '@/axios/mall'
+  import { getShopDetail } from '@/axios/shop'
 
   const route = useRoute()
   const router = useRouter()
 
   const productId = computed(() => route.params.id)
   const product = ref(null)
+  const shop = ref(null)
   const images = ref([])
+  const specifications = ref({})
   const loading = ref(false)
   const quantity = ref(1)
   const activeTab = ref('detail')
@@ -227,12 +288,30 @@
       if (response.code === 200) {
         product.value = response.data.product
         images.value = response.data.images || []
+
+        // 处理图片
         if (product.value.cover_image && !images.value.find(img => img.image_url === product.value.cover_image)) {
           images.value.unshift({
             id: 0,
             image_url: product.value.cover_image,
             sort_order: 0
           })
+        }
+
+        // 处理规格信息
+        if (product.value.specifications) {
+          try {
+            specifications.value = typeof product.value.specifications === 'string'
+              ? JSON.parse(product.value.specifications)
+              : product.value.specifications
+          } catch (error) {
+            specifications.value = {}
+          }
+        }
+
+        // 获取店铺信息
+        if (product.value.shop_id) {
+          await fetchShopInfo(product.value.shop_id)
         }
       } else {
         ElMessage.error(response.message || '获取商品详情失败')
@@ -241,6 +320,25 @@
       ElMessage.error(error.response?.data?.message || '获取商品详情失败')
     } finally {
       loading.value = false
+    }
+  }
+
+  // 获取店铺信息
+  const fetchShopInfo = async (shopId) => {
+    try {
+      const response = await getShopDetail(shopId)
+      if (response.success) {
+        shop.value = response.data.shop
+      }
+    } catch (error) {
+      console.error('获取店铺信息失败:', error)
+    }
+  }
+
+  // 跳转到店铺
+  const goToShop = () => {
+    if (shop.value) {
+      router.push(`/shop/${shop.value.shop_id}`)
     }
   }
 
@@ -374,6 +472,112 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.shop-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .shop-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .shop-details {
+    flex: 1;
+
+    .shop-name {
+      display: block;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .shop-stats {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+
+      .rating-text {
+        margin-left: 4px;
+      }
+    }
+  }
+}
+
+.product-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.specs-section {
+  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+
+  .spec-item {
+    display: flex;
+    margin-bottom: 8px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .spec-label {
+      width: 80px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .spec-value {
+      color: var(--text-primary);
+    }
+  }
+}
+
+.params-section {
+  .param-item {
+    display: flex;
+    margin-bottom: 8px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .param-label {
+      width: 60px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .param-value {
+      color: var(--text-primary);
+    }
+  }
 }
 
 .product-name {

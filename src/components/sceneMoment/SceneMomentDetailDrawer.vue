@@ -2,16 +2,42 @@
   <el-drawer
     v-model="visible"
     append-to-body
-    :title="scene?.title || '名场面详情'"
     size="560px"
     height="100%"
     :with-header="true"
   >
+    <template #header>
+      <div class="drawer-header">
+        <div class="drawer-title">
+          {{ scene?.title || '名场面详情' }}
+        </div>
+        <div v-if="scene?.tags?.length" class="drawer-tags">
+          <el-tag v-for="t in scene.tags" :key="t.id" size="small" effect="dark">
+            {{ t.name }}
+          </el-tag>
+        </div>
+      </div>
+    </template>
     <div v-if="loading" class="loading">
       <el-skeleton :rows="6" animated />
     </div>
 
     <div v-else-if="scene" class="detail">
+      <div v-if="scene.characters?.length" class="characters">
+        <div class="character-label">
+          关联角色：
+        </div>
+        <div class="character-list">
+          <el-tag
+            v-for="c in scene.characters"
+            :key="c.id"
+            size="small"
+            :class="{ 'main-character': c.id === scene.main_character_id }"
+          >
+            {{ c.name_native || c.name_alternative || c.id }}
+          </el-tag>
+        </div>
+      </div>
       <div class="image">
         <div v-if="imageUrls && imageUrls.length > 0" class="image-grid">
           <el-image
@@ -31,6 +57,9 @@
       </div>
 
       <div class="meta">
+        <div v-if="scene.description" class="desc">
+          {{ scene.description }}
+        </div>
         <div class="meta-row">
           <span v-if="scene.episode" class="pill">{{ scene.episode }}</span>
           <span v-if="timeText" class="pill">{{ timeText }}</span>
@@ -42,21 +71,9 @@
         <div v-if="scene.quote_text" class="quote">
           “{{ scene.quote_text }}”
         </div>
-        <div v-if="scene.description" class="desc">
-          {{ scene.description }}
-        </div>
+        
 
-        <div v-if="scene.tags?.length" class="tags">
-          <el-tag v-for="t in scene.tags" :key="t.id" size="small" effect="dark">
-            {{ t.name }}
-          </el-tag>
-        </div>
-
-        <div v-if="scene.characters?.length" class="chars">
-          <el-tag v-for="c in scene.characters" :key="c.id" size="small">
-            {{ c.name_native || c.name_alternative || c.id }}
-          </el-tag>
-        </div>
+        
 
         <div class="actions">
           <el-button size="small" :type="scene.liked ? 'primary' : 'default'" @click="onLike">
@@ -72,39 +89,20 @@
 
       <el-divider />
 
-      <div class="comments">
-        <div class="comments-head">
-          <div class="h">
-            评论
-          </div>
-          <el-button size="small" @click="refreshComments">
-            刷新
-          </el-button>
-        </div>
-
-        <div class="editor">
-          <el-input v-model="commentText" type="textarea" :rows="2" placeholder="写下你的想法…" />
-          <div class="editor-actions">
-            <el-button type="primary" size="small" :loading="commentSubmitting" @click="submitComment()">
-              发表
-            </el-button>
-          </div>
-        </div>
-
-        <div v-if="commentsLoading" class="loading">
-          <el-skeleton :rows="4" animated />
-        </div>
-
-        <div v-else-if="comments.length" class="comment-list">
-          <SceneMomentCommentNode
-            v-for="c in comments"
-            :key="c.id"
-            :node="c"
-            @reply="submitComment"
-          />
-        </div>
-        <el-empty v-else description="暂无评论" />
-      </div>
+      <!-- 使用通用的CommentList组件 -->
+      <CommentList
+        :post-id="scene?.id"
+        :api-param-name="'scene_id'"
+        :get-comments-api="getSceneMomentComments"
+        :create-comment-api="createSceneMomentCommentWrapper"
+        :delete-comment-api="deleteSceneMomentComment"
+        :post-author-id="scene?.submitter_id"
+        :support-pagination="false"
+        comment-type="scene_moment"
+        @create-comment="handleCreateComment"
+        @reply="handleReply"
+        @comment-count-change="handleCommentCountChange"
+      />
     </div>
   </el-drawer>
 </template>
@@ -113,7 +111,7 @@
   import { computed, ref, watch ,defineProps, defineEmits} from 'vue'
   import { ElMessage } from 'element-plus'
   import { useUserStore } from '@/stores/user'
-  import SceneMomentCommentNode from './SceneMomentCommentNode.vue'
+  import CommentList from '@/components/CommentList.vue'
   import { toggleFavorite } from '@/axios/favorite'
   import {
     getSceneMomentDetail,
@@ -138,18 +136,20 @@
   const loading = ref(false)
   const scene = ref(null)
 
-  const commentsLoading = ref(false)
-  const comments = ref([])
-  const commentText = ref('')
-  const commentSubmitting = ref(false)
 
   const timeText = computed(() => {
-    const sec = scene.value?.time_position
-    if (sec === null || sec === undefined || sec === '') return ''
-    const s = Math.max(0, Number(sec) || 0)
-    const mm = String(Math.floor(s / 60)).padStart(2, '0')
+    const timeString = scene.value?.time_position
+    if (timeString === null || timeString === undefined || timeString === '') return ''
+    // 如果已经是时分秒格式，直接返回
+    if (typeof timeString === 'string' && timeString.includes(':')) {
+      return timeString
+    }
+    // 兼容旧的秒数格式，转换为时分秒格式
+    const s = Math.max(0, Number(timeString) || 0)
+    const hh = String(Math.floor(s / 3600)).padStart(2, '0')
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0')
     const ss = String(Math.floor(s % 60)).padStart(2, '0')
-    return `${mm}:${ss}`
+    return `${hh}:${mm}:${ss}`
   })
 
   // 处理 image_url：可能是数组或字符串
@@ -179,16 +179,18 @@
     }
   }
 
-  const refreshComments = async () => {
-    if (!props.sceneId) return
-    commentsLoading.value = true
-    try {
-      const resp = await getSceneMomentComments(props.sceneId)
-      if (resp.code === 200) {
-        comments.value = resp.data.list || []
-      }
-    } finally {
-      commentsLoading.value = false
+  // 创建评论的包装函数（适配CommentList的调用方式）
+  const createSceneMomentCommentWrapper = async (data) => {
+    return await createSceneMomentComment(props.sceneId, data)
+  }
+
+  // 删除评论的包装函数
+  const deleteSceneMomentComment = async (commentId) => {
+    // TODO: 如果需要删除功能，需要在sceneMoments API中添加删除评论的接口
+    // 暂时返回不支持删除的响应
+    return {
+      success: false,
+      message: '暂不支持删除评论'
     }
   }
 
@@ -197,11 +199,8 @@
     async ([v]) => {
       if (v) {
         await fetchDetail()
-        await refreshComments()
       } else {
         scene.value = null
-        comments.value = []
-        commentText.value = ''
       }
     }
   )
@@ -231,16 +230,14 @@
     }
   }
 
-  const submitComment = async (payload) => {
+  // 处理CommentList组件的评论创建事件
+  const handleCreateComment = async ({ content, parent_id, onSuccess }) => {
     if (!userStore.isLoggedIn) return ElMessage.warning('请先登录')
-    const content = (payload?.content ?? commentText.value).trim()
-    if (!content) return
-    commentSubmitting.value = true
+
     try {
-      const resp = await createSceneMomentComment(props.sceneId, { content, parent_id: payload?.parent_id || null })
+      const resp = await createSceneMomentComment(props.sceneId, { content, parent_id: parent_id || null })
       if (resp.code === 200) {
-        commentText.value = ''
-        await refreshComments()
+        onSuccess && onSuccess()
         if (scene.value) {
           scene.value.comments_count = Number(scene.value.comments_count || 0) + 1
           emit('updated', { type: 'comment', id: scene.value.id })
@@ -248,8 +245,25 @@
       } else {
         ElMessage.error(resp.message || '评论失败')
       }
-    } finally {
-      commentSubmitting.value = false
+    } catch (error) {
+      ElMessage.error('评论失败，请稍后重试')
+    }
+  }
+
+  // 处理评论回复
+  const handleReply = (comment) => {
+    // 这里可以添加回复UI逻辑，比如显示@用户名等
+    // 暂时直接调用创建评论，传递parent_id
+    handleCreateComment({
+      content: `@${comment.username} `, // 预填充@用户名
+      parent_id: comment.id
+    })
+  }
+
+  // 处理评论数量变化
+  const handleCommentCountChange = (count) => {
+    if (scene.value) {
+      scene.value.comments_count = count
     }
   }
 </script>
@@ -329,15 +343,57 @@
 
 .desc {
   margin-top: 8px;
+  margin-bottom: 12px;
   color: rgba(229, 231, 235, 0.9);
   line-height: 1.6;
 }
 
-.tags, .chars {
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+}
+
+.drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(229, 231, 235, 0.95);
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  flex-shrink: 0;
+}
+
+.characters {
+  margin-top: 12px;
+}
+
+.character-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(229, 231, 235, 0.9);
+  margin-bottom: 8px;
+}
+
+.character-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.character-list .el-tag.main-character {
+  background-color: rgba(59, 130, 246, 0.9);
+  border-color: rgba(59, 130, 246, 0.9);
+  color: white;
+  font-weight: 600;
 }
 
 .actions {
@@ -352,25 +408,6 @@
   color: rgba(156, 163, 175, 0.95);
 }
 
-.comments-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.comments-head .h {
-  font-weight: 700;
-}
-
-.editor {
-  margin-top: 10px;
-}
-
-.editor-actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-}
 
 </style>
 

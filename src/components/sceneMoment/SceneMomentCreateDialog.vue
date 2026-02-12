@@ -156,8 +156,14 @@
             </el-form-item>
 
             <el-form-item label="时间点">
-              <el-input-number v-model="form.time_position" :min="0" :step="1" controls-position="right" />
-              <span class="hint">秒（可选）</span>
+              <el-time-picker
+                v-model="form.time_position"
+                format="HH:mm:ss"
+                value-format="HH:mm:ss"
+                placeholder="选择时间点"
+                clearable
+              />
+              <span class="hint">名场面出现的时间点（可选）</span>
             </el-form-item>
 
             <el-form-item label="经典台词">
@@ -427,11 +433,19 @@
   })
 
   // 格式化时间显示
-  const formatTime = (seconds) => {
-    if (!seconds) return ''
-    const mins = Math.floor(seconds / 60)
+  const formatTime = (timeString) => {
+    if (!timeString) return ''
+    // 如果已经是时分秒格式，直接返回
+    if (typeof timeString === 'string' && timeString.includes(':')) {
+      return timeString
+    }
+    // 兼容旧的秒数格式
+    const seconds = Number(timeString)
+    if (isNaN(seconds)) return ''
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
   // 获取标签名称
@@ -786,7 +800,7 @@
         media_id: Number(selectedWork.value.id),
         title: form.title,
         episode: form.episode || null,
-        time_position: form.time_position === null ? null : Number(form.time_position),
+        time_position: form.time_position || null,
         image_url: uploadedUrls, // 使用上传后的 URL 数组
         quote_text: form.quote_text || null,
         description: form.description || null,

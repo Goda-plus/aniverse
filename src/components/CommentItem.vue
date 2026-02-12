@@ -127,6 +127,7 @@
           :depth="depth + 1"
           :max-depth="maxDepth"
           :post-author-id="postAuthorId"
+          :comment-type="commentType"
           @reply="handleChildReply"
           @delete="handleChildDelete"
         />
@@ -159,6 +160,10 @@
     postAuthorId: {
       type: [Number, String],
       default: null
+    },
+    commentType: {
+      type: String,
+      default: 'post' // 'post' 或 'scene_moment'
     }
   })
 
@@ -342,8 +347,9 @@
       }
       
       // 调用后端投票接口
+      const targetType = props.commentType === 'scene_moment' ? 'scene_moment_comment_id' : 'comment_id'
       const res = await userVote({
-        comment_id: props.comment.id,
+        [targetType]: props.comment.id,
         vote_type: type
       })
       

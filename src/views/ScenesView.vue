@@ -24,8 +24,8 @@
               <el-input
                 v-model="searchQuery"
                 placeholder="搜索名场面、台词或作品..."
-                @input="handleSearch"
                 clearable
+                @input="handleSearch"
               >
                 <template #prefix>
                   <el-icon><Search /></el-icon>
@@ -92,7 +92,9 @@
                   </div>
                 </div>
                 <div class="scene-content">
-                  <h4 class="scene-title">{{ scene.title }}</h4>
+                  <h4 class="scene-title">
+                    {{ scene.title }}
+                  </h4>
                   <div class="scene-meta">
                     <span class="work-name">{{ scene.media_title }}</span>
                     <span v-if="scene.episode" class="episode"> · {{ scene.episode }}</span>
@@ -101,7 +103,9 @@
                   <div v-if="scene.quote_text" class="scene-quote">
                     "{{ scene.quote_text }}"
                   </div>
-                  <div class="scene-description">{{ scene.description }}</div>
+                  <div class="scene-description">
+                    {{ scene.description }}
+                  </div>
                   <div v-if="scene.tag_names && scene.tag_names.length" class="scene-tags">
                     <el-tag
                       v-for="tag in scene.tag_names"
@@ -120,8 +124,8 @@
                       <el-button
                         size="small"
                         type="text"
-                        @click.stop="toggleLike(scene)"
                         :class="{ liked: scene.liked }"
+                        @click.stop="toggleLike(scene)"
                       >
                         <el-icon><Star /></el-icon>
                         {{ scene.likes_count }}
@@ -134,7 +138,7 @@
           </el-row>
 
           <!-- 分页 -->
-          <div class="pagination-wrapper" v-if="totalPages > 1">
+          <div v-if="totalPages > 1" class="pagination-wrapper">
             <el-pagination
               v-model:current-page="currentPage"
               v-model:page-size="pageSize"
@@ -168,31 +172,55 @@
           </div>
           <div class="guide-steps">
             <div class="guide-step">
-              <div class="step-number">1</div>
+              <div class="step-number">
+                1
+              </div>
               <div class="step-content">
-                <div class="step-title">选择作品</div>
-                <div class="step-desc">从动漫或影视作品中选择</div>
+                <div class="step-title">
+                  选择作品
+                </div>
+                <div class="step-desc">
+                  从动漫或影视作品中选择
+                </div>
               </div>
             </div>
             <div class="guide-step">
-              <div class="step-number">2</div>
+              <div class="step-number">
+                2
+              </div>
               <div class="step-content">
-                <div class="step-title">上传媒体</div>
-                <div class="step-desc">上传截图或GIF动图</div>
+                <div class="step-title">
+                  上传媒体
+                </div>
+                <div class="step-desc">
+                  上传截图或GIF动图
+                </div>
               </div>
             </div>
             <div class="guide-step">
-              <div class="step-number">3</div>
+              <div class="step-number">
+                3
+              </div>
               <div class="step-content">
-                <div class="step-title">填写信息</div>
-                <div class="step-desc">添加标题、台词、描述等</div>
+                <div class="step-title">
+                  填写信息
+                </div>
+                <div class="step-desc">
+                  添加标题、台词、描述等
+                </div>
               </div>
             </div>
             <div class="guide-step">
-              <div class="step-number">4</div>
+              <div class="step-number">
+                4
+              </div>
               <div class="step-content">
-                <div class="step-title">提交审核</div>
-                <div class="step-desc">等待管理员审核通过</div>
+                <div class="step-title">
+                  提交审核
+                </div>
+                <div class="step-desc">
+                  等待管理员审核通过
+                </div>
               </div>
             </div>
           </div>
@@ -209,8 +237,8 @@
               v-for="tag in popularTags"
               :key="tag.id"
               size="small"
-              @click="filterByTag(tag.id)"
               class="tag-item"
+              @click="filterByTag(tag.id)"
             >
               {{ tag.name }}
             </el-tag>
@@ -225,16 +253,28 @@
           </div>
           <div class="community-stats">
             <div class="stat-item">
-              <div class="stat-number">{{ totalScenes }}</div>
-              <div class="stat-label">名场面</div>
+              <div class="stat-number">
+                {{ totalScenes }}
+              </div>
+              <div class="stat-label">
+                名场面
+              </div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ totalWorks }}</div>
-              <div class="stat-label">作品</div>
+              <div class="stat-number">
+                {{ totalWorks }}
+              </div>
+              <div class="stat-label">
+                作品
+              </div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ activeUsers }}</div>
-              <div class="stat-label">活跃用户</div>
+              <div class="stat-number">
+                {{ activeUsers }}
+              </div>
+              <div class="stat-label">
+                活跃用户
+              </div>
             </div>
           </div>
         </div>
@@ -310,11 +350,19 @@
   const activeUsers = ref(0)
 
   // 格式化时间
-  const formatTime = (seconds) => {
-    if (!seconds) return ''
-    const mins = Math.floor(seconds / 60)
+  const formatTime = (timeString) => {
+    if (!timeString) return ''
+    // 如果已经是时分秒格式，直接返回
+    if (typeof timeString === 'string' && timeString.includes(':')) {
+      return timeString
+    }
+    // 兼容旧的秒数格式，转换为时分秒格式
+    const seconds = Number(timeString)
+    if (isNaN(seconds)) return ''
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
   // 加载名场面列表

@@ -76,6 +76,12 @@ const routes = [
     name: 'order-detail',
     component: () => import('../views/OrderDetailView.vue')
   },
+  // 店铺相关路由
+  {
+    path: '/shop/:id',
+    name: 'shop-detail',
+    component: () => import('../views/ShopDetailView.vue')
+  },
   {
     path: '/browse-history',
     name: 'browse-history',

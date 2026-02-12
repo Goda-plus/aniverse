@@ -22,12 +22,11 @@
     </div>
 
     <div v-else-if="list.length" class="timeline-wrap">
-      <el-timeline>
+      <el-timeline mode="alternate">
         <el-timeline-item
           v-for="s in list"
           :key="s.id"
           :timestamp="formatTime(s.created_at)"
-          placement="top"
         >
           <SceneMomentCard
             :scene="s"
@@ -194,6 +193,14 @@
 
 .timeline-wrap {
   padding-top: 6px;
+}
+
+.timeline-wrap :deep(.el-timeline-item__wrapper) {
+  max-width: 400px;
+}
+
+.timeline-wrap :deep(.el-timeline-item__content) {
+  text-align: center;
 }
 
 .loading {
