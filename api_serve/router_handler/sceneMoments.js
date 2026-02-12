@@ -177,14 +177,33 @@ exports.getDetail = async (req, res, next) => {
     `
     const tags = await conMysql(tagsSql, [id])
 
-    // characters
+    // characters - 确保包含主角色
+    let characters = []
+
+    // 先获取关联的所有角色
     const charsSql = `
       SELECT c.id, c.name_native, c.image_medium, c.image_large
       FROM scene_moment_characters smc
       JOIN characters c ON smc.character_id = c.id
       WHERE smc.scene_id = ?
     `
-    const characters = await conMysql(charsSql, [id])
+    characters = await conMysql(charsSql, [id])
+
+    // 如果有主角色ID，确保主角色也被包含（即使不在关联表中）
+    if (scene.main_character_id) {
+      const mainCharExists = characters.some(c => c.id === scene.main_character_id)
+      if (!mainCharExists) {
+        const mainCharSql = `
+          SELECT c.id, c.name_native, c.image_medium, c.image_large
+          FROM characters c
+          WHERE c.id = ?
+        `
+        const [mainChar] = await conMysql(mainCharSql, [scene.main_character_id])
+        if (mainChar) {
+          characters.push(mainChar)
+        }
+      }
+    }
 
     // views +1
     await conMysql('UPDATE scene_moments SET views = views + 1 WHERE id = ?', [id])
@@ -316,11 +335,16 @@ exports.create = async (req, res, next) => {
       await conMysql(`INSERT IGNORE INTO scene_moment_tags (scene_id, tag_id) VALUES ${placeholders}`, params)
     }
 
-    // characters relation
-    if (Array.isArray(character_ids) && character_ids.length) {
-      const placeholders = character_ids.map(() => '(?, ?)').join(', ')
+    // characters relation - 确保 main_character_id 也被包含
+    let allCharacterIds = [...(character_ids || [])]
+    if (main_character_id && !allCharacterIds.includes(main_character_id)) {
+      allCharacterIds.push(main_character_id)
+    }
+
+    if (allCharacterIds.length) {
+      const placeholders = allCharacterIds.map(() => '(?, ?)').join(', ')
       const params = []
-      character_ids.forEach((cid) => {
+      allCharacterIds.forEach((cid) => {
         params.push(sceneId, cid)
       })
       await conMysql(`INSERT IGNORE INTO scene_moment_characters (scene_id, character_id) VALUES ${placeholders}`, params)

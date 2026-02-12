@@ -124,9 +124,9 @@ exports.getFavorites = async (req, res, next) => {
         JOIN posts p ON f.target_id = p.id
         LEFT JOIN users u ON p.user_id = u.id
         LEFT JOIN subreddits s ON p.subreddit_id = s.id
-        LEFT JOIN votes v ON p.id = v.post_id
+        LEFT JOIN votes v ON p.id = v.target_id AND v.target_type = 'post'
         LEFT JOIN comments c ON p.id = c.post_id
-        LEFT JOIN votes uv ON p.id = uv.post_id AND uv.user_id = ?
+        LEFT JOIN votes uv ON p.id = uv.target_id AND uv.target_type = 'post' AND uv.user_id = ?
         WHERE f.user_id = ? AND f.target_type = 'post'
         GROUP BY p.id, f.genres, f.tags, f.created_at, u.username, u.avatar_url, s.name, s.image_url, uv.vote_type
         ORDER BY f.created_at DESC

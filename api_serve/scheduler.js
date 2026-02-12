@@ -275,7 +275,7 @@ async function updateHotPostsHeatScores () {
     const sql = `
       SELECT DISTINCT p.id
       FROM posts p
-      LEFT JOIN votes v ON v.post_id = p.id
+      LEFT JOIN votes v ON v.target_id = p.id AND v.target_type = 'post'
       LEFT JOIN comments c ON c.post_id = p.id
       LEFT JOIN favorites f ON f.target_id = p.id AND f.target_type = 'post'
       WHERE p.is_draft != 1

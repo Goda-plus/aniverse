@@ -192,7 +192,7 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
       FROM posts
       JOIN users ON posts.user_id = users.id
       LEFT JOIN comments ON comments.post_id = posts.id
-      LEFT JOIN votes ON votes.post_id = posts.id
+      LEFT JOIN votes ON votes.target_id = posts.id AND votes.target_type = 'post'
     `
 
     const params = []
@@ -235,7 +235,7 @@ exports.getPostsBySubredditWithUserAndStats = async (req, res) => {
 
 
 // 构建排序SQL的辅助函数
-function buildOrderByClause(sortType) {
+function buildOrderByClause (sortType) {
   switch (sortType) {
     case 'hot':
       // 热门：基于热度评分排序
@@ -287,7 +287,7 @@ FROM posts
 JOIN users ON posts.user_id = users.id
 LEFT JOIN subreddits ON posts.subreddit_id = subreddits.id
 LEFT JOIN comments ON comments.post_id = posts.id
-LEFT JOIN votes ON votes.post_id = posts.id
+LEFT JOIN votes ON votes.target_id = posts.id AND votes.target_type = 'post'
 WHERE (posts.is_draft IS NULL OR posts.is_draft = 0) AND posts.moderation_status = "approved"
 GROUP BY posts.id, users.id, subreddits.id, posts.tags
 ORDER BY ${orderByClause}
@@ -345,7 +345,7 @@ exports.getUserPostDetail = async (req, res, next) => {
       JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
       LEFT JOIN comments c ON c.post_id = p.id
-      LEFT JOIN votes v ON v.post_id = p.id
+      LEFT JOIN votes v ON v.target_id = p.id AND v.target_type = 'post'
       WHERE p.id = ? AND (p.user_id = ? OR (p.is_draft IS NULL OR p.is_draft = 0))
       GROUP BY p.id, u.id, s.id, p.tags
     `
@@ -399,7 +399,7 @@ exports.getGuestPostDetail = async (req, res, next) => {
       JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
       LEFT JOIN comments c ON c.post_id = p.id
-      LEFT JOIN votes v ON v.post_id = p.id
+      LEFT JOIN votes v ON v.target_id = p.id AND v.target_type = 'post'
       WHERE p.id = ? AND (p.is_draft IS NULL OR p.is_draft = 0)
       GROUP BY p.id, u.id, s.id, p.tags
     `
@@ -475,8 +475,8 @@ exports.getCurrentUserPosts = async (req, res, next) => {
         u.avatar_url,
         s.name as subreddit_name,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as comment_count,
-        (SELECT COUNT(*) FROM votes pv WHERE pv.post_id = p.id AND pv.vote_type = 'up') as upvotes,
-        (SELECT COUNT(*) FROM votes pv WHERE pv.post_id = p.id AND pv.vote_type = 'down') as downvotes
+        (SELECT COUNT(*) FROM votes pv WHERE pv.target_id = p.id AND pv.target_type = 'post' AND pv.vote_type = 'up') as upvotes,
+        (SELECT COUNT(*) FROM votes pv WHERE pv.target_id = p.id AND pv.target_type = 'post' AND pv.vote_type = 'down') as downvotes
       FROM posts p
       LEFT JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
@@ -531,10 +531,10 @@ exports.getUpvotedPosts = async (req, res, next) => {
         u.bio,
         s.name as subreddit_name,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
-        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.target_id = p.id AND v_up.target_type = 'post' AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.target_id = p.id AND v_down.target_type = 'post' AND v_down.vote_type = 'down') AS downvotes
       FROM votes v
-      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN posts p ON v.target_id = p.id AND v.target_type = 'post'
       INNER JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
       WHERE v.user_id = ? AND v.vote_type = 'up' AND (p.is_draft IS NULL OR p.is_draft = 0)
@@ -544,9 +544,9 @@ exports.getUpvotedPosts = async (req, res, next) => {
     `
 
     const countSql = `
-      SELECT COUNT(DISTINCT v.post_id) as total 
+      SELECT COUNT(DISTINCT v.target_id) as total 
       FROM votes v
-      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN posts p ON v.target_id = p.id AND v.target_type = 'post'
       WHERE v.user_id = ? AND v.vote_type = 'up' AND (p.is_draft IS NULL OR p.is_draft = 0)
     `
     
@@ -600,10 +600,10 @@ exports.getDownvotedPosts = async (req, res, next) => {
         u.bio,
         s.name as subreddit_name,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
-        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.target_id = p.id AND v_up.target_type = 'post' AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.target_id = p.id AND v_down.target_type = 'post' AND v_down.vote_type = 'down') AS downvotes
       FROM votes v
-      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN posts p ON v.target_id = p.id AND v.target_type = 'post'
       INNER JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
       WHERE v.user_id = ? AND v.vote_type = 'down' AND (p.is_draft IS NULL OR p.is_draft = 0)
@@ -613,9 +613,9 @@ exports.getDownvotedPosts = async (req, res, next) => {
     `
 
     const countSql = `
-      SELECT COUNT(DISTINCT v.post_id) as total 
+      SELECT COUNT(DISTINCT v.target_id) as total 
       FROM votes v
-      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN posts p ON v.target_id = p.id AND v.target_type = 'post'
       WHERE v.user_id = ? AND v.vote_type = 'down' AND (p.is_draft IS NULL OR p.is_draft = 0)
     `
     
@@ -669,8 +669,8 @@ exports.getCommentedPosts = async (req, res, next) => {
         u.bio,
         s.name as subreddit_name,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
-        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.target_id = p.id AND v_up.target_type = 'post' AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.target_id = p.id AND v_down.target_type = 'post' AND v_down.vote_type = 'down') AS downvotes
       FROM comments c
       INNER JOIN posts p ON c.post_id = p.id
       INNER JOIN users u ON p.user_id = u.id
@@ -805,8 +805,8 @@ exports.getDrafts = async (req, res, next) => {
         u.avatar_url,
         s.name as subreddit_name,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as comment_count,
-        (SELECT COUNT(*) FROM votes pv WHERE pv.post_id = p.id AND pv.vote_type = 'up') as upvotes,
-        (SELECT COUNT(*) FROM votes pv WHERE pv.post_id = p.id AND pv.vote_type = 'down') as downvotes
+        (SELECT COUNT(*) FROM votes pv WHERE pv.target_id = p.id AND pv.target_type = 'post' AND pv.vote_type = 'up') as upvotes,
+        (SELECT COUNT(*) FROM votes pv WHERE pv.target_id = p.id AND pv.target_type = 'post' AND pv.vote_type = 'down') as downvotes
       FROM posts p
       LEFT JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
@@ -852,7 +852,7 @@ exports.deletePost = async (req, res, next) => {
     if (post.user_id !== user_id) return res.cc(false, '无权删除', 403)
 
     // 1. 删除帖子的所有投票记录（解决外键约束问题）
-    await conMysql('DELETE FROM votes WHERE post_id = ?', [post_id])
+    await conMysql('DELETE FROM votes WHERE target_id = ? AND target_type = ?', [post_id, 'post'])
 
     // 2. 删除帖子的所有评论（评论的投票会在删除评论时自动处理）
     // 先获取所有评论ID
@@ -860,7 +860,7 @@ exports.deletePost = async (req, res, next) => {
 
     // 删除每个评论的投票记录
     for (const comment of comments) {
-      await conMysql('DELETE FROM votes WHERE comment_id = ?', [comment.id])
+      await conMysql('DELETE FROM votes WHERE target_id = ? AND target_type = ?', [comment.id, 'comment'])
     }
 
     // 删除所有评论

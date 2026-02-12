@@ -233,11 +233,21 @@ class ModerationService {
     const triggeredRulesJson = JSON.stringify(moderationResult.triggeredRules)
     const reason = moderationResult.violations.map(v => v.reason).join('; ')
 
+    // 将规则动作映射为日志动作
+    const actionMapping = {
+      'pass': 'auto_pass',
+      'queue': 'flag', // queue 映射为 flag，因为需要人工审核
+      'reject': 'auto_reject',
+      'flag': 'flag'
+    }
+
+    const logAction = actionMapping[moderationResult.action] || 'flag'
+
     await conMysql(sql, [
       contentType,
       content.id || null, // content_id 在创建时可能还没有
       userId,
-      moderationResult.action,
+      logAction,
       reason,
       triggeredRulesJson,
       moderationResult.score,

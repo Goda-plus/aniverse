@@ -14,7 +14,9 @@ const cors = require('cors')
 const corsOptions = {
   origin: [
     'http://localhost:8080',  // 开发环境
-    'http://localhost:3000'
+    'http://localhost:3000',
+    // vue-element-admin 默认开发端口 9528，作为 aniverse 后台管理前端
+    'http://localhost:9528'
   ],
   credentials: true,          // 允许携带凭证
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -85,6 +87,11 @@ app.use(
         /^\/api\/mall\/categories$/,
         /^\/api\/mall\/product\/\d+$/,
         /^\/api\/mall\/reviews$/,
+        // 店铺公开接口（店铺列表 & 详情）
+        /^\/api\/shop$/,
+        /^\/api\/shop\/\d+$/,
+        /^\/api\/shop\/\d+\/products$/,
+        /^\/api\/shop\/\d+\/featured$/,
         // 众筹公开接口（仅 GET）
         // 注意：这里必须限制 methods，否则 PUT/POST 会被错误地放行，导致 req.user 为空而 500
         { url: /^\/api\/crowdfunding\/projects\/\d+$/, methods: ['GET'] },
@@ -184,6 +191,7 @@ const friendRouter   = require('./router/friends')
 const chatRoomRouter = require('./router/chatRoom')
 const chatRouter     = require('./router/chat')
 const mallRouter     = require('./router/mall')
+const shopRouter     = require('./router/shop')
 const crowdfundingRouter = require('./router/crowdfunding')
 
 // 次元库相关路由
@@ -198,6 +206,7 @@ app.use('/api/friends',   friendRouter)
 app.use('/api/chatroom',  chatRoomRouter)
 app.use('/api/chat',      chatRouter)
 app.use('/api/mall',      mallRouter)
+app.use('/api/shop',      shopRouter)
 app.use('/api/crowdfunding', crowdfundingRouter)
 
 // 次元库路由

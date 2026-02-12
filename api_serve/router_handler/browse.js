@@ -69,9 +69,9 @@ exports.getBrowseHistory = async (req, res, next) => {
         s.name as subreddit_name,
         bh.last_visited_at,
         (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-        (SELECT COUNT(*) FROM votes v_up WHERE v_up.post_id = p.id AND v_up.vote_type = 'up') AS upvotes,
-        (SELECT COUNT(*) FROM votes v_down WHERE v_down.post_id = p.id AND v_down.vote_type = 'down') AS downvotes,
-        (SELECT vote_type FROM votes v_user WHERE v_user.post_id = p.id AND v_user.user_id = ? LIMIT 1) AS user_vote
+        (SELECT COUNT(*) FROM votes v_up WHERE v_up.target_id = p.id AND v_up.target_type = 'post' AND v_up.vote_type = 'up') AS upvotes,
+        (SELECT COUNT(*) FROM votes v_down WHERE v_down.target_id = p.id AND v_down.target_type = 'post' AND v_down.vote_type = 'down') AS downvotes,
+        (SELECT vote_type FROM votes v_user WHERE v_user.target_id = p.id AND v_user.target_type = 'post' AND v_user.user_id = ? LIMIT 1) AS user_vote
       FROM browse_history bh
       INNER JOIN posts p ON bh.target_id = p.id AND bh.target_type = 'post'
       INNER JOIN users u ON p.user_id = u.id
@@ -199,7 +199,7 @@ exports.getUserActivities = async (req, res, next) => {
         s.name as subreddit_name,
         v.vote_type
       FROM votes v
-      INNER JOIN posts p ON v.post_id = p.id
+      INNER JOIN posts p ON v.target_id = p.id AND v.target_type = 'post'
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
       WHERE v.user_id = ?
       ORDER BY v.created_at DESC
@@ -355,7 +355,7 @@ exports.getUserActivities = async (req, res, next) => {
       const countQueries = await Promise.all([
         conMysql('SELECT COUNT(*) as count FROM posts WHERE user_id = ?', [user_id]),
         conMysql('SELECT COUNT(*) as count FROM comments WHERE user_id = ?', [user_id]),
-        conMysql('SELECT COUNT(*) as count FROM votes WHERE user_id = ?', [user_id]),
+        conMysql('SELECT COUNT(*) as count FROM votes WHERE user_id = ? AND target_type = \'post\'', [user_id]),
         conMysql('SELECT COUNT(*) as count FROM subreddit_members WHERE user_id = ?', [user_id]),
         conMysql('SELECT COUNT(*) as count FROM favorites WHERE user_id = ? AND target_type = "character"', [user_id]),
         conMysql('SELECT COUNT(*) as count FROM favorites WHERE user_id = ? AND target_type = "scene_moment"', [user_id]),
@@ -368,7 +368,7 @@ exports.getUserActivities = async (req, res, next) => {
       const activityTypeMap = {
         posts: 'SELECT COUNT(*) as count FROM posts WHERE user_id = ?',
         community: 'SELECT COUNT(*) as count FROM subreddit_members WHERE user_id = ?',
-        anime: 'SELECT COUNT(*) as count FROM votes WHERE user_id = ?',
+        anime: 'SELECT COUNT(*) as count FROM votes WHERE user_id = ? AND target_type = \'post\'',
         characters: 'SELECT COUNT(*) as count FROM favorites WHERE user_id = ? AND target_type = "character"',
         scenes: `
           SELECT COUNT(*) as count FROM (

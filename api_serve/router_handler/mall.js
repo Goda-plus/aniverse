@@ -165,21 +165,23 @@ exports.getCart = async (req, res, next) => {
   try {
     const user_id = req.user.id
     const sql = `
-      SELECT 
-        c.id,
-        c.product_id,
-        c.quantity,
-        c.selected,
-        c.created_at,
-        c.updated_at,
+      SELECT
+        sc.cart_id,
+        sc.product_id,
+        sc.quantity,
+        sc.selected,
+        sc.added_at,
         p.name,
         p.price,
-        p.cover_image,
-        p.stock
-      FROM carts c
-      JOIN products p ON c.product_id = p.id
-      WHERE c.user_id = ?
-      ORDER BY c.created_at DESC
+        JSON_EXTRACT(p.images, '$[0]') as cover_image,
+        p.stock,
+        s.shop_name,
+        s.shop_id
+      FROM shopping_cart sc
+      JOIN products p ON sc.product_id = p.product_id
+      LEFT JOIN shops s ON p.shop_id = s.shop_id
+      WHERE sc.user_id = ?
+      ORDER BY sc.added_at DESC
     `
     const rows = await conMysql(sql, [user_id])
     res.cc(true, '获取购物车成功', 200, rows)
@@ -199,9 +201,9 @@ exports.addToCart = async (req, res, next) => {
     }
 
     const sql = `
-      INSERT INTO carts (user_id, product_id, quantity)
+      INSERT INTO shopping_cart (user_id, product_id, quantity)
       VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity), updated_at = CURRENT_TIMESTAMP
+      ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
     `
     await conMysql(sql, [user_id, product_id, quantity])
 
@@ -238,8 +240,8 @@ exports.updateCartItem = async (req, res, next) => {
     }
 
     const sql = `
-      UPDATE carts
-      SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      UPDATE shopping_cart
+      SET ${fields.join(', ')}
       WHERE user_id = ? AND product_id = ?
     `
     params.push(user_id, product_id)
@@ -266,7 +268,7 @@ exports.removeCartItem = async (req, res, next) => {
     }
 
     const sql = `
-      DELETE FROM carts
+      DELETE FROM shopping_cart
       WHERE user_id = ? AND product_id = ?
     `
     const result = await conMysql(sql, [user_id, product_id])
@@ -338,7 +340,7 @@ exports.getOrderDetail = async (req, res, next) => {
     }
 
     const orderSql = `
-      SELECT 
+      SELECT
         o.*,
         a.recipient_name,
         a.phone,
@@ -348,7 +350,7 @@ exports.getOrderDetail = async (req, res, next) => {
         a.detail_address,
         a.postal_code
       FROM orders o
-      JOIN addresses a ON o.address_id = a.id
+      JOIN shipping_addresses a ON o.shipping_address->>'$.address_id' = a.address_id
       WHERE o.id = ? AND o.user_id = ?
     `
     const orders = await conMysql(orderSql, [id, user_id])
@@ -385,8 +387,8 @@ exports.listAddresses = async (req, res, next) => {
   try {
     const user_id = req.user.id
     const sql = `
-      SELECT 
-        id,
+      SELECT
+        address_id,
         user_id,
         recipient_name,
         phone,
@@ -396,9 +398,10 @@ exports.listAddresses = async (req, res, next) => {
         detail_address,
         postal_code,
         is_default,
+        label,
         created_at,
         updated_at
-      FROM addresses
+      FROM shipping_addresses
       WHERE user_id = ?
       ORDER BY is_default DESC, created_at DESC
     `
@@ -413,7 +416,7 @@ exports.listAddresses = async (req, res, next) => {
 exports.addAddress = async (req, res, next) => {
   try {
     const user_id = req.user.id
-    const { recipient_name, phone, province, city, district, detail_address, postal_code, is_default } = req.body
+    const { recipient_name, phone, province, city, district, detail_address, postal_code, is_default, label } = req.body
 
     if (!recipient_name || !phone || !province || !city || !district || !detail_address) {
       return res.cc(false, '请填写完整的地址信息', 400)
@@ -422,15 +425,15 @@ exports.addAddress = async (req, res, next) => {
     // 如果设置为默认地址，先取消其他默认地址
     if (is_default) {
       await conMysql(
-        'UPDATE addresses SET is_default = 0 WHERE user_id = ?',
+        'UPDATE shipping_addresses SET is_default = 0 WHERE user_id = ?',
         [user_id]
       )
     }
 
     const sql = `
-      INSERT INTO addresses 
-        (user_id, recipient_name, phone, province, city, district, detail_address, postal_code, is_default)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shipping_addresses
+        (user_id, recipient_name, phone, province, city, district, detail_address, postal_code, is_default, label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(sql, [
       user_id,
@@ -441,10 +444,11 @@ exports.addAddress = async (req, res, next) => {
       district,
       detail_address,
       postal_code || '',
-      is_default ? 1 : 0
+      is_default ? 1 : 0,
+      label || ''
     ])
 
-    res.cc(true, '添加地址成功', 200, { id: result.insertId })
+    res.cc(true, '添加地址成功', 200, { address_id: result.insertId })
   } catch (err) {
     next(err)
   }

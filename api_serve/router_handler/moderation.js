@@ -359,7 +359,7 @@ exports.getAllPostsForModeration = async (req, res, next) => {
       LEFT JOIN users u ON p.user_id = u.id
       LEFT JOIN subreddits s ON p.subreddit_id = s.id
       LEFT JOIN comments c ON c.post_id = p.id
-      LEFT JOIN votes v ON v.post_id = p.id
+      LEFT JOIN votes v ON v.target_id = p.id AND v.target_type = 'post'
       LEFT JOIN users um ON p.moderated_by = um.id
       WHERE ${whereClause}
       GROUP BY p.id, u.id, s.id, um.id

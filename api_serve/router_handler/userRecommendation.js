@@ -155,15 +155,16 @@ async function calculateBehaviorSimilarity (user_id_1, user_id_2) {
   
   // 4. 共同点赞的帖子
   const commonPostSql = `
-    SELECT 
-      v1.post_id,
+    SELECT
+      v1.target_id AS post_id,
       p.title AS post_title,
       bw.weight
     FROM votes v1
-    INNER JOIN votes v2 ON v1.post_id = v2.post_id AND v1.vote_type = v2.vote_type
-    LEFT JOIN posts p ON v1.post_id = p.id
+    INNER JOIN votes v2 ON v1.target_id = v2.target_id AND v1.target_type = v2.target_type AND v1.vote_type = v2.vote_type
+    LEFT JOIN posts p ON v1.target_id = p.id
     LEFT JOIN user_behavior_weights bw ON bw.behavior_type = 'like' AND bw.target_type = 'post'
-    WHERE v1.user_id = ? AND v2.user_id = ? 
+    WHERE v1.user_id = ? AND v2.user_id = ?
+      AND v1.target_type = 'post' AND v2.target_type = 'post'
       AND v1.vote_type = 'up' AND v2.vote_type = 'up'
   `
   const commonPost = await conMysql(commonPostSql, [user_id_1, user_id_2])
