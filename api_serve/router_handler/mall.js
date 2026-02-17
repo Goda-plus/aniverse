@@ -178,7 +178,7 @@ exports.getCart = async (req, res, next) => {
         s.shop_name,
         s.shop_id
       FROM shopping_cart sc
-      JOIN products p ON sc.product_id = p.product_id
+      JOIN products p ON sc.product_id = p.id
       LEFT JOIN shops s ON p.shop_id = s.shop_id
       WHERE sc.user_id = ?
       ORDER BY sc.added_at DESC

@@ -29,10 +29,12 @@
     "mysql": "^2.18.1",
     "node-cron": "^4.2.1",
     "pinia": "^2.1.7",
+    "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "vue": "^3.2.13",
-    "vue-router": "^4.0.3"
+    "vue-router": "^4.0.3",
+    "wechatpay-node-v3": "^2.2.1"
   },
   "devDependencies": {
     "@babel/core": "^7.12.16",

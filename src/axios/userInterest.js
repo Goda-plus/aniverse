@@ -15,6 +15,11 @@ export const batchAddInterests = (data) => {
   return request.post('/api/user/interests/batch', data)
 }
 
+// 更新用户喜欢的分类（genres）
+export const updateUserGenres = (data) => {
+  return request.put('/api/user/interests/genres', data)
+}
+
 // 删除兴趣标签
 export const removeUserInterest = (tag_id) => {
   return request.delete(`/api/user/interests/${tag_id}`)
@@ -29,6 +34,12 @@ export const updateInterestWeight = (tag_id, data) => {
 export const getRecommendedTags = (params) => {
   return request.get('/api/user/interests/recommended', { params })
 }
+
+
+
+
+
+
 
 
 

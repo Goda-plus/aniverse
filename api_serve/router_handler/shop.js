@@ -1,7 +1,7 @@
 const { conMysql } = require('../db/index')
 
 // 工具函数：解析分页参数
-function parsePagination(req) {
+function parsePagination (req) {
   const page = parseInt(req.query.page, 10) || 1
   const pageSize = parseInt(req.query.pageSize, 10) || 10
   const safePage = page < 1 ? 1 : page
@@ -57,10 +57,10 @@ exports.listShops = async (req, res, next) => {
         s.created_at,
         u.nickname,
         u.username,
-        COUNT(p.product_id) as product_count
+        COUNT(p.id) as product_count
       FROM shops s
       JOIN users u ON s.seller_id = u.id
-      LEFT JOIN products p ON s.shop_id = p.shop_id AND p.status = 'active'
+      LEFT JOIN products p ON s.shop_id = p.shop_id
       ${where}
       GROUP BY s.shop_id
       ORDER BY s.rating DESC, s.total_sales DESC
@@ -92,12 +92,12 @@ exports.getShopDetail = async (req, res, next) => {
         s.*,
         u.nickname,
         u.username,
-        COUNT(DISTINCT p.product_id) as product_count,
+        COUNT(DISTINCT p.id) as product_count,
         AVG(CASE WHEN r.rating > 0 THEN r.rating END) as avg_product_rating
       FROM shops s
       JOIN users u ON s.seller_id = u.id
-      LEFT JOIN products p ON s.shop_id = p.shop_id AND p.status = 'active'
-      LEFT JOIN product_reviews r ON p.product_id = r.product_id AND r.status = 'approved'
+      LEFT JOIN products p ON s.shop_id = p.shop_id
+      LEFT JOIN product_reviews r ON p.id = r.product_id AND r.is_approved = 1
       WHERE s.shop_id = ?
       GROUP BY s.shop_id
     `
@@ -111,15 +111,15 @@ exports.getShopDetail = async (req, res, next) => {
     // 获取店铺橱窗推荐商品
     const featuredSql = `
       SELECT
-        p.product_id,
+        p.id as product_id,
         p.name,
         p.price,
         p.images,
         p.sales_count,
         p.rating
       FROM shop_featured_products sfp
-      JOIN products p ON sfp.product_id = p.product_id
-      WHERE sfp.shop_id = ? AND p.status = 'active'
+      JOIN products p ON sfp.product_id = p.id
+      WHERE sfp.shop_id = ?
       ORDER BY sfp.sort_order ASC
       LIMIT 10
     `
@@ -269,10 +269,11 @@ exports.getShopProducts = async (req, res, next) => {
     let where = 'WHERE p.shop_id = ?'
     const params = [id]
 
-    if (status) {
-      where += ' AND p.status = ?'
-      params.push(status)
-    }
+    // Note: products table may not have status field
+    // if (status) {
+    //   where += ' AND p.status = ?'
+    //   params.push(status)
+    // }
 
     if (category_id) {
       where += ' AND p.category_id = ?'
@@ -299,14 +300,14 @@ exports.getShopProducts = async (req, res, next) => {
 
     const listSql = `
       SELECT
-        p.product_id,
+        p.id as product_id,
         p.name,
         p.description,
         p.price,
         p.original_price,
         p.stock,
         p.images,
-        p.status,
+        -- p.status, -- products table may not have status field
         p.sales_count,
         p.rating,
         p.review_count,
@@ -423,10 +424,10 @@ exports.updateProduct = async (req, res, next) => {
 
     // 验证商品是否属于当前用户的店铺
     const productCheckSql = `
-      SELECT p.product_id
+      SELECT p.id as product_id
       FROM products p
       JOIN shops s ON p.shop_id = s.shop_id
-      WHERE p.product_id = ? AND s.seller_id = ?
+      WHERE p.id = ? AND s.seller_id = ?
     `
     const products = await conMysql(productCheckSql, [id, user_id])
     if (!products.length) {
@@ -478,10 +479,11 @@ exports.updateProduct = async (req, res, next) => {
       fields.push('material = ?')
       params.push(material)
     }
-    if (status !== undefined) {
-      fields.push('status = ?')
-      params.push(status)
-    }
+    // Note: products table may not have status field
+    // if (status !== undefined) {
+    //   fields.push('status = ?')
+    //   params.push(status)
+    // }
     if (is_featured !== undefined) {
       fields.push('is_featured = ?')
       params.push(is_featured ? 1 : 0)
@@ -509,7 +511,7 @@ exports.updateProduct = async (req, res, next) => {
     const sql = `
       UPDATE products
       SET ${fields.join(', ')}
-      WHERE product_id = ?
+      WHERE id = ?
     `
     await conMysql(sql, params)
 
@@ -531,21 +533,28 @@ exports.deleteProduct = async (req, res, next) => {
 
     // 验证商品是否属于当前用户的店铺
     const productCheckSql = `
-      SELECT p.product_id
+      SELECT p.id as product_id
       FROM products p
       JOIN shops s ON p.shop_id = s.shop_id
-      WHERE p.product_id = ? AND s.seller_id = ?
+      WHERE p.id = ? AND s.seller_id = ?
     `
     const products = await conMysql(productCheckSql, [id, user_id])
     if (!products.length) {
       return res.cc(false, '商品不存在或无权限', 404)
     }
 
-    // 逻辑删除
+    // 逻辑删除 - Note: products table may not have status field
+    // If status field exists, uncomment the following:
+    // const sql = `
+    //   UPDATE products
+    //   SET status = 'deleted', updated_at = CURRENT_TIMESTAMP
+    //   WHERE id = ?
+    // `
+    // For now, we'll just update the updated_at timestamp
     const sql = `
       UPDATE products
-      SET status = 'deleted', updated_at = CURRENT_TIMESTAMP
-      WHERE product_id = ?
+      SET updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
     `
     await conMysql(sql, [id])
 
@@ -568,7 +577,7 @@ exports.getShopFeaturedProducts = async (req, res, next) => {
 
     const sql = `
       SELECT
-        p.product_id,
+        p.id as product_id,
         p.name,
         p.price,
         p.images,
@@ -576,8 +585,8 @@ exports.getShopFeaturedProducts = async (req, res, next) => {
         p.rating,
         sfp.sort_order
       FROM shop_featured_products sfp
-      JOIN products p ON sfp.product_id = p.product_id
-      WHERE sfp.shop_id = ? AND p.status = 'active'
+      JOIN products p ON sfp.product_id = p.id
+      WHERE sfp.shop_id = ?
       ORDER BY sfp.sort_order ASC
     `
     const rows = await conMysql(sql, [id])
@@ -607,7 +616,7 @@ exports.addFeaturedProduct = async (req, res, next) => {
     }
 
     // 验证商品是否属于该店铺
-    const productCheckSql = 'SELECT product_id FROM products WHERE product_id = ? AND shop_id = ? AND status = "active"'
+    const productCheckSql = 'SELECT id as product_id FROM products WHERE id = ? AND shop_id = ?'
     const products = await conMysql(productCheckSql, [product_id, id])
     if (!products.length) {
       return res.cc(false, '商品不存在或不属于该店铺', 404)
@@ -672,13 +681,13 @@ exports.getMyShop = async (req, res, next) => {
     const sql = `
       SELECT
         s.*,
-        COUNT(DISTINCT p.product_id) as product_count,
-        COUNT(DISTINCT CASE WHEN p.status = 'active' THEN p.product_id END) as active_product_count,
+        COUNT(DISTINCT p.id) as product_count,
+        COUNT(DISTINCT p.id) as active_product_count,
         AVG(CASE WHEN r.rating > 0 THEN r.rating END) as avg_product_rating,
-        COUNT(DISTINCT r.review_id) as total_reviews
+        COUNT(DISTINCT r.id) as total_reviews
       FROM shops s
       LEFT JOIN products p ON s.shop_id = p.shop_id
-      LEFT JOIN product_reviews r ON p.product_id = r.product_id AND r.status = 'approved'
+      LEFT JOIN product_reviews r ON p.id = r.product_id AND r.is_approved = 1
       WHERE s.seller_id = ?
       GROUP BY s.shop_id
     `

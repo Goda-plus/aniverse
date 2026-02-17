@@ -349,6 +349,59 @@ exports.batchAddInterests = async (req, res, next) => {
 }
 
 /**
+ * 仅更新用户的喜欢分类（genres）列表
+ */
+exports.updateUserGenres = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { genres } = req.body
+
+    if (!Array.isArray(genres)) {
+      return res.cc(false, 'genres 必须是数组', 400)
+    }
+
+    // 规范化分类名称，去重
+    const normalizedGenres = [...new Set(
+      genres
+        .filter(g => typeof g === 'string')
+        .map(g => g.trim())
+        .filter(Boolean)
+    )]
+
+    // 如果最终没有有效的分类，允许清空
+    const [userInterest] = await conMysql(
+      'SELECT id FROM user_interests WHERE user_id = ?',
+      [user_id]
+    )
+
+    if (userInterest) {
+      // 更新现有记录的 genre 字段
+      const sql = `
+        UPDATE user_interests
+        SET genre = ?, updated_at = NOW()
+        WHERE user_id = ?
+      `
+      await conMysql(sql, [JSON.stringify(normalizedGenres), user_id])
+    } else {
+      // 如果没有记录，则创建一条仅包含 genres 的记录
+      const insertSql = `
+        INSERT INTO user_interests (user_id, tags, genre, weight, source)
+        VALUES (?, ?, ?, 1.0, 'manual')
+      `
+      await conMysql(insertSql, [
+        user_id,
+        JSON.stringify([]),
+        JSON.stringify(normalizedGenres)
+      ])
+    }
+
+    res.cc(true, '更新喜欢的分类成功', 200, { genres: normalizedGenres })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * 获取推荐标签（基于用户行为自动推荐）
  */
 exports.getRecommendedTags = async (req, res, next) => {

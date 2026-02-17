@@ -64,6 +64,8 @@ app.use(
       path: [
         /^\/api\/user\/login$/,
         /^\/api\/user\/register$/,
+        // 管理员登录接口（公开）
+        /^\/api\/admin\/auth\/login$/,
         /^\/api\/category\/list$/,
         /^\/api\/genre\/list$/,
         /^\/api\/genre\/subreddits$/,
@@ -222,6 +224,10 @@ const userInterestRouter = require('./router/userInterest')
 const userRecommendationRouter = require('./router/userRecommendation')
 app.use('/api/user', userInterestRouter)
 app.use('/api/user', userRecommendationRouter)
+
+// 管理员路由
+const adminRouter = require('./router/admin')
+app.use('/api/admin', adminRouter)
 
 
 

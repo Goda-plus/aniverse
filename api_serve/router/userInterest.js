@@ -12,6 +12,9 @@ router.post('/interests', authenticateToken, userInterestHandler.addUserInterest
 // 批量添加兴趣标签
 router.post('/interests/batch', authenticateToken, userInterestHandler.batchAddInterests)
 
+// 更新用户喜欢的分类（genres）
+router.put('/interests/genres', authenticateToken, userInterestHandler.updateUserGenres)
+
 // 删除兴趣标签
 router.delete('/interests/:tag_id', authenticateToken, userInterestHandler.removeUserInterest)
 
