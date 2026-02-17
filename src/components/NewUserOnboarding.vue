@@ -380,8 +380,19 @@
 
       // 保存兴趣标签（可选）
       if (form.tagIds.length > 0) {
+        // 后端期望的 tags 字段同时包含 id 和标签名
+        const selectedTags = form.tagIds.map(id => {
+          const tag = tagOptions.value.find(t => t.id === id)
+          return {
+            id,
+            name: tag ? tag.name : ''
+          }
+        })
+
         await batchAddInterests({
+          // 兼容后端原有的 tag_ids 字段，同时额外传 tags（包含 id 和 name）
           tag_ids: form.tagIds,
+          tags: selectedTags,
           genres: form.genres
         })
       }
