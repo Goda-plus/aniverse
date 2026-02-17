@@ -4,12 +4,24 @@
       <div class="mall-page">
         <!-- 页面标题 -->
         <div class="page-header">
-          <h1 class="page-title">
-            周边商城
-          </h1>
-          <p class="page-description">
-            发现你喜欢的动漫周边商品
-          </p>
+          <div class="header-content">
+            <div class="header-text">
+              <h1 class="page-title">
+                周边商城
+              </h1>
+              <p class="page-description">
+                发现你喜欢的动漫周边商品
+              </p>
+            </div>
+            <el-button
+              type="primary"
+              size="large"
+              @click="showRegistrationDialog = true"
+            >
+              <el-icon><DocumentAdd /></el-icon>
+              入驻商城
+            </el-button>
+          </div>
         </div>
 
         <!-- 搜索和筛选栏 -->
@@ -97,6 +109,12 @@
           />
         </div>
       </div>
+
+      <!-- 入驻商城对话框 -->
+      <ShopRegistration
+        v-model="showRegistrationDialog"
+        @success="handleRegistrationSuccess"
+      />
     </template>
   </MainContentLayout>
 </template>
@@ -105,9 +123,10 @@
   import { ref, onMounted, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import { Search } from '@element-plus/icons-vue'
+  import { Search, DocumentAdd } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import ProductCard from '@/components/ProductCard.vue'
+  import ShopRegistration from '@/components/ShopRegistration.vue'
   import { listProducts, listCategories } from '@/axios/mall'
 
   const route = useRoute()
@@ -122,6 +141,7 @@
   const pageSize = ref(12)
   const searchKeyword = ref('')
   const selectedCategoryId = ref(null)
+  const showRegistrationDialog = ref(false)
 
   // 获取分类列表
   const fetchCategories = async () => {
@@ -201,6 +221,12 @@
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // 入驻成功回调
+  const handleRegistrationSuccess = (data) => {
+    ElMessage.success('恭喜您成功入驻商城！')
+    // 可以在这里刷新页面数据或执行其他操作
+  }
+
   // 初始化
   onMounted(() => {
     fetchCategories()
@@ -250,6 +276,17 @@
 
 .page-header {
   margin-bottom: 24px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.header-text {
+  flex: 1;
 }
 
 .page-title {

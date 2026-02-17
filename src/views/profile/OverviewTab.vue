@@ -40,9 +40,29 @@
 
           <!-- Genre Overview 面板 -->
           <div class="panel genre-overview-panel">
-            <h3 class="panel-title">
-              Genre Overview
-            </h3>
+            <div class="panel-header-with-action">
+              <h3 class="panel-title">
+                Genre Overview
+              </h3>
+              <div class="genre-actions">
+                <el-button
+                  type="primary"
+                  text
+                  size="small"
+                  @click="openEditGenres"
+                >
+                  编辑喜欢的分类
+                </el-button>
+                <el-button
+                  type="primary"
+                  text
+                  size="small"
+                  @click="openEditTags"
+                >
+                  编辑兴趣标签
+                </el-button>
+              </div>
+            </div>
             <div class="genre-label">
               喜欢的分类
             </div>
@@ -275,15 +295,127 @@
     </div>
   </div>
   <UserSettings v-model="showUserSettings" />
+  <!-- 编辑喜欢的分类对话框 -->
+  <el-dialog
+    v-model="editGenresVisible"
+    title="编辑喜欢的分类"
+    width="420px"
+    append-to-body
+  >
+    <div class="edit-genres-content">
+      <p class="edit-genres-tip">
+        选择你喜欢的番剧分类，这将影响首页推荐与同好匹配结果。
+      </p>
+      <el-form label-width="80px">
+        <el-form-item label="喜欢的分类">
+          <el-select
+            v-model="selectedGenres"
+            multiple
+            filterable
+            clearable
+            :loading="loadingGenres"
+            placeholder="选择你常看的番剧类型"
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="genre in genreOptions"
+              :key="genre.id || genre.name"
+              :label="genre.name"
+              :value="genre.name"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </div>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="editGenresVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="savingGenres"
+          @click="handleSaveGenres"
+        >
+          保存
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
+  <!-- 编辑兴趣标签对话框 -->
+  <el-dialog
+    v-model="editTagsVisible"
+    title="编辑兴趣标签"
+    width="480px"
+    append-to-body
+  >
+    <div class="edit-tags-content">
+      <p class="edit-tags-tip">
+        选择你感兴趣的主题标签，这将帮助系统为你推荐更合拍的内容与同好。
+      </p>
+      <el-form label-width="80px">
+        <el-form-item label="兴趣标签">
+          <el-select
+            v-model="selectedTagIds"
+            multiple
+            filterable
+            clearable
+            :loading="loadingTags"
+            placeholder="选择或搜索你感兴趣的标签"
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="tag in tagOptions"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <div v-if="userTags.length" class="current-tags-preview">
+        <span class="current-tags-label">当前标签：</span>
+        <div class="current-tags-list">
+          <el-tag
+            v-for="tag in userTags"
+            :key="getTagId(tag)"
+            size="small"
+            class="preview-tag"
+          >
+            {{ getTagName(tag) }}
+          </el-tag>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="editTagsVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="savingTags"
+          @click="handleSaveTags"
+        >
+          保存
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
   import { ref, reactive, onMounted, watch } from 'vue'
+  import { ElMessage } from 'element-plus'
   import { Heart, ArrowDown } from '@element-plus/icons-vue'
   import { useUserStore } from '@/stores/user'
   import UserSettings from '@/components/UserSettings.vue'
   import { getFavorite } from '@/axios/favorite'
   import { getUserActivities, getUserStatistics } from '@/axios/browse'
+  import { 
+    getUserInterests, 
+    updateUserGenres,
+    batchAddInterests,
+    removeUserInterest
+  } from '@/axios/userInterest'
+  import { getAllGenres } from '@/axios/genre'
+  import { getTagsList } from '@/axios/tags'
 
   const activityFilter = ref('all')
   const showUserSettings = ref(false)
@@ -315,13 +447,25 @@
     return days
   }
 
-  // 分类数据
-  const genres = reactive([
-    { name: 'Fantasy', entries: 316, progress: 100, color: '#4caf50' },
-    { name: 'Action', entries: 314, progress: 99, color: '#2196f3' },
-    { name: 'Comedy', entries: 223, progress: 71, color: '#9c27b0' },
-    { name: 'Adventure', entries: 214, progress: 68, color: '#e91e63' }
-  ])
+  // 分类数据（喜欢的分类）
+  const genres = ref([])
+
+  // 兴趣标签数据
+  const userTags = ref([])
+
+  // 编辑喜欢的分类对话框状态
+  const editGenresVisible = ref(false)
+  const selectedGenres = ref([])
+  const genreOptions = ref([])
+  const loadingGenres = ref(false)
+  const savingGenres = ref(false)
+
+  // 编辑兴趣标签对话框状态
+  const editTagsVisible = ref(false)
+  const selectedTagIds = ref([])
+  const tagOptions = ref([])
+  const loadingTags = ref(false)
+  const savingTags = ref(false)
 
   // 收藏的动漫和角色
   const collectedAnime = reactive([])
@@ -347,6 +491,142 @@
   const editPersonalSignature = () => {
     showUserSettings.value = true
   }
+
+  // 将后端返回的分类名称转换成展示用数据
+  const buildGenreStats = (genreNames) => {
+    if (!Array.isArray(genreNames) || genreNames.length === 0) return []
+    const count = genreNames.length
+    return genreNames.map((name, index) => {
+      const progress = Math.round(((count - index) / count) * 100)
+      return {
+        name,
+        entries: '',
+        progress
+      }
+    })
+  }
+
+  // 获取用户喜欢的分类和兴趣标签
+  const fetchUserGenresAndTags = async () => {
+    try {
+      const res = await getUserInterests()
+      if (res.success) {
+        const userGenres = res.data?.genres || []
+        genres.value = buildGenreStats(userGenres)
+        userTags.value = res.data?.interests || []
+      }
+    } catch (error) {
+      console.error('获取用户喜欢的分类失败:', error)
+    }
+  }
+
+  // 加载所有可选分类
+  const loadAllGenres = async () => {
+    loadingGenres.value = true
+    try {
+      const res = await getAllGenres()
+      if (res.success) {
+        genreOptions.value = Array.isArray(res.data)
+          ? res.data
+          : (res.data?.genres || [])
+      }
+    } catch (error) {
+      console.error('获取分类列表失败:', error)
+    } finally {
+      loadingGenres.value = false
+    }
+  }
+
+  // 打开编辑喜欢的分类对话框
+  const openEditGenres = async () => {
+    editGenresVisible.value = true
+    // 初始化已选分类
+    selectedGenres.value = (genres.value || []).map(g => g.name)
+    if (genreOptions.value.length === 0) {
+      await loadAllGenres()
+    }
+  }
+
+  // 保存喜欢的分类
+  const handleSaveGenres = async () => {
+    try {
+      savingGenres.value = true
+      await updateUserGenres({
+        genres: selectedGenres.value
+      })
+      ElMessage.success('已更新喜欢的分类')
+      genres.value = buildGenreStats(selectedGenres.value)
+      editGenresVisible.value = false
+    } catch (error) {
+      console.error('更新喜欢的分类失败:', error)
+      ElMessage.error(error.response?.data?.message || '更新失败，请稍后重试')
+    } finally {
+      savingGenres.value = false
+    }
+  }
+
+  // 加载所有可选标签
+  const loadAllTags = async () => {
+    loadingTags.value = true
+    try {
+      const res = await getTagsList({ page: 1, pageSize: 100 })
+      if (res.success) {
+        const list = Array.isArray(res.data)
+          ? res.data
+          : (res.data?.list || [])
+        tagOptions.value = list
+      }
+    } catch (error) {
+      console.error('获取标签列表失败:', error)
+    } finally {
+      loadingTags.value = false
+    }
+  }
+
+  // 打开编辑兴趣标签对话框
+  const openEditTags = async () => {
+    editTagsVisible.value = true
+    selectedTagIds.value = (userTags.value || []).map(t => getTagId(t))
+    if (tagOptions.value.length === 0) {
+      await loadAllTags()
+    }
+  }
+
+  // 保存兴趣标签
+  const handleSaveTags = async () => {
+    const currentIds = (userTags.value || []).map(t => getTagId(t))
+    const toAdd = selectedTagIds.value.filter(id => !currentIds.includes(id))
+    const toRemove = currentIds.filter(id => !selectedTagIds.value.includes(id))
+
+    if (!toAdd.length && !toRemove.length) {
+      editTagsVisible.value = false
+      return
+    }
+
+    try {
+      savingTags.value = true
+      // 批量添加新标签
+      if (toAdd.length) {
+        await batchAddInterests({ tag_ids: toAdd })
+      }
+      // 逐个删除取消的标签
+      for (const id of toRemove) {
+        await removeUserInterest(id)
+      }
+      ElMessage.success('已更新兴趣标签')
+      await fetchUserGenresAndTags()
+      editTagsVisible.value = false
+    } catch (error) {
+      console.error('更新兴趣标签失败:', error)
+      ElMessage.error(error.response?.data?.message || '更新失败，请稍后重试')
+    } finally {
+      savingTags.value = false
+    }
+  }
+
+  // 辅助：兼容不同字段命名
+  const getTagId = (tag) => tag?.id ?? tag?.tag_id
+  const getTagName = (tag) => tag?.name ?? tag?.tag_name ?? ''
 
   // 切换动漫展开状态
   const toggleAnimeExpanded = () => {
@@ -457,6 +737,7 @@
 
   onMounted(() => {
     activityDays.value = generateActivityDays()
+    fetchUserGenresAndTags()
     fetchUserFavoriteAnime()
     fetchUserFavoriteCharacters()
     fetchUserActivities()
@@ -564,6 +845,13 @@
 }
 
 /* Genre Overview 面板 */
+.panel-header-with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 .genre-label {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
@@ -600,6 +888,83 @@
 .genre-tag.genre-adventure {
   background: rgba(233, 30, 99, 0.2);
   border-left: 4px solid #e91e63;
+}
+
+.genre-tag.genre-drama {
+  background: rgba(255, 152, 0, 0.2);
+  border-left: 4px solid #ff9800;
+}
+
+.genre-tag.genre-romance {
+  background: rgba(255, 64, 129, 0.2);
+  border-left: 4px solid #ff4081;
+}
+
+.genre-tag.genre-sci-fi {
+  background: rgba(0, 188, 212, 0.2);
+  border-left: 4px solid #00bcd4;
+}
+
+.genre-tag.genre-supernatural {
+  background: rgba(103, 58, 183, 0.2);
+  border-left: 4px solid #673ab7;
+}
+
+.genre-tag.genre-ecchi {
+  background: rgba(244, 67, 54, 0.2);
+  border-left: 4px solid #f44336;
+}
+
+/* "Slice of Life" -> class "genre-slice" when using name.toLowerCase() */
+.genre-tag.genre-slice {
+  background: rgba(0, 150, 136, 0.2);
+  border-left: 4px solid #009688;
+}
+
+.genre-tag.genre-psychological {
+  background: rgba(63, 81, 181, 0.2);
+  border-left: 4px solid #3f51b5;
+}
+
+.genre-tag.genre-thriller {
+  background: rgba(255, 87, 34, 0.2);
+  border-left: 4px solid #ff5722;
+}
+
+.genre-tag.genre-mystery {
+  background: rgba(96, 125, 139, 0.2);
+  border-left: 4px solid #607d8b;
+}
+
+.genre-tag.genre-sports {
+  background: rgba(205, 220, 57, 0.2);
+  border-left: 4px solid #cddc39;
+}
+
+.genre-tag.genre-horror {
+  background: rgba(183, 28, 28, 0.2);
+  border-left: 4px solid #b71c1c;
+}
+
+/* "Mahou Shoujo" -> class "genre-mahou" when using name.toLowerCase() */
+.genre-tag.genre-mahou {
+  background: rgba(255, 111, 0, 0.2);
+  border-left: 4px solid #ff6f00;
+}
+
+.genre-tag.genre-music {
+  background: rgba(139, 195, 74, 0.2);
+  border-left: 4px solid #8bc34a;
+}
+
+.genre-tag.genre-mecha {
+  background: rgba(121, 85, 72, 0.2);
+  border-left: 4px solid #795548;
+}
+
+.genre-tag.genre-hentai {
+  background: rgba(136, 14, 79, 0.2);
+  border-left: 4px solid #880e4f;
 }
 
 .genre-name {
@@ -643,6 +1008,76 @@
 
 .genre-adventure .genre-progress-fill {
   background: #e91e63;
+}
+
+.genre-drama .genre-progress-fill {
+  background: #ff9800;
+}
+
+.genre-romance .genre-progress-fill {
+  background: #ff4081;
+}
+
+.genre-sci-fi .genre-progress-fill {
+  background: #00bcd4;
+}
+
+.genre-supernatural .genre-progress-fill {
+  background: #673ab7;
+}
+
+.genre-ecchi .genre-progress-fill {
+  background: #f44336;
+}
+
+.genre-slice .genre-progress-fill {
+  background: #009688;
+}
+
+.genre-psychological .genre-progress-fill {
+  background: #3f51b5;
+}
+
+.genre-thriller .genre-progress-fill {
+  background: #ff5722;
+}
+
+.genre-mystery .genre-progress-fill {
+  background: #607d8b;
+}
+
+.genre-sports .genre-progress-fill {
+  background: #cddc39;
+}
+
+.genre-horror .genre-progress-fill {
+  background: #b71c1c;
+}
+
+.genre-mahou .genre-progress-fill {
+  background: #ff6f00;
+}
+
+.genre-music .genre-progress-fill {
+  background: #8bc34a;
+}
+
+.genre-mecha .genre-progress-fill {
+  background: #795548;
+}
+
+.genre-hentai .genre-progress-fill {
+  background: #880e4f;
+}
+
+.edit-genres-content {
+  padding-top: 4px;
+}
+
+.edit-genres-tip {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-bottom: 16px;
 }
 
 /* Anime 面板 */
