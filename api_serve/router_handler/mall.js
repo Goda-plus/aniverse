@@ -166,22 +166,22 @@ exports.getCart = async (req, res, next) => {
     const user_id = req.user.id
     const sql = `
       SELECT
-        sc.cart_id,
+        sc.id,
         sc.product_id,
         sc.quantity,
         sc.selected,
-        sc.added_at,
+        sc.created_at,
         p.name,
         p.price,
-        JSON_EXTRACT(p.images, '$[0]') as cover_image,
+        p.cover_image,
         p.stock,
         s.shop_name,
         s.shop_id
-      FROM shopping_cart sc
+      FROM carts sc
       JOIN products p ON sc.product_id = p.id
       LEFT JOIN shops s ON p.shop_id = s.shop_id
       WHERE sc.user_id = ?
-      ORDER BY sc.added_at DESC
+      ORDER BY sc.created_at DESC
     `
     const rows = await conMysql(sql, [user_id])
     res.cc(true, '获取购物车成功', 200, rows)
@@ -201,7 +201,7 @@ exports.addToCart = async (req, res, next) => {
     }
 
     const sql = `
-      INSERT INTO shopping_cart (user_id, product_id, quantity)
+      INSERT INTO carts (user_id, product_id, quantity)
       VALUES (?, ?, ?)
       ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)
     `
@@ -240,7 +240,7 @@ exports.updateCartItem = async (req, res, next) => {
     }
 
     const sql = `
-      UPDATE shopping_cart
+      UPDATE carts
       SET ${fields.join(', ')}
       WHERE user_id = ? AND product_id = ?
     `
@@ -268,7 +268,7 @@ exports.removeCartItem = async (req, res, next) => {
     }
 
     const sql = `
-      DELETE FROM shopping_cart
+      DELETE FROM carts
       WHERE user_id = ? AND product_id = ?
     `
     const result = await conMysql(sql, [user_id, product_id])
@@ -350,7 +350,7 @@ exports.getOrderDetail = async (req, res, next) => {
         a.detail_address,
         a.postal_code
       FROM orders o
-      JOIN shipping_addresses a ON o.shipping_address->>'$.address_id' = a.address_id
+      JOIN shipping_addresses a ON o.address_id = a.address_id
       WHERE o.id = ? AND o.user_id = ?
     `
     const orders = await conMysql(orderSql, [id, user_id])
@@ -466,7 +466,7 @@ exports.updateAddress = async (req, res, next) => {
     }
 
     // 验证地址是否属于当前用户
-    const checkSql = 'SELECT id FROM addresses WHERE id = ? AND user_id = ?'
+    const checkSql = 'SELECT address_id FROM shipping_addresses WHERE address_id = ? AND user_id = ?'
     const checkResult = await conMysql(checkSql, [id, user_id])
     if (!checkResult.length) {
       return res.cc(false, '地址不存在或无权限', 404)
@@ -475,7 +475,7 @@ exports.updateAddress = async (req, res, next) => {
     // 如果设置为默认地址，先取消其他默认地址
     if (is_default) {
       await conMysql(
-        'UPDATE addresses SET is_default = 0 WHERE user_id = ? AND id != ?',
+        'UPDATE shipping_addresses SET is_default = 0 WHERE user_id = ? AND address_id != ?',
         [user_id, id]
       )
     }
@@ -524,9 +524,9 @@ exports.updateAddress = async (req, res, next) => {
     params.push(id, user_id)
 
     const sql = `
-      UPDATE addresses
+      UPDATE shipping_addresses
       SET ${fields.join(', ')}
-      WHERE id = ? AND user_id = ?
+      WHERE address_id = ? AND user_id = ?
     `
     await conMysql(sql, params)
 
@@ -546,7 +546,7 @@ exports.deleteAddress = async (req, res, next) => {
       return res.cc(false, '缺少地址ID', 400)
     }
 
-    const sql = 'DELETE FROM addresses WHERE id = ? AND user_id = ?'
+    const sql = 'DELETE FROM shipping_addresses WHERE address_id = ? AND user_id = ?'
     const result = await conMysql(sql, [id, user_id])
 
     if (result.affectedRows === 0) {
@@ -572,7 +572,7 @@ exports.createOrder = async (req, res, next) => {
     }
 
     // 验证地址是否属于当前用户
-    const addressSql = 'SELECT * FROM addresses WHERE id = ? AND user_id = ?'
+    const addressSql = 'SELECT * FROM shipping_addresses WHERE address_id = ? AND user_id = ?'
     const addresses = await conMysql(addressSql, [address_id, user_id])
     if (!addresses.length) {
       return res.cc(false, '地址不存在或无权限', 404)

@@ -22,6 +22,22 @@ router.delete('/cart/remove', mallHandler.removeCartItem)
 router.get('/orders', mallHandler.listOrders)
 router.get('/orders/:id', mallHandler.getOrderDetail)
 
+// 地址管理（需要登录）
+router.get('/addresses', mallHandler.listAddresses)
+router.post('/addresses', mallHandler.addAddress)
+router.put('/addresses/:id', mallHandler.updateAddress)
+router.delete('/addresses/:id', mallHandler.deleteAddress)
+
+// 订单操作（需要登录）
+router.post('/orders', mallHandler.createOrder)
+router.post('/orders/:id/pay', mallHandler.payOrder)
+router.post('/orders/:id/confirm', mallHandler.confirmOrder)
+router.post('/orders/:id/cancel', mallHandler.cancelOrder)
+
+// 商品评价
+router.get('/reviews', mallHandler.listProductReviews)
+router.post('/reviews', mallHandler.addProductReview)
+
 module.exports = router
 
 

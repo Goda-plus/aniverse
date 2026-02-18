@@ -42,6 +42,7 @@ router.post('/comments', crowdfundingHandler.addComment)
 
 // 管理功能（需要登录）
 router.get('/my-projects', crowdfundingHandler.getMyProjects)
-router.get('/projects/:project_id/backers', crowdfundingHandler.getProjectBackers)
+// 获取项目支持者列表（公开接口，支持可选认证）
+router.get('/projects/:project_id/backers', optionalAuth, crowdfundingHandler.getProjectBackers)
 
 module.exports = router

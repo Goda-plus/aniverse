@@ -906,7 +906,6 @@ exports.getMyProjects = async (req, res, next) => {
 // 获取项目支持者列表（项目创建者可见）
 exports.getProjectBackers = async (req, res, next) => {
   try {
-    const user_id = req.user.id
     const { project_id } = req.params
     const { page, pageSize, offset } = parsePagination(req)
 
@@ -914,11 +913,11 @@ exports.getProjectBackers = async (req, res, next) => {
       return res.cc(false, '缺少项目ID', 400)
     }
 
-    // 验证项目所有权
-    const checkSql = 'SELECT id FROM crowdfunding_projects WHERE id = ? AND creator_id = ?'
-    const projects = await conMysql(checkSql, [project_id, user_id])
+    // 验证项目是否存在
+    const checkSql = 'SELECT id FROM crowdfunding_projects WHERE id = ?'
+    const projects = await conMysql(checkSql, [project_id])
     if (!projects.length) {
-      return res.cc(false, '项目不存在或无权限', 404)
+      return res.cc(false, '项目不存在', 404)
     }
 
     const countSql = `

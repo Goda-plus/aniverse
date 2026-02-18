@@ -60,6 +60,25 @@ exports.login = async (req, res, next) => {
     }
 
     const user = result[0]
+
+    // 封禁校验（若迁移未执行，user_bans 表不存在会被忽略）
+    try {
+      const banRows = await conMysql(
+        'SELECT status, banned_until FROM user_bans WHERE user_id = ? LIMIT 1',
+        [user.id]
+      )
+      if (banRows && banRows.length > 0 && banRows[0].status === 'banned') {
+        const until = banRows[0].banned_until ? new Date(banRows[0].banned_until) : null
+        if (!until || (until && !Number.isNaN(until.getTime()) && until.getTime() > Date.now())) {
+          return res.cc(false, '账号已被封禁', 403, { banned_until: banRows[0].banned_until || null })
+        }
+        // 到期自动解封
+        await conMysql('UPDATE user_bans SET status = ?, updated_at = NOW() WHERE user_id = ?', ['active', user.id])
+      }
+    } catch (e) {
+      if (!(e && e.code === 'ER_NO_SUCH_TABLE')) throw e
+    }
+
     const isMatch = bcrypt.compareSync(password, user.password_hash)
     if (!isMatch) {
       return res.cc(false, '密码错误', 401)

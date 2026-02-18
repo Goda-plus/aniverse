@@ -3,6 +3,75 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const config = require('../config')
 
+// 管理员注册（公开接口）
+exports.register = async (req, res) => {
+  try {
+    const { username, password } = req.body
+
+    if (!username || !password) {
+      return res.cc(false, '用户名和密码不能为空', 400)
+    }
+
+    if (password.length < 6) {
+      return res.cc(false, '密码长度不能少于6位', 400)
+    }
+
+    // 检查用户名是否已存在
+    const checkSql = 'SELECT id FROM admins WHERE username = ?'
+    const checkResult = await db.conMysql(checkSql, [username])
+
+    if (checkResult.length > 0) {
+      return res.cc(false, '用户名已存在', 400)
+    }
+
+    // 查找默认角色（普通管理员角色，如果没有则使用第一个角色）
+    let roleSql = `
+      SELECT id FROM admin_roles 
+      WHERE name = '普通管理员' 
+      LIMIT 1
+    `
+    let roleResult = await db.conMysql(roleSql, [])
+
+    // 如果没有普通管理员角色，则查找第一个角色
+    if (roleResult.length === 0) {
+      roleSql = 'SELECT id FROM admin_roles ORDER BY id ASC LIMIT 1'
+      roleResult = await db.conMysql(roleSql, [])
+    }
+
+    // 如果仍然没有角色，返回错误
+    if (roleResult.length === 0) {
+      return res.cc(false, '系统中没有可用的角色，请联系管理员', 400)
+    }
+
+    const roleId = roleResult[0].id
+
+    // 加密密码
+    const hashedPassword = bcrypt.hashSync(password, 10)
+
+    // 插入管理员（默认状态为active）
+    const insertSql = `
+      INSERT INTO admins (username, password, role_id, status)
+      VALUES (?, ?, ?, 'active')
+    `
+    const insertResult = await db.conMysql(insertSql, [username, hashedPassword, roleId])
+
+    // 获取客户端IP
+    const clientIp = req.headers['x-forwarded-for'] || 
+                     req.headers['x-real-ip'] || 
+                     req.connection.remoteAddress || 
+                     req.socket.remoteAddress ||
+                     (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+                     'unknown'
+
+  
+
+    res.cc(true, '注册成功', 200, { id: insertResult.insertId, username })
+  } catch (err) {
+    console.error('管理员注册错误:', err)
+    res.cc(false, '注册失败', 500)
+  }
+}
+
 // 管理员登录
 exports.login = async (req, res) => {
   try {
