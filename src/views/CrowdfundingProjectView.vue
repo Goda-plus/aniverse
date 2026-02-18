@@ -60,15 +60,15 @@
             分享项目
           </div>
           <div class="share-buttons">
-            <el-button type="primary" plain @click="shareToWechat">
+            <el-button type="info" @click="shareToWechat">
               <el-icon><Share /></el-icon>
               微信分享
             </el-button>
-            <el-button plain @click="copyLink">
+            <el-button type="info" @click="copyLink">
               <el-icon><Link /></el-icon>
               复制链接
             </el-button>
-            <el-button plain @click="shareToWeibo">
+            <el-button type="info" @click="shareToWeibo">
               <el-icon><ChatDotRound /></el-icon>
               微博分享
             </el-button>
@@ -294,6 +294,10 @@
 
 .share-buttons .el-button {
   justify-content: flex-start;
+}
+
+.share-buttons :deep(.el-button + .el-button) {
+  margin-left: 0 !important;
 }
 
 .related-projects {

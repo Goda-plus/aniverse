@@ -110,12 +110,12 @@
             编辑项目
           </el-button>
 
-          <el-button :type="isFavorited ? 'warning' : 'default'" @click="toggleFavorite">
+          <el-button :type="isFavorited ? 'warning' : 'info'" size="large" @click="toggleFavorite">
             <el-icon><Star /></el-icon>
             {{ isFavorited ? '已收藏' : '收藏项目' }}
           </el-button>
 
-          <el-button @click="shareProject">
+          <el-button type="info" size="large" @click="shareProject">
             <el-icon><Share /></el-icon>
             分享
           </el-button>
@@ -1328,7 +1328,10 @@
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
-
+/* 覆盖 Element Plus 默认的按钮间距 - 使用深度选择器 */
+.project-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
 /* 响应式设计 */
 @media (max-width: 768px) {
   .project-header {

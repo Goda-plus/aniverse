@@ -26,7 +26,7 @@
                       />
                     </span>
                     <span class="sales">销量 {{ shop.total_sales || 0 }}</span>
-                    <span class="level" :class="`level-${shop.level}`">{{ getLevelText(shop.level) }}</span>
+                    <span class="level" :class="`level-${shop?.level || 'default'}`">{{ getLevelText(shop?.level) }}</span>
                   </div>
                   <p v-if="shop.description" class="shop-description">
                     {{ shop.description }}
@@ -70,7 +70,7 @@
         </div>
 
         <!-- 店铺内容区域 -->
-        <div class="shop-content">
+        <div v-if="shop" class="shop-content">
           <!-- 首页标签页 -->
           <div v-if="activeTab === 'home'" class="tab-content">
             <!-- 橱窗推荐 -->
@@ -116,21 +116,21 @@
               <div class="shop-info-content">
                 <div class="info-item">
                   <span class="label">店铺等级：</span>
-                  <span class="value">{{ getLevelText(shop.level) }}</span>
+                  <span class="value">{{ getLevelText(shop?.level) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">开店时间：</span>
-                  <span class="value">{{ formatDate(shop.created_at) }}</span>
+                  <span class="value">{{ formatDate(shop?.created_at) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">商品数量：</span>
-                  <span class="value">{{ shop.product_count || 0 }} 件</span>
+                  <span class="value">{{ shop?.product_count || 0 }} 件</span>
                 </div>
                 <div class="info-item">
                   <span class="label">累计销量：</span>
-                  <span class="value">{{ shop.total_sales || 0 }} 件</span>
+                  <span class="value">{{ shop?.total_sales || 0 }} 件</span>
                 </div>
-                <div v-if="shop.announcement" class="info-item">
+                <div v-if="shop?.announcement" class="info-item">
                   <span class="label">店铺公告：</span>
                   <span class="value">{{ shop.announcement }}</span>
                 </div>
@@ -203,7 +203,7 @@
             <div class="contact-section">
               <h3>联系我们</h3>
               <p>如有问题请通过以下方式联系：</p>
-              <div v-if="shop.contact_info" class="contact-info">
+              <div v-if="shop?.contact_info" class="contact-info">
                 <div v-for="(value, key) in shop.contact_info" :key="key" class="contact-item">
                   <span class="contact-label">{{ getContactLabel(key) }}：</span>
                   <span class="contact-value">{{ value }}</span>
@@ -331,6 +331,7 @@
   }
 
   const getLevelText = (level) => {
+    if (!level) return '普通店铺'
     const levelMap = {
       bronze: '青铜店铺',
       silver: '白银店铺',

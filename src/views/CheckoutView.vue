@@ -215,9 +215,21 @@
   // 选择地址
   const handleSelectAddress = async () => {
     if (addressManageRef.value) {
-      await addressManageRef.value.fetchAddresses()
+      // 获取用户在对话框中选中的地址
+      const selected = addressManageRef.value.getSelectedAddress()
+      if (selected) {
+        selectedAddress.value = selected
+        console.log('更新选中地址:', selected)
+        // 同时更新地址列表，但不自动选择（保持用户的选择）
+        const response = await listAddresses()
+        if (response.code === 200) {
+          addresses.value = response.data || []
+        }
+      } else {
+        ElMessage.warning('请先选择一个地址')
+        return
+      }
     }
-    await fetchAddresses()
     showAddressDialog.value = false
   }
 
@@ -244,7 +256,7 @@
       }))
 
       const response = await createOrder({
-        address_id: selectedAddress.value.id,
+        address_id: selectedAddress.value.address_id,
         payment_method: '模拟支付',
         cart_items
       })
@@ -272,7 +284,6 @@
 .checkout-page {
   padding: 20px 24px;
   min-height: 100vh;
-  background: var(--bg-primary);
   transition: background-color 0.3s ease;
   max-width: 1200px;
   margin: 0 auto;
@@ -286,7 +297,7 @@
   font-size: 28px;
   font-weight: 700;
   margin: 0;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .loading-container {
@@ -300,9 +311,10 @@
 }
 
 .checkout-section {
-  background: var(--el-bg-color);
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 24px;
+  color: var(--text-primary);
   margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -311,7 +323,7 @@
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 20px 0;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .address-card {
@@ -319,9 +331,10 @@
   justify-content: space-between;
   align-items: flex-start;
   padding: 16px;
-  background: var(--el-fill-color-light);
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
   border-radius: 8px;
-  border: 1px solid var(--el-border-color-light);
+  border: 1px solid var(--card-border-color);
 }
 
 .address-info {
@@ -340,17 +353,17 @@
 .recipient-name {
   font-size: 16px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .recipient-phone {
   font-size: 14px;
-  color: var(--el-text-color-regular);
+  color: var(--text-secondary);
 }
 
 .address-detail {
   font-size: 14px;
-  color: var(--el-text-color-regular);
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
@@ -369,8 +382,9 @@
   grid-template-columns: 80px 1fr auto auto;
   gap: 16px;
   align-items: center;
+  color: var(--text-primary);
   padding: 16px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-tertiary);
   border-radius: 8px;
 }
 
@@ -389,7 +403,7 @@
 .item-name {
   font-size: 16px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
 }
 
 .item-price {
@@ -409,7 +423,8 @@
 }
 
 .checkout-summary {
-  background: var(--el-bg-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -435,7 +450,7 @@
 }
 
 .summary-row .value {
-  color: var(--el-text-color-primary);
+  color: var(--text-primary);
   font-weight: 500;
 }
 

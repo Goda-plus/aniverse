@@ -267,7 +267,6 @@
 .shopping-cart-page {
   padding: 20px 24px;
   min-height: 100vh;
-  background: var(--bg-primary);
   transition: background-color 0.3s ease;
   max-width: 1200px;
   margin: 0 auto;
@@ -289,7 +288,7 @@
 }
 
 .cart-content {
-  background: var(--el-bg-color);
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -317,7 +316,7 @@
   gap: 16px;
   align-items: center;
   padding: 16px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-tertiary);
   border-radius: 8px;
   transition: background-color 0.3s;
 }
@@ -375,7 +374,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-tertiary);
   border-radius: 8px;
 }
 

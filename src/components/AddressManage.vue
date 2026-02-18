@@ -14,9 +14,13 @@
     <div v-if="addresses.length > 0" class="addresses-list">
       <div
         v-for="address in addresses"
-        :key="address.id"
+        :key="address.address_id"
         class="address-item"
-        :class="{ 'is-default': address.is_default }"
+        :class="{ 
+          'is-default': address.is_default,
+          'is-selected': selectedAddressId === address.address_id || selectedAddressId == address.address_id
+        }"
+        @click="handleSelectAddress(address)"
       >
         <el-descriptions
           class="address-descriptions descriptions-theme"
@@ -32,32 +36,39 @@
             padding: '12px',
             color: 'var(--text-primary)'
           }"
+          @click.stop
         >
           <template #extra>
-            <div class="address-actions">
-              <el-button
-                link
-                type="primary"
-                style="color: var(--text-primary);"
-                @click="handleEdit(address)"
-              >
-                编辑
-              </el-button>
-              <el-button
-                v-if="!address.is_default"
-                link
-                type="primary"
-                @click="handleSetDefault(address.id)"
-              >
-                设为默认
-              </el-button>
-              <el-button
-                link
-                type="danger"
-                @click="handleDelete(address.id)"
-              >
-                删除
-              </el-button>
+            <div class="address-extra-content">
+              <div v-if="selectedAddressId === address.address_id || selectedAddressId == address.address_id" class="address-selected-indicator">
+                <el-icon><Check /></el-icon>
+                <span>已选择</span>
+              </div>
+              <div class="address-actions">
+                <el-button
+                  link
+                  type="primary"
+                  style="color: var(--text-primary);"
+                  @click.stop="handleEdit(address)"
+                >
+                  编辑
+                </el-button>
+                <el-button
+                  v-if="!address.is_default"
+                  link
+                  type="primary"
+                  @click.stop="handleSetDefault(address.address_id)"
+                >
+                  设为默认
+                </el-button>
+                <el-button
+                  link
+                  type="danger"
+                  @click.stop="handleDelete(address.address_id)"
+                >
+                  删除
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -176,13 +187,17 @@
 <script setup>
   import { ref, onMounted ,defineExpose} from 'vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Plus } from '@element-plus/icons-vue'
+  import { Plus, Check } from '@element-plus/icons-vue'
   import { listAddresses, addAddress, updateAddress, deleteAddress } from '@/axios/mall'
 
   const addresses = ref([])
   const dialogVisible = ref(false)
   const editingAddress = ref(null)
   const formRef = ref(null)
+  
+  // 选择地址相关
+  const selectedAddressId = ref(null)
+  const selectedAddress = ref(null)
 
   const formData = ref({
     recipient_name: '',
@@ -223,6 +238,19 @@
       const response = await listAddresses()
       if (response.code === 200) {
         addresses.value = response.data || []
+        // 自动选中默认地址或第一个地址
+        if (addresses.value.length > 0) {
+          const defaultAddr = addresses.value.find(addr => 
+            addr.is_default === 1 || addr.is_default === true
+          )
+          if (defaultAddr) {
+            selectedAddressId.value = defaultAddr.address_id
+            selectedAddress.value = defaultAddr
+          } else {
+            selectedAddressId.value = addresses.value[0].address_id
+            selectedAddress.value = addresses.value[0]
+          }
+        }
       } else {
         ElMessage.error(response.message || '获取地址列表失败')
       }
@@ -263,6 +291,16 @@
     dialogVisible.value = true
   }
 
+  // 选择地址
+  const handleSelectAddress = (address) => {
+    console.log('点击地址:', address)
+    console.log('当前选中ID:', selectedAddressId.value)
+    console.log('新选中ID:', address.address_id)
+    selectedAddressId.value = address.address_id
+    selectedAddress.value = address
+    console.log('更新后选中ID:', selectedAddressId.value)
+  }
+
   // 提交表单
   const handleSubmit = async () => {
     if (!formRef.value) return
@@ -270,7 +308,7 @@
       if (valid) {
         try {
           if (editingAddress.value) {
-            await updateAddress(editingAddress.value.id, formData.value)
+            await updateAddress(editingAddress.value.address_id, formData.value)
             ElMessage.success('更新地址成功')
           } else {
             await addAddress(formData.value)
@@ -324,9 +362,10 @@
     fetchAddresses()
   })
 
-  // 暴露方法供父组件调用刷新
+  // 暴露方法供父组件调用刷新和获取选中地址
   defineExpose({
-    fetchAddresses
+    fetchAddresses,
+    getSelectedAddress: () => selectedAddress.value
   })
 </script>
 
@@ -360,10 +399,23 @@
   border-radius: 8px;
   padding: 20px;
   transition: all 0.3s;
+  cursor: pointer;
+  position: relative;
+}
+
+.address-item:hover {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .address-item.is-default {
   border-color: var(--el-color-primary);
+}
+
+.address-item.is-selected {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
 }
 
 .address-content {
@@ -408,10 +460,29 @@
   color: var(--el-text-color-secondary);
 }
 
+.address-extra-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .address-actions {
   display: flex;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.address-selected-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--el-color-primary);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 4px 12px;
+  background-color: var(--el-color-primary-light-9);
+  border-radius: 4px;
+  border: 1px solid var(--el-color-primary-light-7);
 }
 
 .empty-container {
