@@ -163,6 +163,12 @@
                   <el-option label="最新上架" value="newest" />
                 </el-select>
               </div>
+
+              <div v-if="isOwner" class="owner-actions">
+                <el-button type="primary" icon="Plus" @click="openAddProduct">
+                  添加商品
+                </el-button>
+              </div>
             </div>
 
             <!-- 商品网格 -->
@@ -175,7 +181,7 @@
                   v-for="product in products"
                   :key="product.product_id"
                   :product="product"
-                  @click="goToProduct(product.product_id)"
+                  :action="'cart'"
                 />
               </div>
 
@@ -217,6 +223,7 @@
         <el-dialog
           v-model="showSettingsDialog"
           title="店铺设置"
+          append-to-body
           width="600px"
           :close-on-click-modal="false"
         >
@@ -225,6 +232,25 @@
             :shop="shop"
             @success="handleSettingsSuccess"
             @cancel="showSettingsDialog = false"
+          />
+        </el-dialog>
+
+        <!-- 快捷添加/编辑商品对话框 -->
+        <el-dialog
+          v-model="showQuickProductDialog"
+          :title="quickProductMode === 'add' ? '添加商品' : '编辑商品'"
+          width="800px"
+          append-to-body
+          :close-on-click-modal="false"
+          top="5vh"
+        >
+          <ProductForm
+            v-if="showQuickProductDialog"
+            :product="quickEditingProduct"
+            :shop-id="shopId"
+            :mode="quickProductMode"
+            @success="handleQuickProductSuccess"
+            @cancel="showQuickProductDialog = false"
           />
         </el-dialog>
 
@@ -252,11 +278,12 @@
   import { ref, onMounted, computed, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import { Search, Star, ChatDotRound } from '@element-plus/icons-vue'
+  import { Search, Star, ChatDotRound, Plus } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import ProductCard from '@/components/ProductCard.vue'
   import ShopSettingsForm from '@/components/ShopSettingsForm.vue'
   import ShopProductManage from '@/components/ShopProductManage.vue'
+  import ProductForm from '@/components/ProductForm.vue'
   import { getShopDetail, getShopProducts, getShopFeaturedProducts } from '@/axios/shop'
   import { useUserStore } from '@/stores/user'
 
@@ -276,6 +303,9 @@
   const total = ref(0)
   const showSettingsDialog = ref(false)
   const showProductDialog = ref(false)
+  const showQuickProductDialog = ref(false)
+  const quickProductMode = ref('add')
+  const quickEditingProduct = ref(null)
 
   const productFilters = ref({
     category_id: null,
@@ -284,7 +314,7 @@
 
   // 计算属性
   const isOwner = computed(() => {
-    return userStore.userInfo?.id && shop.value?.seller_id === userStore.userInfo.id
+    return userStore.user?.id && shop.value?.seller_id === userStore.user.id
   })
 
   // 方法
@@ -294,6 +324,7 @@
       const res = await getShopDetail(shopId.value)
       if (res.success) {
         shop.value = res.data.shop
+        shop.value.contact_info = JSON.parse(shop.value.contact_info)
         featuredProducts.value = res.data.featuredProducts || []
       } else {
         ElMessage.error(res.message || '获取店铺信息失败')
@@ -312,6 +343,7 @@
       const params = {
         page: currentPage.value,
         pageSize: pageSize.value,
+        id:shopId.value,
         ...productFilters.value
       }
 
@@ -355,7 +387,7 @@
   }
 
   const goToProduct = (productId) => {
-    router.push(`/product/${productId}`)
+    router.push(`/mall/product/${productId}`)
   }
 
   const handleTabClick = (tab) => {
@@ -370,6 +402,26 @@
 
   const showProductManage = () => {
     showProductDialog.value = true
+  }
+
+  const openAddProduct = () => {
+    quickProductMode.value = 'add'
+    quickEditingProduct.value = null
+    showQuickProductDialog.value = true
+  }
+
+  const openEditProduct = (product) => {
+    quickProductMode.value = 'edit'
+    quickEditingProduct.value = product || null
+    showQuickProductDialog.value = true
+  }
+
+  const handleQuickProductSuccess = () => {
+    showQuickProductDialog.value = false
+    if (activeTab.value === 'products') {
+      loadProducts()
+    }
+    loadShopDetail()
   }
 
   const handleSettingsSuccess = () => {
@@ -425,7 +477,17 @@
 <style lang="scss" scoped>
 .shop-detail-page {
   min-height: 100vh;
-  background-color: var(--bg-primary);
+}
+
+.product-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.owner-actions {
+  margin-left: auto;
 }
 
 .shop-header {
@@ -597,6 +659,7 @@
             margin: 0 0 8px 0;
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
           }

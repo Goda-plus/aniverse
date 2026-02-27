@@ -338,7 +338,7 @@
       }]
 
       const response = await createOrder({
-        address_id: selectedAddress.value.id,
+        address_id: selectedAddress.value.address_id,
         payment_method: '模拟支付',
         cart_items
       })

@@ -9,10 +9,9 @@ exports.getRoleList = async (req, res) => {
         name, 
         description, 
         permissions,
-        created_at,
-        updated_at
+        created_at
       FROM admin_roles
-      ORDER BY created_at DESC
+      ORDER BY id ASC
     `
     const results = await db.conMysql(sql, [])
 

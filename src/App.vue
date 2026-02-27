@@ -1,7 +1,7 @@
 <template>
   <div class="app-shell">
-    <!-- 登录页面独立显示，不包含导航栏和侧边栏 -->
-    <router-view v-if="isAuthPage" />
+    <!-- 登录页面和后台页面独立显示，不包含导航栏和侧边栏 -->
+    <router-view v-if="isAuthPage || isBackendPage" />
     
     <!-- 其他页面显示完整布局 -->
     <template v-else>
@@ -244,7 +244,7 @@
                 <el-menu-item index="/careers">
                   <el-icon><Briefcase /></el-icon>
                   <template #title>
-                    职业
+                    我的店铺
                   </template>
                 </el-menu-item>
                 <el-menu-item index="/news">
@@ -393,6 +393,11 @@
   // 判断是否是认证页面（登录/注册），这些页面不显示导航栏和侧边栏
   const isAuthPage = computed(() => {
     return route.path === '/login' || route.path === '/register'
+  })
+  
+  // 判断是否是后台管理页面，这些页面独立显示，不显示前台导航栏和侧边栏
+  const isBackendPage = computed(() => {
+    return route.path.startsWith('/back')
   })
   
   const isMallPage = computed(() => {

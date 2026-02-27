@@ -26,9 +26,9 @@
           <el-select v-model="formData.category_id" placeholder="请选择商品分类" clearable>
             <el-option
               v-for="category in categories"
-              :key="category.category_id"
-              :label="category.category_name"
-              :value="category.category_id"
+              :key="category.id"
+              :label="category.name"
+              :value="category.id"
             />
           </el-select>
         </el-form-item>
@@ -153,11 +153,7 @@
             <el-upload
               ref="uploadRef"
               class="image-uploader"
-              :action="uploadUrl"
-              :headers="uploadHeaders"
               :show-file-list="false"
-              :on-success="handleImageSuccess"
-              :on-error="handleImageError"
               :before-upload="beforeImageUpload"
               multiple
               accept="image/*"
@@ -264,6 +260,7 @@
   import { Plus } from '@element-plus/icons-vue'
   import { createProduct, updateProduct, listCategories } from '@/axios/mall'
   import { createProduct as createShopProduct } from '@/axios/shop'
+  import { uploadPostImage } from '@/axios/post'
 
   const props = defineProps({
     product: {
@@ -331,12 +328,7 @@
     ]
   }
 
-  // 上传相关
-  const uploadUrl = '/api/upload/image'
-  const uploadHeaders = {
-    Authorization: `Bearer ${localStorage.getItem('token')}`
-  }
-
+  // 商品图片上传使用 before-upload 手动上传
   // 初始化表单数据
   const initFormData = () => {
     if (props.mode === 'edit' && props.product) {
@@ -394,6 +386,7 @@
       if (res.success) {
         categories.value = res.data.list || []
       }
+      console.log('categories', categories.value)
     } catch (error) {
       console.error('加载分类失败:', error)
     }
@@ -409,20 +402,7 @@
   }
 
   // 图片管理
-  const handleImageSuccess = (response) => {
-    if (response.success) {
-      formData.images.push(response.data.url)
-      ElMessage.success('图片上传成功')
-    } else {
-      ElMessage.error(response.message || '上传失败')
-    }
-  }
-
-  const handleImageError = () => {
-    ElMessage.error('图片上传失败')
-  }
-
-  const beforeImageUpload = (file) => {
+  const beforeImageUpload = async (file) => {
     const isImage = file.type.startsWith('image/')
     const isLt5M = file.size / 1024 / 1024 < 5
 
@@ -438,7 +418,22 @@
       ElMessage.error('最多只能上传9张图片!')
       return false
     }
-    return true
+
+    try {
+      const res = await uploadPostImage(file)
+      if (res.success) {
+        formData.images.push(res.data.url)
+        ElMessage.success('图片上传成功')
+      } else {
+        ElMessage.error(res.message || '上传失败')
+      }
+    } catch (error) {
+      console.error('图片上传失败:', error)
+      ElMessage.error('图片上传失败')
+    }
+
+    // 阻止 el-upload 继续默认上传
+    return false
   }
 
   const removeImage = (index) => {

@@ -60,29 +60,41 @@ exports.listProducts = async (req, res) => {
 
     const sql = `
       SELECT
-        p.id,
-        p.name,
-        p.description,
-        p.price,
-        p.original_price,
-        p.stock,
-        p.media_id,
-        p.category_id,
-        p.shop_id,
-        p.is_approved,
-        p.is_listed,
-        p.sort_order,
-        p.cover_image,
-        p.created_at,
-        p.updated_at,
-        AVG(CASE WHEN r.is_approved = 1 THEN r.rating ELSE NULL END) AS avg_rating,
-        COUNT(DISTINCT r.id) AS review_count
-      FROM products p
-      LEFT JOIN product_reviews r ON r.product_id = p.id
-      ${where}
-      GROUP BY p.id
-      ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
+    p.id,
+    p.name,
+    p.description,
+    p.price,
+    p.original_price,
+    p.stock,
+    p.media_id,
+    p.category_id,
+    p.shop_id,
+    p.is_approved,
+    p.is_listed,
+    p.sort_order,
+    p.cover_image,
+    p.created_at,
+    p.updated_at,
+    -- 店铺信息（根据需求选择字段，避免与商品字段重名）
+    s.shop_name,
+    s.logo AS shop_logo,
+    s.rating AS shop_rating,
+    s.total_sales AS shop_total_sales,
+    s.status AS shop_status,
+    s.level AS shop_level,
+    s.banner_image AS shop_banner,
+    s.announcement AS shop_announcement,
+    s.contact_info AS shop_contact_info,
+    -- 商品评价统计
+    AVG(CASE WHEN r.is_approved = 1 THEN r.rating ELSE NULL END) AS avg_rating,
+    COUNT(DISTINCT r.id) AS review_count
+FROM products p
+LEFT JOIN product_reviews r ON r.product_id = p.id
+LEFT JOIN shops s ON p.shop_id = s.shop_id   -- 关联店铺表
+${where}
+GROUP BY p.id, s.shop_id   -- 将店铺主键加入 GROUP BY，避免 ONLY_FULL_GROUP_BY 错误
+ORDER BY p.id ASC
+LIMIT ? OFFSET ?;
     `
     const rows = await db.conMysql(sql, [...params, pageSize, offset])
     res.cc(true, '获取成功', 200, { list: rows, total, page, pageSize })
@@ -163,7 +175,7 @@ exports.listOrders = async (req, res) => {
       FROM orders o
       LEFT JOIN users u ON u.id = o.user_id
       ${where}
-      ORDER BY o.created_at DESC
+      ORDER BY o.id ASC
       LIMIT ? OFFSET ?
     `
     const rows = await db.conMysql(sql, [...params, pageSize, offset])

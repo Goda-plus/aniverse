@@ -358,7 +358,7 @@ exports.getAdminList = async (req, res) => {
       params.push(role_id)
     }
 
-    sql += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?'
+    sql += ' ORDER BY a.id ASC LIMIT ? OFFSET ?'
     params.push(parseInt(pageSize), parseInt(offset))
 
     const results = await db.conMysql(sql, params)
@@ -565,6 +565,145 @@ exports.resetAdminPassword = async (req, res) => {
   } catch (err) {
     console.error('重置密码错误:', err)
     res.cc(false, '重置失败', 500)
+  }
+}
+
+// 更新管理员信息（包括角色）
+exports.updateAdmin = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { username, role_id, status } = req.body
+
+    // 查询管理员信息
+    const sql = 'SELECT username FROM admins WHERE id = ?'
+    const results = await db.conMysql(sql, [id])
+
+    if (results.length === 0) {
+      return res.cc(false, '管理员不存在', 404)
+    }
+
+    const oldUsername = results[0].username
+
+    // 构建更新字段
+    const updateFields = []
+    const updateParams = []
+
+    if (username !== undefined) {
+      // 检查用户名是否与其他管理员冲突
+      const checkSql = 'SELECT id FROM admins WHERE username = ? AND id != ?'
+      const checkResult = await db.conMysql(checkSql, [username, id])
+      if (checkResult.length > 0) {
+        return res.cc(false, '用户名已存在', 400)
+      }
+      updateFields.push('username = ?')
+      updateParams.push(username)
+    }
+
+    if (role_id !== undefined) {
+      // 检查角色是否存在
+      const roleSql = 'SELECT id FROM admin_roles WHERE id = ?'
+      const roleResult = await db.conMysql(roleSql, [role_id])
+      if (roleResult.length === 0) {
+        return res.cc(false, '角色不存在', 400)
+      }
+      updateFields.push('role_id = ?')
+      updateParams.push(role_id)
+    }
+
+    if (status !== undefined) {
+      if (!['active', 'disabled'].includes(status)) {
+        return res.cc(false, '状态参数无效', 400)
+      }
+      // 不能禁用自己
+      if (parseInt(id) === req.user.id && status === 'disabled') {
+        return res.cc(false, '不能禁用自己的账号', 400)
+      }
+      updateFields.push('status = ?')
+      updateParams.push(status)
+    }
+
+    if (updateFields.length === 0) {
+      return res.cc(false, '没有需要更新的字段', 400)
+    }
+
+    updateFields.push('updated_at = NOW()')
+    updateParams.push(id)
+
+    // 更新管理员
+    const updateSql = `UPDATE admins SET ${updateFields.join(', ')} WHERE id = ?`
+    await db.conMysql(updateSql, updateParams)
+
+    // 获取客户端IP
+    const clientIp = req.headers['x-forwarded-for'] || 
+                     req.headers['x-real-ip'] || 
+                     req.connection.remoteAddress || 
+                     'unknown'
+
+    // 记录操作日志
+    const logSql = `
+      INSERT INTO admin_logs (admin_id, action_type, target_type, target_id, description, ip_address)
+      VALUES (?, 'update_admin', 'admin', ?, ?, ?)
+    `
+    await db.conMysql(logSql, [
+      req.user.id,
+      id,
+      `更新管理员 ${oldUsername} 的信息`,
+      clientIp
+    ])
+
+    res.cc(true, '更新成功', 200)
+  } catch (err) {
+    console.error('更新管理员错误:', err)
+    res.cc(false, '更新失败', 500)
+  }
+}
+
+// 删除管理员（需要权限）
+exports.deleteAdmin = async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // 不能删除自己
+    if (parseInt(id) === req.user.id) {
+      return res.cc(false, '不能删除自己的账号', 400)
+    }
+
+    // 查询管理员信息
+    const sql = 'SELECT username FROM admins WHERE id = ?'
+    const results = await db.conMysql(sql, [id])
+
+    if (results.length === 0) {
+      return res.cc(false, '管理员不存在', 404)
+    }
+
+    const username = results[0].username
+
+    // 删除管理员
+    const deleteSql = 'DELETE FROM admins WHERE id = ?'
+    await db.conMysql(deleteSql, [id])
+
+    // 获取客户端IP
+    const clientIp = req.headers['x-forwarded-for'] || 
+                     req.headers['x-real-ip'] || 
+                     req.connection.remoteAddress || 
+                     'unknown'
+
+    // 记录操作日志
+    const logSql = `
+      INSERT INTO admin_logs (admin_id, action_type, target_type, target_id, description, ip_address)
+      VALUES (?, 'delete_admin', 'admin', ?, ?, ?)
+    `
+    await db.conMysql(logSql, [
+      req.user.id,
+      id,
+      `删除管理员 ${username}`,
+      clientIp
+    ])
+
+    res.cc(true, '删除成功', 200)
+  } catch (err) {
+    console.error('删除管理员错误:', err)
+    res.cc(false, '删除失败', 500)
   }
 }
 

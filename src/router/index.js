@@ -159,6 +159,11 @@ const routes = [
         path: 'communities',
         name: 'profile-communities',
         component: () => import('../views/profile/CommunitiesTab.vue')
+      },
+      {
+        path: 'shops',
+        name: 'profile-shops',
+        component: () => import('../views/profile/ShopsTab.vue')
       }
     ]
   },

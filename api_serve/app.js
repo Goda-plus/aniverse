@@ -16,7 +16,7 @@ const corsOptions = {
     'http://localhost:8080',  // 开发环境
     'http://localhost:3000',
     // vue-element-admin 默认开发端口 9528，作为 aniverse 后台管理前端
-    'http://localhost:9528'
+    'http://localhost:9527'
   ],
   credentials: true,          // 允许携带凭证
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -66,6 +66,7 @@ app.use(
         /^\/api\/user\/register$/,
         // 管理员登录接口（公开）
         /^\/api\/admin\/auth\/login$/,
+        /^\/api\/admin\/auth\/register$/,
         /^\/api\/category\/list$/,
         /^\/api\/genre\/list$/,
         /^\/api\/genre\/subreddits$/,
@@ -89,11 +90,11 @@ app.use(
         /^\/api\/mall\/categories$/,
         /^\/api\/mall\/product\/\d+$/,
         /^\/api\/mall\/reviews$/,
-        // 店铺公开接口（店铺列表 & 详情）
-        /^\/api\/shop$/,
-        /^\/api\/shop\/\d+$/,
-        /^\/api\/shop\/\d+\/products$/,
-        /^\/api\/shop\/\d+\/featured$/,
+        // 店铺公开接口（店铺列表 & 详情，只允许 GET 免认证）
+        { url: /^\/api\/shop$/, methods: ['GET'] },
+        { url: /^\/api\/shop\/\d+$/, methods: ['GET'] },
+        { url: /^\/api\/shop\/\d+\/products$/, methods: ['GET'] },
+        { url: /^\/api\/shop\/\d+\/featured$/, methods: ['GET'] },
         // 众筹公开接口（仅 GET）
         // 注意：这里必须限制 methods，否则 PUT/POST 会被错误地放行，导致 req.user 为空而 500
         { url: /^\/api\/crowdfunding\/projects\/\d+$/, methods: ['GET'] },

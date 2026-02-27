@@ -49,6 +49,12 @@ router.put('/admins/:id/status', checkPermission('admin.manage'), adminHandler.u
 // 重置管理员密码
 router.put('/admins/:id/reset-password', checkPermission('admin.manage'), adminHandler.resetAdminPassword)
 
+// 更新管理员信息（包括角色）
+router.put('/admins/:id', checkPermission('admin.manage'), adminHandler.updateAdmin)
+
+// 删除管理员
+router.delete('/admins/:id', checkPermission('admin.manage'), adminHandler.deleteAdmin)
+
 // ============================================
 // 角色管理接口（需要 role.manage 权限）
 // ============================================

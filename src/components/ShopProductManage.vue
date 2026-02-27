@@ -151,6 +151,7 @@
       v-model="showProductDialog"
       :title="dialogMode === 'add' ? '添加商品' : '编辑商品'"
       width="800px"
+      append-to-body
       :close-on-click-modal="false"
       top="5vh"
     >

@@ -112,11 +112,7 @@ exports.getShopDetail = async (req, res, next) => {
     const featuredSql = `
       SELECT
         p.id as product_id,
-        p.name,
-        p.price,
-        p.images,
-        p.sales_count,
-        p.rating
+        p.*
       FROM shop_featured_products sfp
       JOIN products p ON sfp.product_id = p.id
       WHERE sfp.shop_id = ?
@@ -181,9 +177,13 @@ exports.createShop = async (req, res, next) => {
 // 更新店铺信息
 exports.updateShop = async (req, res, next) => {
   try {
+    console.log(req.user)
+
     const user_id = req.user.id
     const { id } = req.params
     const { shop_name, description, logo, contact_info, banner_image, announcement } = req.body
+ 
+    console.log(id, user_id)
 
     if (!id) {
       return res.cc(false, '缺少店铺ID', 400)
@@ -301,23 +301,11 @@ exports.getShopProducts = async (req, res, next) => {
     const listSql = `
       SELECT
         p.id as product_id,
-        p.name,
-        p.description,
-        p.price,
-        p.original_price,
-        p.stock,
-        p.images,
-        -- p.status, -- products table may not have status field
-        p.sales_count,
-        p.rating,
-        p.review_count,
-        p.is_featured,
-        p.created_at,
-        pc.category_name
+        p.*
       FROM products p
-      LEFT JOIN product_categories pc ON p.category_id = pc.category_id
+      LEFT JOIN product_categories pc ON p.category_id = pc.id
       ${where}
-      ORDER BY p.is_featured DESC, p.sales_count DESC, p.created_at DESC
+      ORDER BY p.is_featured DESC, p.sort_order DESC, p.created_at DESC
       LIMIT ? OFFSET ?
     `
     const rows = await conMysql(listSql, [...params, pageSize, offset])
@@ -370,7 +358,7 @@ exports.createProduct = async (req, res, next) => {
 
     const sql = `
       INSERT INTO products
-        (shop_id, category_id, name, description, price, stock, images,
+        (shop_id, category_id, name, description, price, stock, cover_image,
          specifications, material, is_featured, weight, dimensions, tags)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
@@ -578,11 +566,7 @@ exports.getShopFeaturedProducts = async (req, res, next) => {
     const sql = `
       SELECT
         p.id as product_id,
-        p.name,
-        p.price,
-        p.images,
-        p.sales_count,
-        p.rating,
+        p.*
         sfp.sort_order
       FROM shop_featured_products sfp
       JOIN products p ON sfp.product_id = p.id

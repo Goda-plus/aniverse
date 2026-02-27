@@ -5,6 +5,12 @@ module.exports = {
     node: true,
     es2021: true
   },
+  globals: {
+    defineProps: 'readonly',
+    defineEmits: 'readonly',
+    defineExpose: 'readonly',
+    withDefaults: 'readonly'
+  },
   extends: [
     'eslint:recommended',
     'plugin:vue/vue3-recommended'

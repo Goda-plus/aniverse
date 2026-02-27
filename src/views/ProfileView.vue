@@ -115,7 +115,8 @@
     { key: 'history', label: '历史记录', route: 'profile-history' },
     { key: 'upvoted', label: '已点赞', route: 'profile-upvoted' },
     { key: 'downvoted', label: '已点踩', route: 'profile-downvoted' },
-    { key: 'communities', label: '我的社区', route: 'profile-communities' }
+    { key: 'communities', label: '我的社区', route: 'profile-communities' },
+    { key: 'shops', label: '我的商铺', route: 'profile-shops' }
   ]
 
   // 根据当前路由确定激活的标签

@@ -125,6 +125,7 @@
         <el-dialog
           v-model="showAddressDialog"
           title="选择收货地址"
+          append-to-body
           width="800px"
         >
           <AddressManage ref="addressManageRef" />

@@ -350,7 +350,7 @@ exports.getOrderDetail = async (req, res, next) => {
         a.detail_address,
         a.postal_code
       FROM orders o
-      JOIN shipping_addresses a ON o.address_id = a.address_id
+      JOIN addresses a ON o.address_id = a.id
       WHERE o.id = ? AND o.user_id = ?
     `
     const orders = await conMysql(orderSql, [id, user_id])
@@ -388,7 +388,7 @@ exports.listAddresses = async (req, res, next) => {
     const user_id = req.user.id
     const sql = `
       SELECT
-        address_id,
+        id AS address_id,
         user_id,
         recipient_name,
         phone,
@@ -398,10 +398,9 @@ exports.listAddresses = async (req, res, next) => {
         detail_address,
         postal_code,
         is_default,
-        label,
         created_at,
         updated_at
-      FROM shipping_addresses
+      FROM addresses
       WHERE user_id = ?
       ORDER BY is_default DESC, created_at DESC
     `
@@ -416,7 +415,7 @@ exports.listAddresses = async (req, res, next) => {
 exports.addAddress = async (req, res, next) => {
   try {
     const user_id = req.user.id
-    const { recipient_name, phone, province, city, district, detail_address, postal_code, is_default, label } = req.body
+    const { recipient_name, phone, province, city, district, detail_address, postal_code, is_default } = req.body
 
     if (!recipient_name || !phone || !province || !city || !district || !detail_address) {
       return res.cc(false, '请填写完整的地址信息', 400)
@@ -425,15 +424,15 @@ exports.addAddress = async (req, res, next) => {
     // 如果设置为默认地址，先取消其他默认地址
     if (is_default) {
       await conMysql(
-        'UPDATE shipping_addresses SET is_default = 0 WHERE user_id = ?',
+        'UPDATE addresses SET is_default = 0 WHERE user_id = ?',
         [user_id]
       )
     }
 
     const sql = `
-      INSERT INTO shipping_addresses
-        (user_id, recipient_name, phone, province, city, district, detail_address, postal_code, is_default, label)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO addresses
+        (user_id, recipient_name, phone, province, city, district, detail_address, postal_code, is_default)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(sql, [
       user_id,
@@ -444,8 +443,7 @@ exports.addAddress = async (req, res, next) => {
       district,
       detail_address,
       postal_code || '',
-      is_default ? 1 : 0,
-      label || ''
+      is_default ? 1 : 0
     ])
 
     res.cc(true, '添加地址成功', 200, { address_id: result.insertId })
@@ -466,7 +464,7 @@ exports.updateAddress = async (req, res, next) => {
     }
 
     // 验证地址是否属于当前用户
-    const checkSql = 'SELECT address_id FROM shipping_addresses WHERE address_id = ? AND user_id = ?'
+    const checkSql = 'SELECT id FROM addresses WHERE id = ? AND user_id = ?'
     const checkResult = await conMysql(checkSql, [id, user_id])
     if (!checkResult.length) {
       return res.cc(false, '地址不存在或无权限', 404)
@@ -475,7 +473,7 @@ exports.updateAddress = async (req, res, next) => {
     // 如果设置为默认地址，先取消其他默认地址
     if (is_default) {
       await conMysql(
-        'UPDATE shipping_addresses SET is_default = 0 WHERE user_id = ? AND address_id != ?',
+        'UPDATE addresses SET is_default = 0 WHERE user_id = ? AND address_id != ?',
         [user_id, id]
       )
     }
@@ -524,9 +522,9 @@ exports.updateAddress = async (req, res, next) => {
     params.push(id, user_id)
 
     const sql = `
-      UPDATE shipping_addresses
+      UPDATE addresses
       SET ${fields.join(', ')}
-      WHERE address_id = ? AND user_id = ?
+      WHERE id = ? AND user_id = ?
     `
     await conMysql(sql, params)
 
@@ -546,7 +544,7 @@ exports.deleteAddress = async (req, res, next) => {
       return res.cc(false, '缺少地址ID', 400)
     }
 
-    const sql = 'DELETE FROM shipping_addresses WHERE address_id = ? AND user_id = ?'
+    const sql = 'DELETE FROM addresses WHERE id = ? AND user_id = ?'
     const result = await conMysql(sql, [id, user_id])
 
     if (result.affectedRows === 0) {
@@ -572,7 +570,7 @@ exports.createOrder = async (req, res, next) => {
     }
 
     // 验证地址是否属于当前用户
-    const addressSql = 'SELECT * FROM shipping_addresses WHERE address_id = ? AND user_id = ?'
+    const addressSql = 'SELECT * FROM addresses WHERE id = ? AND user_id = ?'
     const addresses = await conMysql(addressSql, [address_id, user_id])
     if (!addresses.length) {
       return res.cc(false, '地址不存在或无权限', 404)
