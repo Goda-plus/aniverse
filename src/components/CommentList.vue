@@ -1,7 +1,7 @@
 <template>
   <div class="comment-list">
     <!-- 评论输入框 -->
-    <div class="comment-editor">
+    <div v-if="userStore.isLoggedIn" class="comment-editor">
       <!-- 回复目标评论显示 -->
       <div v-if="replyingTo" class="reply-target-info">
         <div class="reply-target-content">

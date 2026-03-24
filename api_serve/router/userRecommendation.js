@@ -6,6 +6,9 @@ const authenticateToken = require('../middleware/optionalAuth')
 // 获取推荐列表
 router.get('/recommendations', authenticateToken, userRecommendationHandler.getRecommendations)
 
+// 搜索同好用户（关键词 + 筛选排序）
+router.get('/match/search', authenticateToken, userRecommendationHandler.searchMatchedUsers)
+
 // 刷新推荐列表
 router.post('/recommendations/refresh', authenticateToken, userRecommendationHandler.refreshRecommendations)
 

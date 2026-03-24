@@ -23,6 +23,31 @@
             </el-button>
           </div>
 
+          <div class="search-toolbar">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜索用户名或简介关键词"
+              clearable
+              @keyup.enter="handleSearch"
+            />
+            <el-select v-model="searchSortBy" style="width: 140px">
+              <el-option label="按相似度" value="similarity" />
+              <el-option label="按活跃度" value="activity" />
+            </el-select>
+            <el-select v-model="searchMinSimilarity" style="width: 140px">
+              <el-option label="全部匹配" :value="0" />
+              <el-option label="30%以上" :value="0.3" />
+              <el-option label="60%以上" :value="0.6" />
+              <el-option label="80%以上" :value="0.8" />
+            </el-select>
+            <el-button type="primary" :loading="searching" @click="handleSearch">
+              搜索同好
+            </el-button>
+            <el-button v-if="isSearchMode" @click="resetSearch">
+              返回推荐
+            </el-button>
+          </div>
+
           <!-- 加载状态 -->
           <div v-if="loading" class="loading-container">
             <el-icon class="is-loading">
@@ -44,7 +69,7 @@
           <div v-else class="recommendations-list">
             <div 
               v-for="item in recommendations" 
-              :key="item.id" 
+              :key="item.id || `search-${item.recommended_user_id}`"
               class="match-item"
             >
               <div class="left">
@@ -85,6 +110,7 @@
                     {{ item.is_followed ? '已关注' : '关注' }}
                   </el-button>
                   <el-button 
+                    v-if="!isSearchMode"
                     text 
                     size="small"
                     :loading="item.dismissing"
@@ -98,11 +124,11 @@
           </div>
 
           <!-- 分页 -->
-          <div v-if="pagination.totalPages > 1" class="pagination-container">
+          <div v-if="activePagination.totalPages > 1" class="pagination-container">
             <el-pagination
               v-model:current-page="currentPage"
               :page-size="pageSize"
-              :total="pagination.totalItems"
+              :total="activePagination.totalItems"
               layout="prev, pager, next"
               @current-change="handlePageChange"
             />
@@ -128,11 +154,11 @@
           <div v-else-if="interests.length > 0" class="interests-list">
             <el-tag 
               v-for="tag in interests" 
-              :key="tag.id" 
+              :key="tag.id ?? tag.tag_id" 
               class="tag"
               :type="tag.source === 'auto' ? 'info' : 'primary'"
             >
-              {{ tag.tag_name }}
+              {{ tag.name ?? tag.tag_name }}
               <el-tooltip 
                 v-if="tag.source === 'auto'"
                 content="系统自动推荐"
@@ -189,11 +215,11 @@
           <div class="tags-container">
             <el-tag
               v-for="tag in interests"
-              :key="tag.id"
+              :key="tag.id ?? tag.tag_id"
               closable
-              @close="handleRemoveInterest(tag.tag_id)"
+              @close="handleRemoveInterest(tag.id ?? tag.tag_id)"
             >
-              {{ tag.tag_name }}
+              {{ tag.name ?? tag.tag_name }}
             </el-tag>
             <p v-if="interests.length === 0" class="meta-text">
               暂无标签
@@ -231,12 +257,13 @@
 </template>
 
 <script setup>
-  import { ref, onMounted, computed } from 'vue'
+  import { ref, onMounted } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { Loading, Refresh, InfoFilled } from '@element-plus/icons-vue'
   import { 
     getRecommendations, 
+    searchMatchedUsers,
     refreshRecommendations, 
     dismissRecommendation 
   } from '@/axios/match'
@@ -258,7 +285,12 @@
   const loadingInterests = ref(false)
   const loadingRecommendedTags = ref(false)
   const refreshing = ref(false)
+  const searching = ref(false)
   const showManageDialog = ref(false)
+  const isSearchMode = ref(false)
+  const searchKeyword = ref('')
+  const searchSortBy = ref('similarity')
+  const searchMinSimilarity = ref(0)
 
   // 分页
   const currentPage = ref(1)
@@ -270,6 +302,14 @@
     hasNextPage: false,
     hasPreviousPage: false
   })
+  const searchPagination = ref({
+    totalItems: 0,
+    totalPages: 0,
+    currentPage: 1,
+    hasNextPage: false,
+    hasPreviousPage: false
+  })
+  const activePagination = ref(pagination.value)
 
   // 获取推荐列表
   async function loadRecommendations () {
@@ -286,6 +326,7 @@
           dismissing: false
         }))
         pagination.value = res.data.pagination
+        activePagination.value = pagination.value
       } else {
         ElMessage.error(res.message || '获取推荐列表失败')
       }
@@ -293,6 +334,36 @@
       ElMessage.error(error.response?.data?.message || '获取推荐列表失败')
     } finally {
       loading.value = false
+    }
+  }
+
+  async function loadSearchResults () {
+    loading.value = true
+    searching.value = true
+    try {
+      const res = await searchMatchedUsers({
+        keyword: searchKeyword.value.trim(),
+        sortBy: searchSortBy.value,
+        minSimilarity: searchMinSimilarity.value,
+        page: currentPage.value,
+        pageSize: pageSize.value
+      })
+      if (res.success) {
+        recommendations.value = (res.data.users || []).map(item => ({
+          ...item,
+          following: false,
+          dismissing: false
+        }))
+        searchPagination.value = res.data.pagination
+        activePagination.value = searchPagination.value
+      } else {
+        ElMessage.error(res.message || '搜索同好失败')
+      }
+    } catch (error) {
+      ElMessage.error(error.response?.data?.message || '搜索同好失败')
+    } finally {
+      loading.value = false
+      searching.value = false
     }
   }
 
@@ -321,6 +392,7 @@
       if (res.success) {
         ElMessage.success('刷新成功')
         currentPage.value = 1
+        isSearchMode.value = false
         await loadRecommendations()
       } else {
         ElMessage.error(res.message || '刷新失败')
@@ -330,6 +402,22 @@
     } finally {
       refreshing.value = false
     }
+  }
+
+  async function handleSearch () {
+    currentPage.value = 1
+    isSearchMode.value = true
+    await loadSearchResults()
+  }
+
+  async function resetSearch () {
+    searchKeyword.value = ''
+    searchSortBy.value = 'similarity'
+    searchMinSimilarity.value = 0
+    currentPage.value = 1
+    isSearchMode.value = false
+    activePagination.value = pagination.value
+    await loadRecommendations()
   }
 
   // 关注用户
@@ -342,7 +430,7 @@
         item.is_followed = true
         // 从推荐列表中移除
         recommendations.value = recommendations.value.filter(
-          r => r.id !== item.id
+          r => r.recommended_user_id !== item.recommended_user_id
         )
       } else {
         ElMessage.error(res.message || '关注失败')
@@ -369,7 +457,7 @@
         ElMessage.success('已忽略')
         // 从推荐列表中移除
         recommendations.value = recommendations.value.filter(
-          r => r.id !== item.id
+          r => r.recommended_user_id !== item.recommended_user_id
         )
       } else {
         ElMessage.error(res.message || '操作失败')
@@ -421,7 +509,7 @@
       const res = await getRecommendedTags({ limit: 20 })
       if (res.success) {
         // 过滤掉已添加的标签
-        const existingTagIds = new Set(interests.value.map(i => i.tag_id))
+        const existingTagIds = new Set(interests.value.map(i => i.id ?? i.tag_id))
         recommendedTags.value = (res.data.tags || []).filter(
           tag => !existingTagIds.has(tag.id)
         )
@@ -436,6 +524,10 @@
   // 分页变化
   function handlePageChange (page) {
     currentPage.value = page
+    if (isSearchMode.value) {
+      loadSearchResults()
+      return
+    }
     loadRecommendations()
   }
 
@@ -461,7 +553,6 @@
 <style scoped>
 .page {
   padding: 12px 18px 32px;
-  background: var(--bg-primary);
   transition: background-color 0.3s ease;
 }
 
@@ -498,6 +589,13 @@
 .loading-container .el-icon {
   font-size: 32px;
   margin-bottom: 12px;
+}
+
+.search-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  align-items: center;
 }
 
 .recommendations-list {

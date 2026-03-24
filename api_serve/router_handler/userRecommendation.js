@@ -510,6 +510,136 @@ exports.getRecommendations = async (req, res, next) => {
 }
 
 /**
+ * 搜索同好用户（支持相似度/活跃度排序）
+ */
+exports.searchMatchedUsers = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const {
+      keyword = '',
+      sortBy = 'similarity',
+      minSimilarity = 0,
+      page = 1,
+      pageSize = 10
+    } = req.query
+
+    const currentPage = Math.max(parseInt(page, 10) || 1, 1)
+    const size = Math.min(Math.max(parseInt(pageSize, 10) || 10, 1), 50)
+    const offset = (currentPage - 1) * size
+    const normalizedMinSimilarity = Math.max(0, Math.min(parseFloat(minSimilarity) || 0, 1))
+    const keywordLike = `%${String(keyword).trim()}%`
+
+    const orderBy = sortBy === 'activity'
+      ? 'activity_score DESC, similarity_score DESC, u.id DESC'
+      : 'similarity_score DESC, activity_score DESC, u.id DESC'
+
+    const baseSql = `
+      FROM users u
+      LEFT JOIN user_similarity us
+        ON (
+          (us.user_id_1 = ? AND us.user_id_2 = u.id) OR
+          (us.user_id_2 = ? AND us.user_id_1 = u.id)
+        )
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) AS browse_cnt
+        FROM browse_history
+        WHERE last_visited_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY user_id
+      ) bh ON bh.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) AS favorite_cnt
+        FROM favorites
+        WHERE created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY user_id
+      ) fav ON fav.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) AS vote_cnt
+        FROM votes
+        WHERE created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY user_id
+      ) vt ON vt.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) AS comment_cnt
+        FROM comments
+        WHERE created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY user_id
+      ) cmt ON cmt.user_id = u.id
+      WHERE u.id != ?
+        AND (
+          ? = '%%' OR
+          u.username LIKE ? OR
+          u.bio LIKE ?
+        )
+    `
+
+    const scoreExpr = `
+      COALESCE(us.similarity_score, 0) AS similarity_score,
+      (
+        COALESCE(bh.browse_cnt, 0) * 1 +
+        COALESCE(fav.favorite_cnt, 0) * 3 +
+        COALESCE(vt.vote_cnt, 0) * 2 +
+        COALESCE(cmt.comment_cnt, 0) * 2
+      ) AS activity_score
+    `
+
+    const listSql = `
+      SELECT
+        u.id AS recommended_user_id,
+        u.username,
+        u.avatar_url,
+        u.bio,
+        ${scoreExpr},
+        CASE
+          WHEN COALESCE(us.similarity_score, 0) >= 0.6 THEN '高匹配用户'
+          WHEN COALESCE(us.similarity_score, 0) >= 0.3 THEN '兴趣相近用户'
+          ELSE '可能感兴趣的用户'
+        END AS recommendation_reason
+      ${baseSql}
+        AND COALESCE(us.similarity_score, 0) >= ?
+      ORDER BY ${orderBy}
+      LIMIT ? OFFSET ?
+    `
+
+    const countSql = `
+      SELECT COUNT(*) AS total
+      ${baseSql}
+        AND COALESCE(us.similarity_score, 0) >= ?
+    `
+
+    const commonParams = [user_id, user_id, user_id, keywordLike, keywordLike, keywordLike, normalizedMinSimilarity]
+    const [rows, countRows] = await Promise.all([
+      conMysql(listSql, [...commonParams, size, offset]),
+      conMysql(countSql, commonParams)
+    ])
+
+    const total = countRows?.[0]?.total || 0
+    const totalPages = Math.ceil(total / size)
+
+    res.cc(true, '搜索同好成功', 200, {
+      users: rows.map(item => ({
+        ...item,
+        similarity_score: Number(item.similarity_score || 0),
+        activity_score: Number(item.activity_score || 0)
+      })),
+      filters: {
+        keyword: String(keyword).trim(),
+        sortBy: sortBy === 'activity' ? 'activity' : 'similarity',
+        minSimilarity: normalizedMinSimilarity
+      },
+      pagination: {
+        totalItems: total,
+        totalPages,
+        currentPage,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * 刷新推荐列表
  */
 exports.refreshRecommendations = async (req, res, next) => {

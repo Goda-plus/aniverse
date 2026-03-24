@@ -5,6 +5,11 @@ export const getRecommendations = (params) => {
   return request.get('/api/user/recommendations', { params })
 }
 
+// 搜索同好（关键词 + 相似度/活跃度排序）
+export const searchMatchedUsers = (params) => {
+  return request.get('/api/user/match/search', { params })
+}
+
 // 刷新推荐列表
 export const refreshRecommendations = () => {
   return request.post('/api/user/recommendations/refresh')

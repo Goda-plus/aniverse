@@ -982,6 +982,11 @@
   background: var(--bg-hover, #343536);
 }
 
+/* 在帖子详情页隐藏 CommentList 组件内部的第二个评论输入框 */
+.post-detail :deep(.comment-editor) {
+  display: none;
+}
+
 .post-more-btn {
   position: relative;
   flex: 1;
