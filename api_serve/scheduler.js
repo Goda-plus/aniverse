@@ -255,8 +255,10 @@ async function updateAllHeatScores (batchSize = 1000) {
 
     const result = await HeatCalculator.updateAllHeatScores(batchSize)
     console.log(`热度评分更新完成。总计: ${result.total}, 成功: ${result.updated}, 失败: ${result.errors}`)
+    return result
   } catch (error) {
     console.error('更新热度评分失败:', error)
+    throw error
   }
 }
 

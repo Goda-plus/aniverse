@@ -258,7 +258,7 @@
               <!-- 社区部分 -->
               <el-menu-item-group>
                 <template #title>
-                  <el-icon><Globe /></el-icon>
+                  <el-icon><Compass /></el-icon>
                   <span class="section-header-text">社区</span>
                 </template>
                 <el-menu-item index="/best">
@@ -298,8 +298,28 @@
       <component 
         :is="ChatWindowComponent"
         v-if="userStore.isLoggedIn && ChatWindowComponent"
-        v-model:visible="showChatWindow" 
-        @close="showChatWindow = false" 
+        v-model:visible="showChatWindow"
+        :initial-room-id="pendingChatRoomId"
+        @close="showChatWindow = false"
+        @room-initialized="handleRoomInitialized"
+      />
+
+      <component
+        :is="ShopServiceChatWindowComponent"
+        v-if="userStore.isLoggedIn && ShopServiceChatWindowComponent"
+        v-model:visible="showShopServiceChatWindow"
+        :initial-room-id="pendingShopServiceRoomId"
+        @close="showShopServiceChatWindow = false"
+        @room-initialized="handleShopServiceRoomInitialized"
+      />
+
+      <component
+        :is="CrowdfundingSupportChatWindowComponent"
+        v-if="userStore.isLoggedIn && CrowdfundingSupportChatWindowComponent"
+        v-model:visible="showCrowdfundingSupportChatWindow"
+        :initial-room-id="pendingCrowdfundingSupportRoomId"
+        @close="showCrowdfundingSupportChatWindow = false"
+        @room-initialized="handleCrowdfundingSupportRoomInitialized"
       />
 
       <!-- 悬浮按钮 -->
@@ -322,7 +342,7 @@
 </template>
 
 <script setup>
-  import { computed, ref, onMounted, watch, defineAsyncComponent, shallowRef } from 'vue'
+  import { computed, ref, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useThemeStore } from '@/stores/theme'
   import { useUserStore } from '@/stores/user'
@@ -335,7 +355,6 @@
   import SceneMomentCreateDialog from '@/components/sceneMoment/SceneMomentCreateDialog.vue'
   
   // 条件导入聊天窗口组件，只在用户登录后加载
-  const ChatWindow = shallowRef(null)
   import {
     House,
     ArrowUp,
@@ -348,7 +367,7 @@
     Document,
     Briefcase,
     Bell,
-    Globe,
+    Compass,
     Trophy,
     Search,
     Download,
@@ -379,6 +398,11 @@
   const showUserMenu = ref(false)
   const showCreateCommunityDialog = ref(false)
   const showChatWindow = ref(false)
+  const pendingChatRoomId = ref(null)
+  const showShopServiceChatWindow = ref(false)
+  const pendingShopServiceRoomId = ref(null)
+  const showCrowdfundingSupportChatWindow = ref(false)
+  const pendingCrowdfundingSupportRoomId = ref(null)
   const themeStore = useThemeStore()
   const userStore = useUserStore()
   const darkModeEnabled = computed({
@@ -406,6 +430,8 @@
   // 计算属性：当用户登录后加载聊天窗口组件
   // 修正：避免在 computed 内部产生副作用，直接定义 async component 并通过 computed 控制是否渲染
   const ChatWindowComponent = defineAsyncComponent(() => import('@/components/ChatWindow.vue'))
+  const ShopServiceChatWindowComponent = defineAsyncComponent(() => import('@/components/ShopServiceChatWindow.vue'))
+  const CrowdfundingSupportChatWindowComponent = defineAsyncComponent(() => import('@/components/CrowdfundingSupportChatWindow.vue'))
 
   const toggleSidebar = () => {
     sidebarVisible.value = !sidebarVisible.value
@@ -488,6 +514,51 @@
     themeStore.setMode(val ? 'dark' : 'light')
   }
 
+  const handleOpenShopChat = (event) => {
+    const roomId = Number(event?.detail?.roomId)
+    if (!Number.isFinite(roomId) || roomId <= 0) {
+      return
+    }
+    pendingChatRoomId.value = roomId
+    showChatWindow.value = true
+  }
+
+  const handleOpenShopServiceChat = (event) => {
+    const roomId = Number(event?.detail?.roomId)
+    if (!Number.isFinite(roomId) || roomId <= 0) {
+      return
+    }
+    pendingShopServiceRoomId.value = roomId
+    showShopServiceChatWindow.value = true
+  }
+
+  const handleOpenCrowdfundingSupportChat = (event) => {
+    const roomId = Number(event?.detail?.roomId)
+    if (!Number.isFinite(roomId) || roomId <= 0) {
+      return
+    }
+    pendingCrowdfundingSupportRoomId.value = roomId
+    showCrowdfundingSupportChatWindow.value = true
+  }
+
+  const handleRoomInitialized = (roomId) => {
+    if (Number(pendingChatRoomId.value) === Number(roomId)) {
+      pendingChatRoomId.value = null
+    }
+  }
+
+  const handleShopServiceRoomInitialized = (roomId) => {
+    if (Number(pendingShopServiceRoomId.value) === Number(roomId)) {
+      pendingShopServiceRoomId.value = null
+    }
+  }
+
+  const handleCrowdfundingSupportRoomInitialized = (roomId) => {
+    if (Number(pendingCrowdfundingSupportRoomId.value) === Number(roomId)) {
+      pendingCrowdfundingSupportRoomId.value = null
+    }
+  }
+
   // 检查是否需要显示新用户引导
   function checkNewUserOnboarding () {
     if (!userStore.isLoggedIn) {
@@ -536,6 +607,16 @@
         themeStore.updateTheme()
       }
     }, 60000) // 每分钟检查一次
+
+    window.addEventListener('open-shop-chat', handleOpenShopChat)
+    window.addEventListener('open-shop-service-chat', handleOpenShopServiceChat)
+    window.addEventListener('open-crowdfunding-support-chat', handleOpenCrowdfundingSupportChat)
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener('open-shop-chat', handleOpenShopChat)
+    window.removeEventListener('open-shop-service-chat', handleOpenShopServiceChat)
+    window.removeEventListener('open-crowdfunding-support-chat', handleOpenCrowdfundingSupportChat)
   })
 </script>
 

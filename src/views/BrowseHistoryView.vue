@@ -97,6 +97,7 @@
   import { Clock, Delete, Picture } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import { getBrowseHistory, deleteHistoryItem, clearAllHistory } from '@/axios/browse'
+  import { firstProductImageUrl } from '@/utils/productImages'
   import { useUserStore } from '@/stores/user'
 
   const router = useRouter()
@@ -169,10 +170,9 @@
   // 获取项目图片
   const getItemImage = (item) => {
     if (item.product?.cover_image) {
-      return item.product.cover_image
+      return firstProductImageUrl(item.product.cover_image)
     }
-    // 如果没有 product 对象，尝试从其他字段获取
-    return item.cover_image || '/placeholder.png'
+    return firstProductImageUrl(item.cover_image)
   }
 
   // 获取项目标题

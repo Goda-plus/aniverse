@@ -97,7 +97,7 @@
 </template>
 
 <script setup>
-  import { computed, ref, onMounted, onUnmounted } from 'vue'
+  import { computed, ref, onUnmounted, watch } from 'vue'
   import {
     User,
     Check,
@@ -132,15 +132,17 @@
   const processingRequests = ref(new Set())
   const internalNotifications = ref([])
   const loadingNotifications = ref(false)
-  // 计算未读通知数量
-  const unreadCount = computed(() => {
-    return internalNotifications.value.filter(n => n.type === 'friendRequest' || n.type === 'newMessage').length
+  // 合并通知：好友申请以接口实时数据为准，其他通知沿用父组件数据
+  const notifications = computed(() => {
+    const externalNotifications = Array.isArray(props.notifications)
+      ? props.notifications.filter(item => item.type !== 'friendRequest')
+      : []
+    return [...internalNotifications.value, ...externalNotifications]
   })
 
-  // 合并 props 和内部通知
-  const notifications = computed(() => {
-    // 如果有内部通知，使用内部通知；否则使用 props
-    return internalNotifications.value.length > 0 ? internalNotifications.value : props.notifications
+  // 计算未读通知数量
+  const unreadCount = computed(() => {
+    return notifications.value.filter(n => n.type === 'friendRequest' || n.type === 'newMessage').length
   })
 
   function formatNotificationTime (timestamp) {
@@ -226,38 +228,48 @@
     }
   }
 
-  // 设置 Socket 监听器
-  function setupSocketListeners () {
-    if (!props.socket) return
-
-    // 监听好友请求通知
-    props.socket.on('friendRequest', (data) => {
-      console.log('收到好友请求通知:', data)
-      // 重新获取好友请求数据
-      loadFriendRequests()
-    })
-
-    // 监听好友请求被接受通知（当其他用户接受了当前用户的请求时）
-    props.socket.on('friendRequestAccepted', (data) => {
-      console.log('收到好友请求接受通知:', data)
-      // 重新获取好友请求数据
-      loadFriendRequests()
-    })
-  }
-
-  // 清理 Socket 监听器
-  function cleanupSocketListeners () {
-    if (!props.socket) return
-
-    props.socket.off('friendRequest')
-    props.socket.off('friendRequestAccepted')
-  }
-
-  // 组件挂载时获取好友请求数据
-  onMounted(() => {
+  let boundSocket = null
+  const onFriendRequest = (data) => {
+    console.log('收到好友请求通知:', data)
     loadFriendRequests()
-    setupSocketListeners()
-  })
+  }
+  const onFriendRequestAccepted = (data) => {
+    console.log('收到好友请求接受通知:', data)
+    loadFriendRequests()
+  }
+
+  // 设置 Socket 监听器
+  function setupSocketListeners (socketInstance) {
+    if (!socketInstance) return
+    socketInstance.on('friendRequest', onFriendRequest)
+    socketInstance.on('friendRequestAccepted', onFriendRequestAccepted)
+    boundSocket = socketInstance
+  }
+
+  // 清理 Socket 监听器（只移除本组件注册的回调，避免影响其他组件）
+  function cleanupSocketListeners (socketInstance = boundSocket) {
+    if (!socketInstance) return
+    socketInstance.off('friendRequest', onFriendRequest)
+    socketInstance.off('friendRequestAccepted', onFriendRequestAccepted)
+    if (boundSocket === socketInstance) {
+      boundSocket = null
+    }
+  }
+
+  // 首次加载 + 监听 socket 变化，确保连接建立后也能绑定事件
+  loadFriendRequests()
+  watch(
+    () => props.socket,
+    (newSocket, oldSocket) => {
+      if (oldSocket) {
+        cleanupSocketListeners(oldSocket)
+      }
+      if (newSocket) {
+        setupSocketListeners(newSocket)
+      }
+    },
+    { immediate: true }
+  )
 
   // 组件卸载时清理监听器
   onUnmounted(() => {
@@ -280,7 +292,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-weight: 500;
   border-bottom: 1px solid var(--border-color, #343536);
 }
@@ -307,7 +319,7 @@
 }
 
 .notification-item {
-  background: var(--bg-color, #1a1a1b);
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color, #343536);
   transition: background 0.2s;
 }
@@ -345,7 +357,7 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
 }
 
 .notification-icon {
@@ -355,7 +367,7 @@
 
 .close-icon {
   font-size: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
@@ -363,21 +375,21 @@
 }
 
 .close-icon:hover {
-  color: var(--text-color, #d7dadc);
-  background: var(--hover-bg, #343536);
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .notification-message {
   font-size: 12px;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   line-height: 1.4;
   margin-bottom: 4px;
 }
 
 .notification-preview {
   font-size: 11px;
-  color: var(--text-color-secondary, #818384);
-  background: var(--hover-bg, #272729);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
   padding: 6px 8px;
   border-radius: 4px;
   margin-top: 6px;
@@ -387,7 +399,7 @@
 
 .notification-time {
   font-size: 10px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -412,14 +424,14 @@
 }
 
 .empty-chat-list h3 {
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-size: 16px;
   margin-bottom: 8px;
   font-weight: 500;
 }
 
 .empty-chat-list p {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
 }

@@ -212,7 +212,7 @@
             >
               <el-icon><component :is="category.icon" /></el-icon>
               <span>{{ category.label }}</span>
-              <span class="count">({{ getCategoryCount(category.key) }})</span>
+              <!-- <span class="count">({{ getCategoryCount(category.key) }})</span> -->
             </div>
           </div>
         </div>

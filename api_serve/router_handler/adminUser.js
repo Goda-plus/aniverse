@@ -103,7 +103,18 @@ exports.getUserDetail = async (req, res) => {
     const statsRes = await db.conMysql(statsSql, [id, id, id])
     const stats = statsRes[0] || { post_count: 0, comment_count: 0, scene_moment_count: 0 }
 
-    res.cc(true, '获取成功', 200, { user: users[0], stats })
+    let ban = null
+    try {
+      const banRows = await db.conMysql(
+        'SELECT status, banned_until, reason FROM user_bans WHERE user_id = ? LIMIT 1',
+        [id]
+      )
+      if (banRows && banRows.length) ban = banRows[0]
+    } catch (e) {
+      if (e.code !== 'ER_NO_SUCH_TABLE') throw e
+    }
+
+    res.cc(true, '获取成功', 200, { user: users[0], stats, ban })
   } catch (err) {
     console.error('获取用户详情错误:', err)
     res.cc(false, '获取失败', 500)
@@ -124,11 +135,30 @@ exports.banOrUnbanUser = async (req, res) => {
     const exists = await db.conMysql('SELECT id, username FROM users WHERE id = ? LIMIT 1', [id])
     if (!exists.length) return res.cc(false, '用户不存在', 404)
 
-    // 更新user表的status字段
+    // 更新 user 表状态
     await db.conMysql(
       'UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?',
       [status, id]
     )
+
+    // 同步 user_bans，与前台登录封禁校验一致（表不存在时忽略）
+    try {
+      if (status === 'banned') {
+        await db.conMysql(
+          `INSERT INTO user_bans (user_id, status, reason, banned_until, updated_at)
+           VALUES (?, 'banned', '', NULL, NOW())
+           ON DUPLICATE KEY UPDATE status = 'banned', banned_until = NULL, updated_at = NOW()`,
+          [id]
+        )
+      } else if (status === 'online') {
+        await db.conMysql(
+          'UPDATE user_bans SET status = ?, updated_at = NOW() WHERE user_id = ?',
+          ['active', id]
+        )
+      }
+    } catch (e) {
+      if (e.code !== 'ER_NO_SUCH_TABLE') console.error('user_bans 同步失败:', e)
+    }
 
     const actionType = status === 'banned' ? 'ban_user' : status === 'online' ? 'unban_user' : 'update_user_status'
     const actionDesc = status === 'banned' ? `封禁用户 ${exists[0].username}` : 

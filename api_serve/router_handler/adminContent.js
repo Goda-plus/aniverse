@@ -12,7 +12,9 @@ async function recordAdminLog (req, action_type, description, target_type = null
       'INSERT INTO admin_logs (admin_id, action_type, target_type, target_id, description, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
       [adminId, action_type, target_type, target_id, description, clientIp]
     )
-  } catch (e) {}
+  } catch (e) {
+    // Ignore log write failures to not block main request.
+  }
 }
 
 // 举报列表
@@ -28,7 +30,8 @@ exports.listReports = async (req, res) => {
       params.push(status)
     }
     if (content_type) {
-      where += ' AND r.content_type = ?'
+      // 前端传入 content_type，这里映射到 user_reports.target_type
+      where += ' AND r.target_type = ?'
       params.push(content_type)
     }
 
@@ -38,21 +41,20 @@ exports.listReports = async (req, res) => {
     const sql = `
       SELECT
         r.id,
-        r.user_id,
+        r.reporter_id,
         u.username,
-        r.content_type,
-        r.content_id,
-        r.reason,
-        r.description,
+        r.target_type AS content_type,
+        r.target_id AS content_id,
+        r.report_type AS reason,
+        r.reason AS description,
         r.status,
-        r.handler_admin_id,
         a.username AS handler_name,
-        r.handle_comment,
+        '' AS handle_comment,
         r.created_at,
-        r.updated_at
+        r.handled_at AS updated_at
       FROM user_reports r
-      LEFT JOIN users u ON u.id = r.user_id
-      LEFT JOIN admins a ON a.id = r.handler_admin_id
+      LEFT JOIN users u ON u.id = r.reporter_id
+      LEFT JOIN admins a ON a.id = r.handler_id
       ${where}
       ORDER BY r.created_at DESC
       LIMIT ? OFFSET ?
@@ -63,7 +65,8 @@ exports.listReports = async (req, res) => {
     if (err && err.code === 'ER_NO_SUCH_TABLE') {
       return res.cc(false, 'user_reports 表不存在，请先执行迁移脚本 migrate_admin_backoffice.js', 500)
     }
-    res.cc(false, '获取失败', 500)
+    console.error('listReports 获取失败:', err)
+    res.cc(false, (err && err.message) || '获取失败', 500)
   }
 }
 
@@ -71,7 +74,7 @@ exports.listReports = async (req, res) => {
 exports.handleReport = async (req, res) => {
   try {
     const { id } = req.params
-    const { status, handle_comment } = req.body
+    const { status } = req.body
     if (!id) return res.cc(false, '缺少举报ID', 400)
     if (!['pending', 'resolved', 'rejected'].includes(status)) {
       return res.cc(false, 'status 必须为 pending/resolved/rejected', 400)
@@ -79,10 +82,10 @@ exports.handleReport = async (req, res) => {
 
     const sql = `
       UPDATE user_reports
-      SET status = ?, handler_admin_id = ?, handle_comment = ?, updated_at = NOW()
+      SET status = ?, handler_id = ?, handled_at = NOW()
       WHERE id = ?
     `
-    const result = await db.conMysql(sql, [status, req.user.id, handle_comment || '', id])
+    const result = await db.conMysql(sql, [status, req.user.id, id])
     if (result.affectedRows === 0) return res.cc(false, '举报不存在', 404)
 
     await recordAdminLog(req, 'handle_report', `处理举报 ${id} -> ${status}`, 'report', id)
@@ -135,7 +138,8 @@ exports.listFeedback = async (req, res) => {
     if (err && err.code === 'ER_NO_SUCH_TABLE') {
       return res.cc(false, 'user_feedback 表不存在，请先执行迁移脚本 migrate_admin_backoffice.js', 500)
     }
-    res.cc(false, '获取失败', 500)
+    console.error('listFeedback 获取失败:', err)
+    res.cc(false, (err && err.message) || '获取失败', 500)
   }
 }
 

@@ -48,7 +48,6 @@ exports.getRoleDetail = async (req, res) => {
         description, 
         permissions,
         created_at,
-        updated_at
       FROM admin_roles
       WHERE id = ?
     `
@@ -162,7 +161,7 @@ exports.updateRole = async (req, res) => {
     // 更新角色
     const updateSql = `
       UPDATE admin_roles 
-      SET name = ?, description = ?, permissions = ?, updated_at = NOW()
+      SET name = ?, description = ?, permissions = ?
       WHERE id = ?
     `
     await db.conMysql(updateSql, [name, description || '', permissionsJson, id])

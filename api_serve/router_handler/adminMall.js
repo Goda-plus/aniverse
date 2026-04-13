@@ -103,6 +103,121 @@ LIMIT ? OFFSET ?;
   }
 }
 
+// 商品详情（管理端：包含图片与评价统计）
+exports.getProductDetail = async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.cc(false, '缺少商品ID', 400)
+
+    const productSql = `
+      SELECT
+        p.*,
+        AVG(CASE WHEN r.is_approved = 1 THEN r.rating ELSE NULL END) AS avg_rating,
+        COUNT(DISTINCT CASE WHEN r.is_approved = 1 THEN r.id END) AS review_count
+      FROM products p
+      LEFT JOIN product_reviews r ON r.product_id = p.id
+      WHERE p.id = ?
+      GROUP BY p.id
+    `
+    const rows = await db.conMysql(productSql, [id])
+    if (!rows.length) return res.cc(false, '商品不存在', 404)
+
+    const imagesSql = `
+      SELECT id, product_id, image_url, sort_order, created_at
+      FROM product_images
+      WHERE product_id = ?
+      ORDER BY sort_order ASC, id ASC
+    `
+    const images = await db.conMysql(imagesSql, [id])
+
+    res.cc(true, '获取成功', 200, { product: rows[0], images })
+  } catch (err) {
+    res.cc(false, '获取失败', 500)
+  }
+}
+
+// 店铺详情（管理端）
+exports.getShopDetail = async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.cc(false, '缺少店铺ID', 400)
+
+    const sql = `
+      SELECT
+        s.shop_id,
+        s.seller_id,
+        s.shop_name,
+        s.description,
+        s.logo,
+        s.banner_image,
+        s.announcement,
+        s.contact_info,
+        s.status,
+        s.rating,
+        s.total_sales,
+        s.level,
+        s.created_at,
+        s.updated_at,
+        u.username AS seller_name,
+        (
+          SELECT COUNT(*)
+          FROM products p
+          WHERE p.shop_id = s.shop_id
+        ) AS product_count,
+        (
+          SELECT COUNT(DISTINCT o.id)
+          FROM orders o
+          JOIN order_items oi ON oi.order_id = o.id
+          JOIN products p2 ON p2.id = oi.product_id
+          WHERE p2.shop_id = s.shop_id
+        ) AS order_count
+      FROM shops s
+      LEFT JOIN users u ON u.id = s.seller_id
+      WHERE s.shop_id = ?
+      LIMIT 1
+    `
+    const rows = await db.conMysql(sql, [id])
+    if (!rows.length) return res.cc(false, '店铺不存在', 404)
+
+    res.cc(true, '获取成功', 200, { shop: rows[0] })
+  } catch (err) {
+    res.cc(false, '获取失败', 500)
+  }
+}
+
+// 更新店铺状态（管理端）
+exports.updateShopStatus = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status } = req.body
+    if (!id) return res.cc(false, '缺少店铺ID', 400)
+    if (!status) return res.cc(false, '缺少 status', 400)
+
+    const allowed = ['pending', 'active', 'suspended', 'closed']
+    if (!allowed.includes(status)) return res.cc(false, '无效的店铺状态', 400)
+
+    let result
+    try {
+      // 优先兼容含 updated_at 字段的表结构
+      const sql = 'UPDATE shops SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE shop_id = ?'
+      result = await db.conMysql(sql, [status, id])
+    } catch (err) {
+      // 部分旧库没有 updated_at 字段，降级仅更新状态
+      if (!['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_FIELD'].includes(err.code)) {
+        throw err
+      }
+      const fallbackSql = 'UPDATE shops SET status = ? WHERE shop_id = ?'
+      result = await db.conMysql(fallbackSql, [status, id])
+    }
+    if (result.affectedRows === 0) return res.cc(false, '店铺不存在', 404)
+
+    await recordAdminLog(req, 'update_shop_status', `更新店铺 ${id} 状态为 ${status}`, 'shop', id)
+    res.cc(true, '更新成功', 200)
+  } catch (err) {
+    res.cc(false, '更新失败', 500)
+  }
+}
+
 // 更新商品（审核/上下架/库存/价格等）
 exports.updateProduct = async (req, res) => {
   try {
@@ -133,11 +248,74 @@ exports.updateProduct = async (req, res) => {
   }
 }
 
+// 订单详情（管理端：包含订单项与地址）
+exports.getOrderDetail = async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.cc(false, '缺少订单ID', 400)
+
+    const orderSql = `
+      SELECT
+        o.*,
+        u.username,
+        a.recipient_name,
+        a.phone,
+        a.province,
+        a.city,
+        a.district,
+        a.detail_address,
+        a.postal_code
+      FROM orders o
+      LEFT JOIN users u ON u.id = o.user_id
+      LEFT JOIN addresses a ON o.address_id = a.id
+      WHERE o.id = ?
+      LIMIT 1
+    `
+    const orders = await db.conMysql(orderSql, [id])
+    if (!orders.length) return res.cc(false, '订单不存在', 404)
+    const order = orders[0]
+
+    const itemsSql = `
+      SELECT
+        oi.*,
+        p.name,
+        p.cover_image
+      FROM order_items oi
+      LEFT JOIN products p ON oi.product_id = p.id
+      WHERE oi.order_id = ?
+      ORDER BY oi.id ASC
+    `
+    let items = await db.conMysql(itemsSql, [id])
+    items = items.map((row) => {
+      if (!row.product_snapshot) return row
+      try {
+        const s = typeof row.product_snapshot === 'string'
+          ? JSON.parse(row.product_snapshot)
+          : row.product_snapshot
+        if (s && typeof s === 'object') {
+          return {
+            ...row,
+            name: row.name || s.name || s.product_name,
+            cover_image: row.cover_image || s.cover_image || s.image || s.cover
+          }
+        }
+      } catch (_) { /* ignore */ }
+      return row
+    })
+
+    res.cc(true, '获取成功', 200, { order, items })
+  } catch (err) {
+    res.cc(false, '获取失败', 500)
+  }
+}
+
 // 订单列表（管理端）
 exports.listOrders = async (req, res) => {
   try {
     const { page, pageSize, offset } = parsePagination(req)
-    const { status, order_number, user_id } = req.query
+    const { status, user_id, shop_id: shopIdParam } = req.query
+    const order_number = req.query.order_number || req.query.order_no
+    const shop_id = shopIdParam || req.query.shopId
 
     let where = 'WHERE 1=1'
     const params = []
@@ -152,6 +330,14 @@ exports.listOrders = async (req, res) => {
     if (user_id) {
       where += ' AND o.user_id = ?'
       params.push(user_id)
+    }
+    if (shop_id) {
+      where += ` AND EXISTS (
+        SELECT 1 FROM order_items oi_shop
+        JOIN products p_shop ON p_shop.id = oi_shop.product_id
+        WHERE oi_shop.order_id = o.id AND p_shop.shop_id = ?
+      )`
+      params.push(shop_id)
     }
 
     const countRes = await db.conMysql(`SELECT COUNT(*) AS total FROM orders o ${where}`, params)
@@ -171,7 +357,12 @@ exports.listOrders = async (req, res) => {
         o.delivered_time,
         o.cancelled_time,
         o.created_at,
-        o.updated_at
+        o.updated_at,
+        (
+          SELECT COALESCE(SUM(oi_qty.quantity), 0)
+          FROM order_items oi_qty
+          WHERE oi_qty.order_id = o.id
+        ) AS item_count
       FROM orders o
       LEFT JOIN users u ON u.id = o.user_id
       ${where}

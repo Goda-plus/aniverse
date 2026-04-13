@@ -27,7 +27,9 @@ export const updateSystemSetting = (data) => request.put('/api/admin/settings', 
 // 操作日志
 export const getAdminLogs = (params) => request.get('/api/admin/logs', { params })
 
-
-
+// 前台用户管理（需 user.read / user.ban）
+export const listAdminUsers = (params) => request.get('/api/admin/users', { params })
+export const getAdminUserDetail = (id) => request.get(`/api/admin/users/${id}`)
+export const banOrUnbanAdminUser = (id, data) => request.put(`/api/admin/users/${id}/ban`, data)
 
 

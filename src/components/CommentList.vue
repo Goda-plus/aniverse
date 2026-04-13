@@ -30,14 +30,18 @@
         show-word-limit
       />
       <div class="editor-actions">
+        <div class="comment-tips">
+          <span>按 Ctrl+Enter 或 Cmd+Enter 发送</span>
+        </div>
         <el-button
           type="primary"
           size="small"
+          class="comment-submit-btn"
           :loading="submittingComment"
           :disabled="!newCommentContent.trim()"
           @click="submitComment"
         >
-          {{ replyingTo ? '发表回复' : '发表评论' }}
+          {{ replyingTo ? '发布回复' : '发布' }}
         </el-button>
       </div>
     </div>
@@ -102,6 +106,7 @@
 <script setup>
   import { ref, computed, onMounted, watch ,defineProps, defineEmits, defineExpose} from 'vue'
   import { getCommentTree, deleteComment } from '@/axios/comment'
+  import { useUserStore } from '@/stores/user'
   import CommentItem from './CommentItem.vue'
   import { ChatLineRound, Loading, Close } from '@element-plus/icons-vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
@@ -154,6 +159,8 @@
   })
 
   const emit = defineEmits(['reply', 'delete', 'comment-count-change', 'create-comment'])
+
+  const userStore = useUserStore()
 
   const comments = ref([])
   const loading = ref(false)
@@ -452,7 +459,17 @@
 .editor-actions {
   margin-top: 12px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.comment-tips {
+  font-size: 12px;
+  color: var(--text-secondary, #818384);
+}
+
+.comment-submit-btn {
+  min-width: 76px;
 }
 
 .loading-container,

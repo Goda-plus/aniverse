@@ -89,7 +89,7 @@
             v-if="project.status === 'active' && !hasBacked"
             type="primary"
             size="large"
-            @click="showSupportDialog = true"
+            @click="openSupportDialog"
           >
             <el-icon><Star /></el-icon>
             支持项目
@@ -105,6 +105,46 @@
             已支持
           </el-button>
 
+          <el-button
+            v-if="myProjectBacking && canBuyerRefundOnly(myProjectBacking)"
+            type="warning"
+            size="large"
+            plain
+            @click="openBuyerRefundDialogForProject"
+          >
+            申请退款
+          </el-button>
+          <el-button
+            v-if="myProjectBacking && canBuyerRefundReturn(myProjectBacking)"
+            type="warning"
+            size="large"
+            plain
+            @click="openBuyerRefundDialogForProject"
+          >
+            申请退款退货
+          </el-button>
+          <el-tag
+            v-if="myProjectBacking && buyerRefundCode(myProjectBacking) === 'refund'"
+            type="warning"
+            size="large"
+            effect="plain"
+          >
+            退款申请处理中
+          </el-tag>
+          <el-tag
+            v-if="myProjectBacking && buyerRefundCode(myProjectBacking) === 'refund_return'"
+            type="warning"
+            size="large"
+            effect="plain"
+          >
+            退款退货申请处理中
+          </el-tag>
+
+          <el-button v-if="isCreator" type="success" size="large" @click="goCreatorOrders">
+            <el-icon><List /></el-icon>
+            回报订单
+          </el-button>
+
           <el-button v-if="isCreator" type="warning" size="large" @click="editProject">
             <el-icon><Edit /></el-icon>
             编辑项目
@@ -118,6 +158,16 @@
           <el-button type="info" size="large" @click="shareProject">
             <el-icon><Share /></el-icon>
             分享
+          </el-button>
+
+          <el-button
+            v-if="userStore.isLoggedIn && !isCreator"
+            type="danger"
+            plain
+            size="large"
+            @click="openReportProject"
+          >
+            举报
           </el-button>
         </div>
       </div>
@@ -149,7 +199,10 @@
                 v-for="tier in tiers"
                 :key="tier.id"
                 class="tier-item"
-                :class="{ disabled: tier.current_backers >= tier.max_backers }"
+                :class="{
+                  disabled: isTierSoldOut(tier),
+                  active: selectedTier && selectedTier.id === tier.id
+                }"
                 @click="selectTier(tier)"
               >
                 <div class="tier-header">
@@ -254,6 +307,15 @@
                     <div class="comment-actions">
                       <el-button size="small" @click="replyToComment(comment)">
                         回复
+                      </el-button>
+                      <el-button
+                        v-if="userStore.isLoggedIn && Number(comment.user_id) !== Number(userStore.user?.id)"
+                        size="small"
+                        link
+                        type="danger"
+                        @click="openReportCrowdfundingComment(comment)"
+                      >
+                        举报
                       </el-button>
                     </div>
                   </div>
@@ -386,19 +448,29 @@
         <el-divider />
 
         <el-form :model="supportForm" label-width="120px">
-          <el-form-item label="收货地址" required>
+          <el-form-item
+            label="收货地址"
+            :required="Boolean(selectedTier.shipping_included || selectedTier.estimated_delivery)"
+          >
             <el-select
               v-model="supportForm.address_id"
               placeholder="选择收货地址"
               style="width: 100%"
+              clearable
             >
               <el-option
                 v-for="address in userAddresses"
-                :key="address.id"
-                :label="`${address.province}${address.city}${address.district} ${address.detail_address}`"
-                :value="address.id"
+                :key="address.address_id"
+                :label="`${address.recipient_name} ${address.phone} ｜ ${address.province}${address.city}${address.district} ${address.detail_address}`"
+                :value="address.address_id"
               />
             </el-select>
+            <div
+              v-if="!(selectedTier.shipping_included || selectedTier.estimated_delivery)"
+              style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;"
+            >
+              此档位不强制填写；若有实体回报需寄送，可自愿选择或填写默认收货地址
+            </div>
           </el-form-item>
 
           <el-form-item label="支持数量">
@@ -434,7 +506,7 @@
             :loading="supporting"
             @click="confirmSupport"
           >
-            {{ supporting ? '支持中...' : `支持 ￥${selectedTier ? selectedTier.amount * supportForm.quantity : 0}` }}
+            {{ supporting ? '支持中...' : `支持 ￥${supportTotal}` }}
           </el-button>
         </div>
       </template>
@@ -445,6 +517,7 @@
       v-model="showUpdateDialog"
       title="发布项目更新"
       width="600px"
+      append-to-body
       :close-on-click-modal="false"
     >
       <el-form :model="updateForm" label-width="80px">
@@ -490,18 +563,25 @@
         </div>
       </template>
     </el-dialog>
+
+    <ReportDialog
+      v-model="reportDialogVisible"
+      :target-type="reportTargetType"
+      :target-id="reportTargetId"
+    />
   </div>
 </template>
 
 <script setup>
   import { ref, computed, onMounted, watch, provide } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  import { ElMessage } from 'element-plus'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   import {
     Picture,
     Star,
     Check,
     Edit,
+    List,
     Share,
     Clock,
     Van
@@ -514,17 +594,39 @@
     backCrowdfundingProject,
     addCrowdfundingComment,
     createCrowdfundingUpdate,
-    getMyCrowdfundingBackings
+    getMyCrowdfundingBackings,
+    requestCrowdfundingBuyerRefund
   } from '@/axios/crowdfunding'
-  import axios from '@/axios/api_index'
+  import {
+    buyerRefundCode,
+    canBuyerRefundOnly,
+    canBuyerRefundReturn
+  } from '@/utils/crowdfundingBuyerRefund'
+  import { listAddresses } from '@/axios/mall'
   import { useUserStore } from '@/stores/user'
+  import ReportDialog from '@/components/ReportDialog.vue'
 
   const route = useRoute()
   const router = useRouter()
   const userStore = useUserStore()
 
   const project = ref({})
-  
+  const reportDialogVisible = ref(false)
+  const reportTargetType = ref('crowdfunding')
+  const reportTargetId = ref(0)
+
+  function openReportProject () {
+    reportTargetType.value = 'crowdfunding'
+    reportTargetId.value = Number(project.value.id) || 0
+    reportDialogVisible.value = true
+  }
+
+  function openReportCrowdfundingComment (comment) {
+    reportTargetType.value = 'crowdfunding_comment'
+    reportTargetId.value = Number(comment.id) || 0
+    reportDialogVisible.value = true
+  }
+
   // 提供项目数据给父组件
   provide('projectData', project)
   const tiers = ref([])
@@ -539,6 +641,7 @@
 
   const selectedTier = ref(null)
   const hasBacked = ref(false)
+  const myProjectBacking = ref(null)
   const isFavorited = ref(false)
   const isCreator = ref(false)
 
@@ -555,6 +658,15 @@
     notes: ''
   })
 
+  // 支持总金额（统一 Number 化，避免字符串/空值导致的 ￥0/NaN）
+  const supportTotal = computed(() => {
+    if (!selectedTier.value) return 0
+    const tierAmount = Number(selectedTier.value.amount || 0)
+    const qty = Number(supportForm.value.quantity || 1)
+    if (!Number.isFinite(tierAmount) || !Number.isFinite(qty) || qty < 1) return 0
+    return tierAmount * qty
+  })
+
   const updateForm = ref({
     title: '',
     content: '',
@@ -569,7 +681,8 @@
       'failed': 'danger',
       'pending_review': 'warning',
       'draft': 'info',
-      'cancelled': 'info'
+      'cancelled': 'info',
+      'paused': 'warning'
     }
     return statusMap[project.value.status] || 'info'
   })
@@ -581,7 +694,8 @@
       'failed': '已失败',
       'pending_review': '审核中',
       'draft': '草稿',
-      'cancelled': '已取消'
+      'cancelled': '已取消',
+      'paused': '已暂停'
     }
     return statusMap[project.value.status] || '未知状态'
   })
@@ -617,8 +731,7 @@
         project.value = projectRes.data.project
         tiers.value = projectRes.data.tiers
 
-        // 检查是否已支持
-        hasBacked.value = await checkIfBacked(projectId)
+        await syncMyProjectBacking(projectId)
 
         // 检查是否为创建者
         isCreator.value = project.value.creator_id === userStore.user?.id
@@ -656,14 +769,58 @@
     }
   }, { immediate: true })
 
-  // 检查是否已支持
-  const checkIfBacked = async (projectId) => {
-    if (!userStore.isLoggedIn) return false
+  const syncMyProjectBacking = async (projectId) => {
+    myProjectBacking.value = null
+    hasBacked.value = false
+    if (!userStore.isLoggedIn || !projectId) return
     try {
-      const response = await getMyCrowdfundingBackings()
-      return (response.data?.list || []).some(backing => backing.project_id === parseInt(projectId))
+      const response = await getMyCrowdfundingBackings({ page: 1, pageSize: 200 })
+      const pid = parseInt(projectId, 10)
+      const list = response.data?.list || []
+      const found = list.find(b => b.project_id === pid)
+      if (found) {
+        myProjectBacking.value = found
+        hasBacked.value = true
+      }
     } catch {
-      return false
+      myProjectBacking.value = null
+      hasBacked.value = false
+    }
+  }
+
+  const openBuyerRefundDialogForProject = async () => {
+    const b = myProjectBacking.value
+    if (!b) return
+    const isReturn = canBuyerRefundReturn(b)
+    const title = isReturn ? '申请退款退货' : '申请退款'
+    const unpaid = String(b?.status || '').toLowerCase() === 'pending'
+    const message = isReturn
+      ? '当前为已发货/已送达/已完成，将发起退款退货申请。请后续与发起人沟通退回商品及退款事宜。'
+      : unpaid
+        ? '当前为待支付或未发货，将发起退款/关单申请。发起人可在回报订单中处理。'
+        : '当前为未发货，将发起退款申请。发起人可在回报订单中处理。'
+    try {
+      const { value } = await ElMessageBox.prompt(
+        `${message}\n\n说明（选填，500 字内）：`,
+        title,
+        {
+          confirmButtonText: '提交申请',
+          cancelButtonText: '取消',
+          inputPlaceholder: '选填',
+          inputPattern: /^[\s\S]{0,500}$/,
+          inputErrorMessage: '说明过长'
+        }
+      )
+      const res = await requestCrowdfundingBuyerRefund(b.id, { reason: value || '' })
+      if (res.success && res.code === 200) {
+        ElMessage.success(res.message || '提交成功')
+        await syncMyProjectBacking(project.value.id)
+      } else {
+        ElMessage.error(res.message || '提交失败')
+      }
+    } catch (error) {
+      if (error === 'cancel') return
+      ElMessage.error(error.response?.data?.message || error.message || '提交失败')
     }
   }
 
@@ -673,18 +830,50 @@
     return false
   }
 
+  // 打开支持对话框（必须先选档位）
+  const openSupportDialog = () => {
+    if (!selectedTier.value) {
+      ElMessage.warning('请先在下方选择一个支持档位')
+      // 尝试滚动到档位区域，提升可发现性
+      const el = document.querySelector('.tiers-grid')
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      return
+    }
+    showSupportDialog.value = true
+  }
+
   // 选择支持档位
   const selectTier = (tier) => {
-    if (tier.current_backers >= tier.max_backers) return
+    if (isTierSoldOut(tier)) return
     selectedTier.value = tier
     showSupportDialog.value = true
+  }
+
+  const isTierSoldOut = (tier) => {
+    const max = tier?.max_backers
+    const current = Number(tier?.current_backers || 0)
+    // max_backers 为 null/undefined/<=0 表示不限量
+    if (max === null || max === undefined) return false
+    const maxNum = Number(max)
+    if (!Number.isFinite(maxNum) || maxNum <= 0) return false
+    return current >= maxNum
   }
 
   // 确认支持
   const confirmSupport = async () => {
     if (!selectedTier.value) return
+    if (!Number.isFinite(supportTotal.value) || supportTotal.value <= 0) {
+      ElMessage.error('该档位支持金额无效')
+      return
+    }
 
-    if (!supportForm.value.address_id) {
+    const needShippingAddress = Boolean(
+      selectedTier.value.shipping_included || selectedTier.value.estimated_delivery
+    )
+
+    if (needShippingAddress && !supportForm.value.address_id) {
       ElMessage.error('请选择收货地址')
       return
     }
@@ -692,18 +881,22 @@
     supporting.value = true
 
     try {
+      const shippingAddressPayload = supportForm.value.address_id
+        ? userAddresses.value.find(addr => addr.address_id === supportForm.value.address_id)
+        : null
+
       const response = await backCrowdfundingProject({
         project_id: project.value.id,
         tier_id: selectedTier.value.id,
         quantity: supportForm.value.quantity,
-        shipping_address: userAddresses.value.find(addr => addr.id === supportForm.value.address_id),
+        shipping_address: shippingAddressPayload,
         notes: supportForm.value.notes
       })
 
       if (response.success) {
         ElMessage.success('支持成功！')
         showSupportDialog.value = false
-        hasBacked.value = true
+        await syncMyProjectBacking(project.value.id)
         // 重新加载项目数据
         loadProjectData()
       } else {
@@ -818,6 +1011,14 @@
     }
   }
 
+  // 发起人：回报订单管理
+  const goCreatorOrders = () => {
+    router.push({
+      name: 'crowdfunding-creator-orders',
+      query: { projectId: String(project.value.id) }
+    })
+  }
+
   // 编辑项目
   const editProject = () => {
     router.push(`/crowdfunding/edit/${project.value.id}`)
@@ -862,13 +1063,22 @@
   const loadUserAddresses = async () => {
     if (!userStore.isLoggedIn) return
     try {
-      const response = await axios.get('/api/mall/addresses')
-      if (response.success) {
-        // 处理不同的响应结构
-        userAddresses.value = response.data?.list || response.data || []
+      // 复用商城地址接口：返回结构为 { code, data }
+      const response = await listAddresses()
+      if (response?.code === 200) {
+        userAddresses.value = response.data || []
+
+        // 自动选中默认地址（或第一个），提升可用性
+        if (!supportForm.value.address_id && userAddresses.value.length > 0) {
+          const defaultAddr = userAddresses.value.find(a => a.is_default === 1 || a.is_default === true)
+          supportForm.value.address_id = (defaultAddr || userAddresses.value[0]).address_id
+        }
+      } else {
+        userAddresses.value = []
       }
     } catch (error) {
       console.error('加载地址失败:', error)
+      userAddresses.value = []
     }
   }
 
@@ -1051,6 +1261,16 @@
 .tier-item:hover {
   border-color: var(--primary);
   box-shadow: var(--shadow-soft);
+}
+
+.tier-item.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.4);
+  background: linear-gradient(
+    135deg,
+    rgba(64, 158, 255, 0.08),
+    rgba(64, 158, 255, 0.02)
+  );
 }
 
 .tier-item.disabled {

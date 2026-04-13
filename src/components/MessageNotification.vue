@@ -265,7 +265,7 @@
 }
 
 .notification-item {
-  background: var(--bg-color, #1a1a1b);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color, #343536);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -324,7 +324,7 @@
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
 }
 
 .notification-icon {
@@ -334,7 +334,7 @@
 
 .close-icon {
   font-size: 14px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -342,21 +342,21 @@
 }
 
 .close-icon:hover {
-  color: var(--text-color, #d7dadc);
-  background: var(--hover-bg, #343536);
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .notification-message {
   font-size: 13px;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   line-height: 1.4;
   margin-bottom: 4px;
 }
 
 .notification-preview {
   font-size: 12px;
-  color: var(--text-color-secondary, #818384);
-  background: var(--hover-bg, #272729);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
   padding: 6px 8px;
   border-radius: 4px;
   margin-top: 8px;
@@ -365,7 +365,7 @@
 
 .notification-time {
   font-size: 11px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   margin-top: 8px;
 }
 

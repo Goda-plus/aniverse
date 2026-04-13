@@ -37,7 +37,7 @@
                 </h3>
                 <div class="product-card">
                   <el-image
-                    :src="product.cover_image || '/placeholder.png'"
+                    :src="firstProductImageUrl(product.cover_image)"
                     :alt="product.name"
                     class="product-image"
                     fit="cover"
@@ -210,6 +210,7 @@
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import AddressManage from '@/components/AddressManage.vue'
   import { getProductDetail, listAddresses, createOrder } from '@/axios/mall'
+  import { firstProductImageUrl } from '@/utils/productImages'
 
   const route = useRoute()
   const router = useRouter()

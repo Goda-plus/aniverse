@@ -1,26 +1,151 @@
 const { conMysql } = require('../db/index')
 const moderationService = require('../utils/moderationService')
 
+const VALID_QUEUE_STATUSES = ['pending', 'approved', 'rejected', 'escalated']
+
+/** 队列状态与内容 moderation_status 同步（escalated 仅写在队列，内容保持 pending 不公开） */
+async function syncContentWithQueueStatus (connection, queueItem, queueStatus, moderator_id, reason) {
+  const cid = queueItem.content_id
+  const syncPostOrComment = async (table) => {
+    const contentStatus = queueStatus === 'escalated' ? 'pending' : queueStatus
+    if (contentStatus === 'approved') {
+      await connection.execute(
+        `UPDATE ${table} SET moderation_status = 'approved', moderated_at = NOW(), moderated_by = ?, violation_reason = NULL WHERE id = ?`,
+        [moderator_id, cid]
+      )
+    } else if (contentStatus === 'rejected') {
+      await connection.execute(
+        `UPDATE ${table} SET moderation_status = 'rejected', moderated_at = NOW(), moderated_by = ?, violation_reason = ? WHERE id = ?`,
+        [moderator_id, reason || '审核拒绝', cid]
+      )
+    } else {
+      await connection.execute(
+        `UPDATE ${table} SET moderation_status = 'pending', moderated_at = NOW(), moderated_by = ?, violation_reason = NULL WHERE id = ?`,
+        [moderator_id, cid]
+      )
+    }
+  }
+
+  if (queueItem.content_type === 'post') {
+    await syncPostOrComment('posts')
+  } else if (queueItem.content_type === 'comment') {
+    await syncPostOrComment('comments')
+  } else if (queueItem.content_type === 'scene_moment') {
+    let smStatus
+    let reviewComment
+    if (queueStatus === 'approved') {
+      smStatus = 'approved'
+      reviewComment = null
+    } else if (queueStatus === 'rejected') {
+      smStatus = 'rejected'
+      reviewComment = reason || null
+    } else if (queueStatus === 'escalated') {
+      smStatus = 'pending'
+      reviewComment = reason || '已升级处理'
+    } else {
+      smStatus = 'pending'
+      reviewComment = null
+    }
+    await connection.execute(
+      'UPDATE scene_moments SET moderation_status = ?, reviewer_id = ?, review_time = NOW(), review_comment = ? WHERE id = ?',
+      [smStatus, moderator_id, reviewComment, cid]
+    )
+  }
+}
+
+// 管理员将队列项设为四种状态之一（与数据库 moderation_queue.status 一致）
+exports.setModerationQueueStatus = async (req, res, next) => {
+  try {
+    const { queue_id, status: newStatus, reason } = req.body
+    const moderator_id = req.user.id
+
+    if (!queue_id || !newStatus) {
+      return res.cc(false, '缺少必要参数', 400)
+    }
+    if (!VALID_QUEUE_STATUSES.includes(newStatus)) {
+      return res.cc(false, '无效状态，允许值：pending / approved / rejected / escalated', 400)
+    }
+
+    const [queueItem] = await conMysql('SELECT * FROM moderation_queue WHERE id = ?', [queue_id])
+    if (!queueItem) {
+      return res.cc(false, '审核队列项目不存在', 404)
+    }
+
+    if (queueItem.status === newStatus) {
+      return res.cc(true, '状态未变化', 200)
+    }
+
+    const connection = await conMysql.getConnection()
+    await connection.beginTransaction()
+
+    try {
+      await syncContentWithQueueStatus(connection, queueItem, newStatus, moderator_id, reason)
+
+      await connection.execute(
+        'UPDATE moderation_queue SET status = ?, assigned_moderator_id = ?, updated_at = NOW() WHERE id = ?',
+        [newStatus, moderator_id, queue_id]
+      )
+
+      const logAction =
+        newStatus === 'approved' ? 'manual_approve'
+          : newStatus === 'rejected' ? 'manual_reject'
+            : 'flag'
+      await connection.execute(`
+        INSERT INTO moderation_logs
+        (content_type, content_id, user_id, moderator_id, action, reason, severity_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        queueItem.content_type,
+        queueItem.content_id,
+        queueItem.user_id,
+        moderator_id,
+        logAction,
+        reason || `管理员设置队列状态为 ${newStatus}`,
+        queueItem.severity_score
+      ])
+
+      await connection.commit()
+      res.cc(true, '队列状态已更新', 200)
+    } catch (error) {
+      await connection.rollback()
+      throw error
+    } finally {
+      connection.release()
+    }
+  } catch (err) {
+    next(err)
+  }
+}
+
 // 获取审核队列列表
 exports.getModerationQueue = async (req, res, next) => {
   try {
-    const { page = 1, pageSize = 20, status = 'pending', priority, content_type } = req.query
+    const page = req.query.page !== undefined ? req.query.page : 1
+    const pageSize = req.query.pageSize !== undefined ? req.query.pageSize : 20
+    const { priority, content_type } = req.query
+    const rawStatus = req.query.status
     const offset = (page - 1) * pageSize
 
-    let whereConditions = ['status = ?']
-    const params = [status]
+    const whereConditions = []
+    const params = []
+    const statusAll = String(rawStatus || '').toLowerCase() === 'all'
+    if (!statusAll) {
+      const status = rawStatus !== undefined && rawStatus !== '' ? rawStatus : 'pending'
+      whereConditions.push('mq.status = ?')
+      params.push(status)
+    }
 
     if (priority) {
-      whereConditions.push('priority = ?')
+      whereConditions.push('mq.priority = ?')
       params.push(priority)
     }
 
     if (content_type) {
-      whereConditions.push('content_type = ?')
+      whereConditions.push('mq.content_type = ?')
       params.push(content_type)
     }
 
-    const whereClause = whereConditions.join(' AND ')
+    const whereClause = whereConditions.length ? whereConditions.join(' AND ') : '1=1'
 
     const sql = `
       SELECT
@@ -55,7 +180,7 @@ exports.getModerationQueue = async (req, res, next) => {
       LIMIT ? OFFSET ?
     `
 
-    const countSql = `SELECT COUNT(*) as total FROM moderation_queue WHERE ${whereClause}`
+    const countSql = `SELECT COUNT(*) as total FROM moderation_queue mq WHERE ${whereClause}`
 
     const [queue, totalResult] = await Promise.all([
       conMysql(sql, [...params, parseInt(pageSize), parseInt(offset)]),
@@ -100,13 +225,13 @@ exports.getModerationQueueDetail = async (req, res, next) => {
         END as content_title,
         CASE
           WHEN mq.content_type = 'post' THEN p.content_html
-          WHEN mq.content_type = 'comment' THEN c.content_html
+          WHEN mq.content_type = 'comment' THEN c.content
           WHEN mq.content_type = 'scene_moment' THEN CONCAT('名场面: ', COALESCE(sm.quote_text, ''), ' | ', COALESCE(sm.description, ''))
           ELSE NULL
         END as full_content_html,
         CASE
           WHEN mq.content_type = 'post' THEN p.content_text
-          WHEN mq.content_type = 'comment' THEN c.content_text
+          WHEN mq.content_type = 'comment' THEN c.content
           WHEN mq.content_type = 'scene_moment' THEN CONCAT('名场面: ', COALESCE(sm.quote_text, ''), ' | ', COALESCE(sm.description, ''))
           ELSE NULL
         END as full_content_text
@@ -141,15 +266,18 @@ exports.reviewContent = async (req, res, next) => {
       return res.cc(false, '无效的审核动作', 400)
     }
 
+    if (action === 'escalate') {
+      req.body = { queue_id, status: 'escalated', reason: reason || undefined }
+      return exports.setModerationQueueStatus(req, res, next)
+    }
+
     // 获取审核队列项目
     const [queueItem] = await conMysql('SELECT * FROM moderation_queue WHERE id = ?', [queue_id])
     if (!queueItem) {
       return res.cc(false, '审核队列项目不存在', 404)
     }
 
-    if (queueItem.status !== 'pending') {
-      return res.cc(false, '该内容已被审核过了', 400)
-    }
+    const isOverride = queueItem.status !== 'pending'
 
     // 开始事务
     const connection = await conMysql.getConnection()
@@ -166,10 +294,8 @@ exports.reviewContent = async (req, res, next) => {
         newStatus = 'rejected'
         updateFields.push('violation_reason = ?')
         updateValues.push(reason || '人工审核拒绝')
-      } else if (action === 'escalate') {
-        // 升级处理，暂时保持pending状态
-        await connection.rollback()
-        return res.cc(false, '升级功能暂未实现', 400)
+      } else {
+        updateFields.push('violation_reason = NULL')
       }
 
       // 更新内容状态
@@ -181,7 +307,8 @@ exports.reviewContent = async (req, res, next) => {
         await connection.execute(updateSql, [...updateValues, queueItem.content_id])
       } else if (queueItem.content_type === 'scene_moment') {
         const updateSql = 'UPDATE scene_moments SET moderation_status = ?, reviewer_id = ?, review_time = NOW(), review_comment = ? WHERE id = ?'
-        await connection.execute(updateSql, [newStatus, moderator_id, reason || null, queueItem.content_id])
+        const commentVal = action === 'approve' ? null : (reason || null)
+        await connection.execute(updateSql, [newStatus, moderator_id, commentVal, queueItem.content_id])
       }
 
       // 更新审核队列状态
@@ -201,13 +328,18 @@ exports.reviewContent = async (req, res, next) => {
         queueItem.user_id,
         moderator_id,
         moderationAction,
-        reason || (action === 'approve' ? '人工审核通过' : '人工审核拒绝'),
+        reason ||
+          (action === 'approve'
+            ? (isOverride ? '管理员更正为通过' : '人工审核通过')
+            : (isOverride ? '管理员更正为拒绝' : '人工审核拒绝')),
         queueItem.severity_score
       ])
 
-      // 更新用户审核统计
-      const userAction = action === 'approve' ? 'approved' : 'rejected'
-      await moderationService.updateUserModerationStats(queueItem.user_id, userAction, queueItem.severity_score)
+      // 首次审核才累计用户统计，更正结果不再重复计入（避免重复加减不一致）
+      if (!isOverride) {
+        const userAction = action === 'approve' ? 'approved' : 'rejected'
+        await moderationService.updateUserModerationStats(queueItem.user_id, userAction, queueItem.severity_score)
+      }
 
       await connection.commit()
       res.cc(true, `内容已${action === 'approve' ? '批准' : '拒绝'}`, 200)

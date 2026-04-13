@@ -39,4 +39,8 @@ export const uploadSceneMedia = (file) => {
 export const searchSceneMoments = (params) =>
   request.get('/api/scene-moments/search', { params })
 
+// 我提交的名场面（个人中心）
+export const getMySceneMoments = (params) =>
+  request.get('/api/scene-moments/my', { params })
+
 

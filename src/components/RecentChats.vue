@@ -151,7 +151,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-weight: 500;
   border-bottom: 1px solid var(--border-color, #343536);
 }
@@ -172,11 +172,11 @@
 }
 
 .chat-room-item:hover {
-  background: var(--hover-bg, #272729);
+  background: var(--bg-hover);
 }
 
 .chat-room-item.active {
-  background: var(--hover-bg, #272729);
+  background: var(--bg-hover);
 }
 
 .room-avatar {
@@ -189,7 +189,7 @@
 }
 
 .room-name {
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 4px;
@@ -199,7 +199,7 @@
 }
 
 .room-preview {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -214,7 +214,7 @@
 }
 
 .room-time {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -225,7 +225,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   padding: 24px 16px;
 }
 
@@ -234,14 +234,14 @@
 }
 
 .empty-chat-list h3 {
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-size: 18px;
   margin-bottom: 8px;
   font-weight: 500;
 }
 
 .empty-chat-list p {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 14px;
   margin-bottom: 24px;
   line-height: 1.5;

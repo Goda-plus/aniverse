@@ -83,6 +83,16 @@ const routes = [
     component: () => import('../views/ShopDetailView.vue')
   },
   {
+    path: '/mall/seller/orders',
+    name: 'seller-orders',
+    component: () => import('../views/SellerOrdersView.vue')
+  },
+  {
+    path: '/mall/seller/order/:id',
+    name: 'seller-order-detail',
+    component: () => import('../views/SellerOrderDetailView.vue')
+  },
+  {
     path: '/browse-history',
     name: 'browse-history',
     component: () => import('../views/BrowseHistoryView.vue')
@@ -107,6 +117,18 @@ const routes = [
     path: '/crowdfunding/edit/:id',
     name: 'crowdfunding-edit',
     component: () => import('../views/CrowdfundingEditView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/crowdfunding/creator/orders',
+    name: 'crowdfunding-creator-orders',
+    component: () => import('../views/CrowdfundingCreatorOrdersView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/crowdfunding/creator/order/:id',
+    name: 'crowdfunding-creator-order-detail',
+    component: () => import('../views/CrowdfundingCreatorOrderDetailView.vue'),
     meta: { requiresAuth: true }
   },
   {
@@ -159,6 +181,16 @@ const routes = [
         path: 'communities',
         name: 'profile-communities',
         component: () => import('../views/profile/CommunitiesTab.vue')
+      },
+      {
+        path: 'orders',
+        name: 'profile-orders',
+        component: () => import('../views/profile/MyOrdersTab.vue')
+      },
+      {
+        path: 'scene-contributions',
+        name: 'profile-scene-contributions',
+        component: () => import('../views/profile/SceneContributionsTab.vue')
       },
       {
         path: 'shops',
@@ -236,6 +268,15 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(process.env.BASE_URL),
   routes
+})
+
+const CHUNK_RELOAD_GUARD = 'aniverse_chunk_reload_pending'
+router.onError((error) => {
+  const msg = error?.message || String(error || '')
+  if (!/Loading chunk .* failed|ChunkLoadError|Failed to fetch dynamically imported module/i.test(msg)) return
+  if (sessionStorage.getItem(CHUNK_RELOAD_GUARD)) return
+  sessionStorage.setItem(CHUNK_RELOAD_GUARD, '1')
+  window.location.reload()
 })
 
 export default router

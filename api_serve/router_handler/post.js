@@ -114,11 +114,11 @@ exports.createPost = async (req, res, next) => {
     if (moderationResult.status === 'rejected') {
       moderationStatus = 'rejected'
       violationReason = moderationResult.violations.map(v => v.reason).join('; ')
-      moderatedBy = 0 // 0表示自动审核
+      moderatedBy = null // null表示自动审核
+      await addToModerationQueue(postId, 'post', user_id, contentToModerate, moderationResult, 'rejected')
     } else if (moderationResult.status === 'pending') {
       moderationStatus = 'pending'
-      // 添加到人工审核队列
-      await addToModerationQueue(postId, 'post', user_id, contentToModerate, moderationResult)
+      await addToModerationQueue(postId, 'post', user_id, contentToModerate, moderationResult, 'pending')
     }
 
     // 更新帖子审核状态
@@ -878,18 +878,18 @@ exports.deletePost = async (req, res, next) => {
 }
 
 // 添加内容到人工审核队列
-const addToModerationQueue = async (contentId, contentType, userId, content, moderationResult) => {
+const addToModerationQueue = async (contentId, contentType, userId, content, moderationResult, queueStatus = 'pending') => {
   const contentText = contentType === 'post'
     ? `${content.title}\n\n${content.content_text}`.substring(0, 500)
     : content.content_text || content.content_html || ''
 
   const sql = `
     INSERT INTO moderation_queue
-    (content_type, content_id, user_id, content_text, content_html, moderation_reason, severity_score, priority)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (content_type, content_id, user_id, content_text, content_html, moderation_reason, severity_score, priority, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
 
-  const reason = moderationResult.violations.map(v => v.reason).join('; ')
+  const reason = moderationResult.violations.map(v => v.reason).join('; ') || (queueStatus === 'rejected' ? '自动审核拒绝' : '')
 
   await conMysql(sql, [
     contentType,
@@ -899,6 +899,7 @@ const addToModerationQueue = async (contentId, contentType, userId, content, mod
     content.content_html || null,
     reason,
     moderationResult.score,
-    moderationResult.score > 50 ? 'high' : moderationResult.score > 20 ? 'normal' : 'low'
+    moderationResult.score > 50 ? 'high' : moderationResult.score > 20 ? 'normal' : 'low',
+    queueStatus
   ])
 }

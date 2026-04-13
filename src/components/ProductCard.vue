@@ -66,6 +66,7 @@
   import { ElMessage } from 'element-plus'
   import { Picture } from '@element-plus/icons-vue'
   import { addToCart } from '@/axios/mall'
+  import { firstProductImageUrl } from '@/utils/productImages'
 
   const props = defineProps({
     product: {
@@ -104,14 +105,7 @@
     return 'stock-normal'
   })
 
-  const coverImage = computed(() => {
-    try {
-      JSON.parse(props.product?.cover_image)
-      return JSON.parse(props.product?.cover_image)[0]
-    } catch (e) {
-      return props.product?.cover_image || '/placeholder.png'
-    }
-  })
+  const coverImage = computed(() => firstProductImageUrl(props.product?.cover_image))
 
   const goToDetail = () => {
     if (!productId.value) return

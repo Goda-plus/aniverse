@@ -591,8 +591,8 @@ exports.backProject = async (req, res, next) => {
     // 创建支持记录
     const backSql = `
       INSERT INTO crowdfunding_backings
-        (project_id, user_id, tier_id, amount, quantity, shipping_address)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (project_id, user_id, tier_id, amount, quantity, shipping_address, shipping_status)
+      VALUES (?, ?, ?, ?, ?, ?, 'not_shipped')
     `
     const result = await conMysql(backSql, [
       project_id,
@@ -659,6 +659,9 @@ exports.getUserBackings = async (req, res, next) => {
         b.payment_method,
         b.payment_time,
         b.shipping_status,
+        b.buyer_refund_request,
+        b.buyer_refund_reason,
+        b.buyer_refund_requested_at,
         b.created_at,
         p.title as project_title,
         p.cover_image as project_image,
@@ -955,6 +958,304 @@ exports.getProjectBackers = async (req, res, next) => {
       pageSize,
       total
     })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ==================== 发起人：支持订单 / 回报履约管理 ====================
+
+// 与库中可能存在的枚举对齐：not_shipped 视为待发货
+function canonicalBackingShippingStatus (raw) {
+  if (raw == null || raw === '') return 'pending'
+  const s = String(raw).trim()
+  if (s === 'not_shipped' || s === 'NOT_SHIPPED') return 'pending'
+  return s
+}
+
+function backingPaymentSettled (status) {
+  if (status == null || status === '') return true
+  return String(status).toLowerCase() === 'paid'
+}
+
+/** 未发货→仅退款；已发货/已送达/已完成→退款退货；已退款不可自助发起 */
+function expectedBuyerRefundTypeFromShipping (rawShipping) {
+  const canon = canonicalBackingShippingStatus(rawShipping)
+  if (canon === 'refunded') return null
+  if (canon === 'pending') return 'refund'
+  if (canon === 'shipped' || canon === 'delivered' || canon === 'completed') return 'refund_return'
+  return null
+}
+
+function parseShippingAddress (raw) {
+  if (raw == null || raw === '') return null
+  if (typeof raw === 'object') return raw
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+// 发起人：支持订单列表（仅本人创建的项目）
+exports.listCreatorBackings = async (req, res, next) => {
+  try {
+    const creatorId = req.user.id
+    const { project_id, shipping_status, keyword } = req.query
+    const { page, pageSize, offset } = parsePagination(req)
+
+    let where = 'WHERE p.creator_id = ?'
+    const params = [creatorId]
+
+    if (project_id) {
+      where += ' AND b.project_id = ?'
+      params.push(project_id)
+    }
+    if (shipping_status) {
+      if (shipping_status === 'pending') {
+        where += ` AND (
+          b.shipping_status IS NULL OR TRIM(b.shipping_status) = ''
+          OR b.shipping_status = 'pending'
+          OR LOWER(b.shipping_status) = 'not_shipped'
+        )`
+      } else {
+        where += ' AND b.shipping_status = ?'
+        params.push(shipping_status)
+      }
+    }
+    if (keyword) {
+      where += ' AND (u.username LIKE ? OR CAST(b.id AS CHAR) LIKE ?)'
+      const kw = `%${String(keyword).trim()}%`
+      params.push(kw, kw)
+    }
+
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM crowdfunding_backings b
+      JOIN crowdfunding_projects p ON b.project_id = p.id
+      JOIN users u ON b.user_id = u.id
+      ${where}
+    `
+    const [{ total }] = await conMysql(countSql, params)
+
+    const listSql = `
+      SELECT
+        b.id,
+        b.project_id,
+        b.user_id,
+        b.tier_id,
+        b.amount,
+        b.quantity,
+        b.status,
+        b.shipping_status,
+        b.buyer_refund_request,
+        b.buyer_refund_reason,
+        b.buyer_refund_requested_at,
+        b.created_at,
+        p.title AS project_title,
+        u.username,
+        u.avatar_url AS avatar,
+        t.title AS tier_title
+      FROM crowdfunding_backings b
+      JOIN crowdfunding_projects p ON b.project_id = p.id
+      JOIN users u ON b.user_id = u.id
+      JOIN crowdfunding_tiers t ON b.tier_id = t.id
+      ${where}
+      ORDER BY b.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+    const rows = await conMysql(listSql, [...params, pageSize, offset])
+    for (const row of rows) {
+      row.shipping_status = canonicalBackingShippingStatus(row.shipping_status)
+    }
+
+    res.cc(true, '获取支持订单列表成功', 200, {
+      list: rows,
+      page,
+      pageSize,
+      total
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 发起人：支持订单详情
+exports.getCreatorBackingDetail = async (req, res, next) => {
+  try {
+    const creatorId = req.user.id
+    const { id } = req.params
+    if (!id) return res.cc(false, '缺少订单ID', 400)
+
+    const sql = `
+      SELECT
+        b.id,
+        b.project_id,
+        b.user_id,
+        b.tier_id,
+        b.amount,
+        b.quantity,
+        b.status,
+        b.payment_method,
+        b.payment_time,
+        b.shipping_status,
+        b.shipping_address,
+        b.buyer_refund_request,
+        b.buyer_refund_reason,
+        b.buyer_refund_requested_at,
+        b.created_at,
+        p.title AS project_title,
+        p.cover_image AS project_cover_image,
+        p.status AS project_status,
+        u.username,
+        u.avatar_url AS avatar,
+        t.title AS tier_title,
+        t.reward_description,
+        t.estimated_delivery,
+        t.shipping_included
+      FROM crowdfunding_backings b
+      JOIN crowdfunding_projects p ON b.project_id = p.id
+      JOIN users u ON b.user_id = u.id
+      JOIN crowdfunding_tiers t ON b.tier_id = t.id
+      WHERE b.id = ? AND p.creator_id = ?
+      LIMIT 1
+    `
+    const rows = await conMysql(sql, [id, creatorId])
+    if (!rows.length) {
+      return res.cc(false, '订单不存在或无权限', 404)
+    }
+
+    const row = rows[0]
+    row.shipping_status = canonicalBackingShippingStatus(row.shipping_status)
+    row.shipping_address_parsed = parseShippingAddress(row.shipping_address)
+
+    res.cc(true, '获取支持订单详情成功', 200, { backing: row })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 支持者：按物流状态发起退款（未发货）或退款退货（已发货/已送达）
+exports.requestBuyerBackingRefund = async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { id } = req.params
+    const reasonRaw = req.body?.reason
+    const reason = reasonRaw != null ? String(reasonRaw).trim().slice(0, 500) : ''
+
+    if (!id) {
+      return res.cc(false, '缺少支持单ID', 400)
+    }
+
+    const sql = `
+      SELECT b.id, b.user_id, b.status, b.shipping_status, b.buyer_refund_request
+      FROM crowdfunding_backings b
+      WHERE b.id = ? AND b.user_id = ?
+      LIMIT 1
+    `
+    const rows = await conMysql(sql, [id, userId])
+    if (!rows.length) {
+      return res.cc(false, '支持记录不存在', 404)
+    }
+    const row = rows[0]
+    const paySt = row.status != null ? String(row.status).trim().toLowerCase() : ''
+    if (!backingPaymentSettled(row.status)) {
+      // 待支付的支持单也可发起「退款/关单」类售后，由发起人处理
+      if (paySt !== 'pending') {
+        return res.cc(false, '订单未支付完成，无法发起售后', 400)
+      }
+    }
+
+    const existingReq = row.buyer_refund_request != null ? String(row.buyer_refund_request).trim() : 'none'
+    if (existingReq && existingReq !== 'none') {
+      return res.cc(false, '已提交过售后申请，请等待发起人处理', 400)
+    }
+
+    const expectType = expectedBuyerRefundTypeFromShipping(row.shipping_status)
+    if (!expectType) {
+      return res.cc(false, '当前物流状态不支持发起售后', 400)
+    }
+
+    await conMysql(
+      `UPDATE crowdfunding_backings SET
+        buyer_refund_request = ?,
+        buyer_refund_reason = ?,
+        buyer_refund_requested_at = NOW(),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND user_id = ?`,
+      [expectType, reason || null, id, userId]
+    )
+
+    const label = expectType === 'refund_return' ? '退款退货' : '退款'
+    res.cc(true, `已发起${label}申请`, 200, {
+      backing_id: Number(id),
+      buyer_refund_request: expectType
+    })
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return res.cc(false, '请先执行数据库迁移：在 api_serve 目录运行 node migrate_crowdfunding_buyer_refund.js', 500)
+    }
+    next(err)
+  }
+}
+
+// 发起人：更新回报发货状态（与店铺订单流程类似）
+exports.updateCreatorBackingShipping = async (req, res, next) => {
+  try {
+    const creatorId = req.user.id
+    const { id } = req.params
+    const { shipping_status: nextStatus } = req.body
+
+    if (!id) return res.cc(false, '缺少订单ID', 400)
+    if (!nextStatus) return res.cc(false, '缺少 shipping_status', 400)
+
+    const allowed = ['shipped', 'completed', 'refunded']
+    if (!allowed.includes(nextStatus)) {
+      return res.cc(false, '无效的状态', 400)
+    }
+
+    const checkSql = `
+      SELECT b.id, b.shipping_status
+      FROM crowdfunding_backings b
+      JOIN crowdfunding_projects p ON b.project_id = p.id
+      WHERE b.id = ? AND p.creator_id = ?
+    `
+    const found = await conMysql(checkSql, [id, creatorId])
+    if (!found.length) {
+      return res.cc(false, '订单不存在或无权限', 404)
+    }
+
+    const current = canonicalBackingShippingStatus(found[0].shipping_status)
+
+    if (nextStatus === 'shipped' && current !== 'pending') {
+      return res.cc(false, '当前状态不可标记为已发货', 400)
+    }
+    if (nextStatus === 'completed' && !['shipped', 'delivered'].includes(current)) {
+      return res.cc(false, '请先发货后再确认完成', 400)
+    }
+    if (nextStatus === 'refunded' && !['pending', 'shipped', 'delivered', 'completed'].includes(current)) {
+      return res.cc(false, '当前状态不可退款', 400)
+    }
+
+    if (nextStatus === 'refunded') {
+      await conMysql(
+        `UPDATE crowdfunding_backings SET
+          shipping_status = ?,
+          buyer_refund_request = 'none',
+          buyer_refund_reason = NULL,
+          buyer_refund_requested_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [nextStatus, id]
+      )
+    } else {
+      await conMysql(
+        'UPDATE crowdfunding_backings SET shipping_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [nextStatus, id]
+      )
+    }
+
+    res.cc(true, '状态已更新', 200, { id: Number(id), shipping_status: nextStatus })
   } catch (err) {
     next(err)
   }

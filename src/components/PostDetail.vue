@@ -133,6 +133,27 @@
         <el-icon><Share /></el-icon>
         <span>共享</span>
       </el-button>
+
+      <el-dropdown
+        v-if="userStore.isLoggedIn && post.user_id !== userStore.user?.id"
+        trigger="click"
+        class="report-dropdown"
+      >
+        <el-button text class="action-button">
+          <el-icon><Warning /></el-icon>
+          <span>举报</span>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item @click="openReport('post', post.post_id)">
+              举报帖子
+            </el-dropdown-item>
+            <el-dropdown-item @click="openReport('user', post.user_id)">
+              举报该用户
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
 
     <!-- 评论输入区域 -->
@@ -207,6 +228,12 @@
       @comment-count-change="handleCommentCountChange"
       @create-comment="handleCreateComment"
     />
+
+    <ReportDialog
+      v-model="reportDialogVisible"
+      :target-type="reportTarget.type"
+      :target-id="reportTarget.id"
+    />
   </div>
 </template>
 
@@ -214,9 +241,10 @@
   import { defineProps, defineEmits, ref, defineExpose, onMounted, onBeforeUnmount, shallowRef, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
-  import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close, MoreFilled, Edit, Delete } from '@element-plus/icons-vue'
+  import { ArrowLeft, ArrowUp, ArrowDown, ChatLineRound, Trophy, Share, Close, MoreFilled, Edit, Delete, Warning } from '@element-plus/icons-vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import CommentList from './CommentList.vue'
+  import ReportDialog from './ReportDialog.vue'
   import '@wangeditor/editor/dist/css/style.css'
   import { Editor } from '@wangeditor/editor-for-vue'
   import { createComment } from '@/axios/comment'
@@ -238,7 +266,14 @@
   const commentContent = ref('')
   const submitting = ref(false)
   const replyingTo = ref(null)
-  
+  const reportDialogVisible = ref(false)
+  const reportTarget = ref({ type: 'post', id: 0 })
+
+  function openReport (type, id) {
+    reportTarget.value = { type, id: Number(id) }
+    reportDialogVisible.value = true
+  }
+
   // 菜单相关
   const showMenu = ref(false)
   const menuRef = ref(null)

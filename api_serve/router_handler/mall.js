@@ -10,6 +10,29 @@ function parsePagination (req) {
   return { page: safePage, pageSize: safePageSize, offset }
 }
 
+function parseCoverImageUrls (coverImage) {
+  if (coverImage == null || coverImage === '') return []
+  if (Array.isArray(coverImage)) {
+    return coverImage.filter((u) => typeof u === 'string' && u.trim())
+  }
+  if (typeof coverImage !== 'string') return []
+  const s = coverImage.trim()
+  if (!s) return []
+  if (s.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(s)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((u) => typeof u === 'string' && u.trim())
+      }
+      if (typeof parsed === 'string' && parsed.trim()) return [parsed.trim()]
+    } catch {
+      return []
+    }
+    return []
+  }
+  return [s]
+}
+
 // 分类列表
 exports.listCategories = async (req, res, next) => {
   try {
@@ -149,7 +172,26 @@ exports.getProductDetail = async (req, res, next) => {
       WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC
     `
-    const images = await conMysql(imagesSql, [id])
+    let images = await conMysql(imagesSql, [id])
+
+    const fromCover = parseCoverImageUrls(product.cover_image)
+    if (fromCover.length) {
+      const inCover = new Set(fromCover)
+      const coverRows = fromCover.map((image_url, idx) => ({
+        id: -(idx + 1),
+        product_id: product.id,
+        image_url,
+        sort_order: idx,
+        created_at: null
+      }))
+      const extraRows = images
+        .filter((r) => r.image_url && !inCover.has(r.image_url))
+        .map((r, idx) => ({
+          ...r,
+          sort_order: fromCover.length + idx
+        }))
+      images = [...coverRows, ...extraRows]
+    }
 
     res.cc(true, '获取商品详情成功', 200, {
       product,
@@ -309,6 +351,9 @@ exports.listOrders = async (req, res, next) => {
         shipped_time,
         delivered_time,
         cancelled_time,
+        buyer_refund_request,
+        buyer_refund_reason,
+        buyer_refund_requested_at,
         created_at,
         updated_at
       FROM orders
@@ -781,6 +826,71 @@ exports.cancelOrder = async (req, res, next) => {
   }
 }
 
+/** 已支付未发货→仅退款；已发货未收货完成→退款退货 */
+function expectedMallBuyerRefundType (orderStatus) {
+  const s = orderStatus != null ? String(orderStatus).trim().toLowerCase() : ''
+  if (s === 'paid') return 'refund'
+  if (s === 'shipped') return 'refund_return'
+  return null
+}
+
+// 买家：按订单状态发起退款（待发货）或退款退货（已发货）
+exports.requestBuyerOrderRefund = async (req, res, next) => {
+  try {
+    const user_id = req.user.id
+    const { id } = req.params
+    const reasonRaw = req.body?.reason
+    const reason = reasonRaw != null ? String(reasonRaw).trim().slice(0, 500) : ''
+
+    if (!id) {
+      return res.cc(false, '缺少订单ID', 400)
+    }
+
+    const sql = `
+      SELECT id, user_id, status, buyer_refund_request
+      FROM orders
+      WHERE id = ? AND user_id = ?
+      LIMIT 1
+    `
+    const rows = await conMysql(sql, [id, user_id])
+    if (!rows.length) {
+      return res.cc(false, '订单不存在', 404)
+    }
+    const row = rows[0]
+
+    const existingReq = row.buyer_refund_request != null ? String(row.buyer_refund_request).trim() : 'none'
+    if (existingReq && existingReq !== 'none') {
+      return res.cc(false, '已提交过售后申请，请等待商家处理', 400)
+    }
+
+    const expectType = expectedMallBuyerRefundType(row.status)
+    if (!expectType) {
+      return res.cc(false, '当前订单状态不支持发起售后', 400)
+    }
+
+    await conMysql(
+      `UPDATE orders SET
+        buyer_refund_request = ?,
+        buyer_refund_reason = ?,
+        buyer_refund_requested_at = NOW(),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND user_id = ?`,
+      [expectType, reason || null, id, user_id]
+    )
+
+    const label = expectType === 'refund_return' ? '退款退货' : '退款'
+    res.cc(true, `已发起${label}申请`, 200, {
+      order_id: Number(id),
+      buyer_refund_request: expectType
+    })
+  } catch (err) {
+    if (err.code === 'ER_BAD_FIELD_ERROR') {
+      return res.cc(false, '请先执行数据库迁移：在 api_serve 目录运行 node migrate_mall_buyer_refund.js', 500)
+    }
+    next(err)
+  }
+}
+
 // ==================== 商品评价 ====================
 
 // 获取商品评价列表
@@ -811,7 +921,7 @@ exports.listProductReviews = async (req, res, next) => {
         r.is_approved,
         r.created_at,
         u.username,
-        u.avatar
+        u.avatar_url AS avatar
       FROM product_reviews r
       JOIN users u ON r.user_id = u.id
       WHERE r.product_id = ? AND r.is_approved = 1

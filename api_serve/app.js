@@ -143,6 +143,12 @@ app.use(
 app.get('/', (req, res) => {
   res.send('API server is running')
 })
+
+// vue-element-admin dashboard mock/compat endpoint
+// The frontend calls: GET /vue-element-admin/transaction/list
+const transactionHandler = require('./router_handler/transaction')
+app.get('/vue-element-admin/transaction/list', transactionHandler.listTransactions)
+
 const userRouter = require('./router/user')
 app.use('/api/user', userRouter)
 
@@ -196,6 +202,7 @@ const chatRouter     = require('./router/chat')
 const mallRouter     = require('./router/mall')
 const shopRouter     = require('./router/shop')
 const crowdfundingRouter = require('./router/crowdfunding')
+const reportRouter = require('./router/report')
 
 // 次元库相关路由
 const mediaRouter = require('./router/media')
@@ -211,6 +218,7 @@ app.use('/api/chat',      chatRouter)
 app.use('/api/mall',      mallRouter)
 app.use('/api/shop',      shopRouter)
 app.use('/api/crowdfunding', crowdfundingRouter)
+app.use('/api/reports', reportRouter)
 
 // 次元库路由
 app.use('/api/media', mediaRouter)

@@ -30,6 +30,9 @@ router.post('/backings', crowdfundingHandler.backProject)
 // 用户支持记录（需要登录）
 router.get('/my-backings', crowdfundingHandler.getUserBackings)
 
+// 支持者：发起退款 / 退款退货（需要登录）
+router.post('/backings/:id/buyer-refund-request', crowdfundingHandler.requestBuyerBackingRefund)
+
 // 项目更新（需要登录，项目创建者）
 router.post('/updates', crowdfundingHandler.createUpdate)
 
@@ -42,6 +45,10 @@ router.post('/comments', crowdfundingHandler.addComment)
 
 // 管理功能（需要登录）
 router.get('/my-projects', crowdfundingHandler.getMyProjects)
+// 发起人：支持订单 / 回报履约（需要登录）
+router.get('/creator/backings', crowdfundingHandler.listCreatorBackings)
+router.get('/creator/backings/:id', crowdfundingHandler.getCreatorBackingDetail)
+router.put('/creator/backings/:id/shipping-status', crowdfundingHandler.updateCreatorBackingShipping)
 // 获取项目支持者列表（公开接口，支持可选认证）
 router.get('/projects/:project_id/backers', optionalAuth, crowdfundingHandler.getProjectBackers)
 

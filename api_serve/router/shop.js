@@ -6,6 +6,10 @@ const shopHandler = require('../router_handler/shop')
 // 店铺相关接口（卖家我的店铺须在 /:id 之前，否则会被当作 id）
 router.get('/', shopHandler.listShops)
 router.get('/seller/my-shop', shopHandler.getMyShop)
+// 店主独立后台：订单管理
+router.get('/seller/orders', shopHandler.listSellerOrders)
+router.get('/seller/orders/:id', shopHandler.getSellerOrderDetail)
+router.put('/seller/orders/:id/status', shopHandler.updateSellerOrderStatus)
 router.get('/:id', shopHandler.getShopDetail)
 router.post('/', shopHandler.createShop)
 router.put('/:id', shopHandler.updateShop)

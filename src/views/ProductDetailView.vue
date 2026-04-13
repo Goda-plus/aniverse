@@ -25,7 +25,7 @@
             <div class="product-images">
               <div class="main-image">
                 <el-image
-                  :src="currentImage || product.cover_image || '/placeholder.png'"
+                  :src="currentImage || '/placeholder.png'"
                   :alt="product.name"
                   fit="contain"
                   style="background: var(--bg-tertiary);"
@@ -76,9 +76,21 @@
                 </el-button>
               </div>
 
-              <h1 class="product-name">
-                {{ product.name }}
-              </h1>
+              <div class="product-name-row">
+                <h1 class="product-name">
+                  {{ product.name }}
+                </h1>
+                <el-button
+                  v-if="userStore.isLoggedIn"
+                  link
+                  type="danger"
+                  size="small"
+                  class="product-report-btn"
+                  @click="openReportProduct"
+                >
+                  举报商品
+                </el-button>
+              </div>
               <p v-if="product.description" class="product-description">
                 {{ product.description }}
               </p>
@@ -194,7 +206,12 @@
           <el-tabs v-model="activeTab" class="product-tabs">
             <el-tab-pane label="商品详情" name="detail">
               <div class="detail-content">
-                <p v-if="product.description" class="detail-text">
+                <div
+                  v-if="product.detail_html"
+                  class="detail-rich"
+                  v-html="product.detail_html"
+                />
+                <p v-else-if="product.description" class="detail-text">
                   {{ product.description }}
                 </p>
                 <div v-if="images.length > 0" class="detail-images">
@@ -229,6 +246,12 @@
           </el-result>
         </div>
       </div>
+
+      <ReportDialog
+        v-model="reportDialogVisible"
+        target-type="product"
+        :target-id="Number(productId)"
+      />
     </template>
   </MainContentLayout>
 </template>
@@ -240,11 +263,20 @@
   import { ArrowLeft, Picture, ShoppingCart } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import ProductReviews from '@/components/ProductReviews.vue'
+  import ReportDialog from '@/components/ReportDialog.vue'
+  import { useUserStore } from '@/stores/user'
   import { getProductDetail, addToCart } from '@/axios/mall'
   import { getShopDetail } from '@/axios/shop'
+  import { parseProductImageUrls, firstProductImageUrl } from '@/utils/productImages'
 
   const route = useRoute()
   const router = useRouter()
+  const userStore = useUserStore()
+  const reportDialogVisible = ref(false)
+
+  function openReportProduct () {
+    reportDialogVisible.value = true
+  }
 
   const productId = computed(() => route.params.id)
   const product = ref(null)
@@ -260,14 +292,14 @@
     if (images.value.length > 0 && currentImageIndex.value < images.value.length) {
       return images.value[currentImageIndex.value].image_url
     }
-    return product.value?.cover_image
+    return firstProductImageUrl(product.value?.cover_image, '')
   })
 
   const imageList = computed(() => {
     if (images.value.length > 0) {
       return images.value.map(img => img.image_url)
     }
-    return product.value?.cover_image ? [product.value.cover_image] : []
+    return parseProductImageUrls(product.value?.cover_image)
   })
 
   const rating = computed(() => {
@@ -288,15 +320,6 @@
       if (response.code === 200) {
         product.value = response.data.product
         images.value = response.data.images || []
-
-        // 处理图片
-        if (product.value.cover_image && !images.value.find(img => img.image_url === product.value.cover_image)) {
-          images.value.unshift({
-            id: 0,
-            image_url: product.value.cover_image,
-            sort_order: 0
-          })
-        }
 
         // 处理规格信息
         if (product.value.specifications) {
@@ -578,6 +601,23 @@
       color: var(--text-primary);
     }
   }
+}
+
+.product-name-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-name-row .product-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.product-report-btn {
+  flex-shrink: 0;
+  margin-top: 4px;
 }
 
 .product-name {

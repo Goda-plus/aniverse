@@ -56,6 +56,10 @@ export const confirmOrder = (id) => request.post(`/api/mall/orders/${id}/confirm
 // 取消订单
 export const cancelOrder = (id) => request.post(`/api/mall/orders/${id}/cancel`)
 
+// 买家：已支付未发货→仅退款；已发货→退款退货
+export const requestMallBuyerRefund = (id, data) =>
+  request.post(`/api/mall/orders/${id}/buyer-refund-request`, data || {})
+
 // ==================== 商品评价 ====================
 // 获取商品评价列表
 export const listProductReviews = (params) => request.get('/api/mall/reviews', { params })

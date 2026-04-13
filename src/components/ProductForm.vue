@@ -166,10 +166,22 @@
                   点击上传图片
                 </div>
                 <div class="upload-hint">
-                  最多上传9张图片
+                  最多 9 张；可上传文件或下方添加 http(s) 外链
                 </div>
               </div>
             </el-upload>
+            <div class="image-url-row">
+              <el-input
+                v-model="imageUrlInput"
+                type="textarea"
+                :rows="2"
+                placeholder="粘贴图片 URL，多条可用换行、逗号或分号分隔（每张需 http 或 https）"
+                clearable
+              />
+              <el-button class="image-url-add-btn" @click="addImageUrlsFromInput">
+                添加链接
+              </el-button>
+            </div>
           </div>
         </el-form-item>
       </div>
@@ -229,6 +241,31 @@
         </el-form-item>
       </div>
 
+      <!-- 商品详情 -->
+      <div class="form-section">
+        <h3 class="section-title">
+          商品详情
+        </h3>
+
+        <el-form-item label="详情介绍" prop="detail_html">
+          <div class="detail-editor-wrapper">
+            <Toolbar
+              v-if="detailEditorRef"
+              :editor="detailEditorRef"
+              :default-config="detailToolbarConfig"
+              class="detail-editor-toolbar"
+            />
+            <Editor
+              :key="detailEditorKey"
+              v-model="formData.detail_html"
+              :default-config="detailEditorConfig"
+              class="detail-editor"
+              @on-created="handleDetailEditorCreated"
+            />
+          </div>
+        </el-form-item>
+      </div>
+
       <!-- 其他设置 -->
       <div class="form-section">
         <h3 class="section-title">
@@ -255,12 +292,15 @@
 </template>
 
 <script setup>
-  import { ref, reactive, computed, watch, onMounted, defineProps, defineEmits } from 'vue'
+  import { ref, reactive, computed, watch, onMounted, defineProps, defineEmits, shallowRef } from 'vue'
   import { ElMessage } from 'element-plus'
   import { Plus } from '@element-plus/icons-vue'
-  import { createProduct, updateProduct, listCategories } from '@/axios/mall'
-  import { createProduct as createShopProduct } from '@/axios/shop'
+  import '@wangeditor/editor/dist/css/style.css'
+  import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
+  import { listCategories } from '@/axios/mall'
+  import { createProduct as createShopProduct, updateProduct as updateShopProduct } from '@/axios/shop'
   import { uploadPostImage } from '@/axios/post'
+  import { parseProductImageUrls } from '@/utils/productImages'
 
   const props = defineProps({
     product: {
@@ -285,12 +325,17 @@
   const submitting = ref(false)
   const categories = ref([])
   const specsList = ref([])
+  const detailEditorRef = shallowRef(null)
+  const detailEditorKey = ref(0)
+  const imageUrlInput = ref('')
 
   // 表单数据
   const formData = reactive({
     name: '',
     category_id: null,
     description: '',
+    detail_html: '',
+    detail_text: '',
     price: null,
     original_price: null,
     stock: 0,
@@ -325,25 +370,146 @@
     ],
     images: [
       { type: 'array', min: 1, message: '请至少上传一张商品图片', trigger: 'change' }
+    ],
+    detail_html: [
+      { required: false, trigger: 'blur' }
     ]
+  }
+
+  const normalizeUploadedUrl = (res) => {
+    if (!res) return ''
+    if (res.success && res.code === 200 && res.data?.url) return res.data.url
+    if (res.code === 200 && res.data?.url) return res.data.url
+    if (res.url) return res.url
+    if (res.data?.url) return res.data.url
+    return ''
+  }
+
+  /** 接口 cover_image 为 JSON 数组字符串；表单 images 为 URL 字符串数组 */
+  const parseProductImagesFromRecord = (product) => {
+    if (!product || typeof product !== 'object') return []
+    const rawList = product.images
+    if (Array.isArray(rawList) && rawList.length) {
+      return rawList.map((u) => (typeof u === 'string' ? u : u?.url || u?.image_url || '')).filter(Boolean)
+    }
+    if (typeof rawList === 'string' && rawList.trim()) {
+      const fromJson = parseProductImageUrls(rawList)
+      if (fromJson.length) return fromJson
+      return [rawList.trim()]
+    }
+    return parseProductImageUrls(product.cover_image)
+  }
+
+  const addImageUrlsFromInput = () => {
+    const raw = (imageUrlInput.value || '').trim()
+    if (!raw) {
+      ElMessage.warning('请输入图片地址')
+      return
+    }
+    const parts = raw.split(/[\n,，;；]+/).map(s => s.trim()).filter(Boolean)
+    let added = 0
+    for (const part of parts) {
+      if (formData.images.length >= 9) break
+      try {
+        const u = new URL(part)
+        if (!/^https?:$/i.test(u.protocol)) continue
+      } catch {
+        continue
+      }
+      if (formData.images.includes(part)) continue
+      formData.images.push(part)
+      added++
+    }
+    if (added === 0) {
+      ElMessage.warning('没有添加有效链接（需以 http:// 或 https:// 开头）')
+      return
+    }
+    imageUrlInput.value = ''
+    ElMessage.success(added === 1 ? '已添加 1 张' : `已添加 ${added} 张`)
+  }
+
+  // 详情编辑器配置（复用帖子图片上传接口）
+  const detailToolbarConfig = reactive({
+    excludeKeys: []
+  })
+
+  const detailEditorConfig = reactive({
+    placeholder: '请输入商品详情介绍（支持图文）...',
+    readOnly: false,
+    autoFocus: false,
+    MENU_CONF: {
+      uploadImage: {
+        async customUpload (file, insertFn) {
+          try {
+            const maxSize = 5 * 1024 * 1024
+            if (file.size > maxSize) {
+              ElMessage.error('图片大小不能超过 5MB')
+              return
+            }
+            if (!file.type.startsWith('image/')) {
+              ElMessage.error('只能上传图片文件')
+              return
+            }
+            const res = await uploadPostImage(file)
+            const url = normalizeUploadedUrl(res)
+            if (!url) {
+              ElMessage.error('上传失败')
+              return
+            }
+            insertFn(url, '', url)
+          } catch (error) {
+            ElMessage.error(error?.response?.data?.message || '上传失败，请重试')
+          }
+        },
+        maxFileSize: 5 * 1024 * 1024,
+        allowedFileTypes: ['image/*']
+      }
+    }
+  })
+
+  const handleDetailEditorCreated = (editor) => {
+    detailEditorRef.value = editor
+  }
+
+  const getDetailHtml = () => {
+    const editor = detailEditorRef.value
+    if (!editor || editor.isDestroyed) return formData.detail_html || ''
+    try {
+      return editor.getHtml() || formData.detail_html || ''
+    } catch (e) {
+      return formData.detail_html || ''
+    }
+  }
+
+  const getDetailText = () => {
+    const editor = detailEditorRef.value
+    if (!editor || editor.isDestroyed) return ''
+    try {
+      return editor.getText() || ''
+    } catch (e) {
+      return ''
+    }
   }
 
   // 商品图片上传使用 before-upload 手动上传
   // 初始化表单数据
   const initFormData = () => {
+    imageUrlInput.value = ''
     if (props.mode === 'edit' && props.product) {
       formData.name = props.product.name || ''
       formData.category_id = props.product.category_id || null
       formData.description = props.product.description || ''
-      formData.price = props.product.price || null
-      formData.original_price = props.product.original_price || null
-      formData.stock = props.product.stock || 0
-      formData.images = Array.isArray(props.product.images) ? [...props.product.images] : []
+      formData.detail_html = props.product.detail_html || ''
+      formData.detail_text = props.product.detail_text || ''
+      formData.price = props.product.price ?? null
+      formData.original_price = props.product.original_price ?? null
+      formData.stock = props.product.stock ?? 0
+      formData.images = parseProductImagesFromRecord(props.product)
       formData.material = props.product.material || ''
       formData.dimensions = props.product.dimensions || ''
       formData.tags = props.product.tags || ''
-      formData.weight = props.product.weight || null
-      formData.is_featured = props.product.is_featured || false
+      formData.weight = props.product.weight ?? null
+      formData.is_featured = Boolean(props.product.is_featured)
 
       // 解析规格信息
       if (props.product.specifications) {
@@ -371,6 +537,8 @@
           formData[key] = false
         } else if (key === 'stock') {
           formData[key] = 0
+        } else if (key === 'detail_html' || key === 'detail_text') {
+          formData[key] = ''
         } else {
           formData[key] = null
         }
@@ -463,6 +631,8 @@
     try {
       await formRef.value.validate()
     } catch (error) {
+      console.error('表单验证失败:', error)
+      ElMessage.warning('请先完善表单必填项')
       return
     }
 
@@ -477,17 +647,22 @@
         }
       })
 
+      const finalDetailHtml = getDetailHtml()
+      const finalDetailText = getDetailText()
+
       const submitData = {
         ...formData,
         shop_id: props.shopId,
-        specifications
+        specifications,
+        detail_html: finalDetailHtml,
+        detail_text: finalDetailText
       }
 
       let res
       if (props.mode === 'add') {
         res = await createShopProduct(submitData)
       } else {
-        res = await updateProduct(props.product.product_id, submitData)
+        res = await updateShopProduct(props.product.product_id, submitData)
       }
 
       if (res.success) {
@@ -645,6 +820,15 @@
         color: var(--text-secondary);
       }
     }
+
+    .image-url-row {
+      margin-top: 12px;
+      max-width: 480px;
+
+      .image-url-add-btn {
+        margin-top: 8px;
+      }
+    }
   }
 
   .specs-editor {
@@ -671,6 +855,40 @@
     gap: 12px;
     padding-top: 20px;
     border-top: 1px solid var(--border-color);
+  }
+
+  .detail-editor-wrapper {
+    width: 100%;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    overflow: visible;
+    background: var(--card-bg);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .detail-editor-toolbar {
+    border-bottom: 1px solid var(--card-border);
+    flex-shrink: 0;
+  }
+
+  .detail-editor {
+    height: 320px;
+    overflow: hidden;
+  }
+
+  /* 保持圆角效果，但不要裁切编辑器弹窗 */
+  :deep(.w-e-text-container),
+  :deep(.w-e-toolbar),
+  :deep(.w-e-bar) {
+    border-radius: 6px;
+  }
+
+  :deep(.w-e-text-container) {
+    /* 让编辑区自己滚动；避免裁切 wangEditor 的弹窗（插入图片等） */
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 450px;
   }
 }
 </style>

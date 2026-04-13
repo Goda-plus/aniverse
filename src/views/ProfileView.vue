@@ -116,6 +116,8 @@
     { key: 'upvoted', label: '已点赞', route: 'profile-upvoted' },
     { key: 'downvoted', label: '已点踩', route: 'profile-downvoted' },
     { key: 'communities', label: '我的社区', route: 'profile-communities' },
+    { key: 'orders', label: '我的订单', route: 'profile-orders' },
+    { key: 'scene-contributions', label: '名场面贡献', route: 'profile-scene-contributions' },
     { key: 'shops', label: '我的商铺', route: 'profile-shops' }
   ]
 
@@ -179,10 +181,12 @@
 /* AniList风格的个人中心页面 - 深色主题，粉紫色高亮 */
 
 .profile-page {
-  background: #1a1a1b;
+  /* 实际背景由 .setting-control 的 theme 变量控制，避免与浅色主题冲突 */
+  background: transparent;
   min-height: 100vh;
   position: relative;
   padding: 0;
+  color: var(--text-primary);
 }
 
 /* Banner背景横幅 - 占据40%页面高度 */
@@ -261,8 +265,8 @@
 }
 
 .profile-avatar {
-  border: 4px solid #1a1a1b;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  border: 4px solid var(--card-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   transition: opacity 0.3s ease;
 }
 
@@ -298,18 +302,20 @@
 .profile-username {
   font-size: 32px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin-bottom: 8px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 25%, transparent);
 }
 
 /* 标签导航 */
 .profile-tabs {
-  background: rgba(26, 26, 27, 0.95);
+  background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent);
   backdrop-filter: blur(10px);
   border-radius: 8px 8px 0 0;
   padding: 0 20px;
   margin-top: 20px;
+  border: 1px solid var(--card-border);
+  border-bottom: none;
 }
 
 /* Element Plus Tabs 样式定制 */
@@ -330,18 +336,18 @@
 :deep(.el-tabs__item) {
   padding: 16px 20px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-weight: 500;
   transition: all 0.2s ease;
   border-bottom: 2px solid transparent;
 }
 
 :deep(.el-tabs__item:hover) {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
 }
 
 :deep(.el-tabs__item.is-active) {
-  color: #ffffff;
+  color: var(--text-primary);
   font-weight: 600;
   border-bottom-color: #ff69b4;
 }

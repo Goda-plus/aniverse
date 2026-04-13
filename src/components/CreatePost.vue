@@ -177,6 +177,31 @@
 
   const emit = defineEmits(['success', 'cancel'])
 
+  /** 根据审核结果提示：待审核/违规分高时明确告知需人工审核 */
+  const notifyPublishModeration = (res) => {
+    const data = res?.data || {}
+    const status = data.moderation_status
+    const score = Number(data.moderation_score)
+    const scoreHint = Number.isFinite(score) && score > 0 ? `违规评分 ${score}，` : ''
+    const serverMsg = res?.message || ''
+
+    if (status === 'rejected') {
+      ElMessage.error(serverMsg || '帖子因违反社区准则未能发布')
+      return
+    }
+    if (status === 'pending') {
+      ElMessage.warning({
+        message:
+          (serverMsg || '帖子已提交，正在等待人工审核') +
+          `。${scoreHint}审核通过前不会在社区公开显示，可在个人主页「帖子」中查看审核状态。`,
+        duration: 9000,
+        showClose: true
+      })
+      return
+    }
+    ElMessage.success(serverMsg || '帖子发布成功')
+  }
+
   // 表单数据
   const formData = reactive({
     subreddit: '',
@@ -738,15 +763,19 @@
         }
 
         const res = await createPost(postData)
-        ElMessage.success('帖子发布成功')
-        
+        if (!res.success) {
+          ElMessage.error(res.message || '发布失败')
+          return
+        }
+        notifyPublishModeration(res)
+
         // 发布成功后，先重置表单（在emit之前，避免组件卸载后访问）
         formData.subreddit = ''
         formData.title = ''
         formData.tags = []
         formData.content = ''
         imageUrl.value = [] // 重置图片 URL 数组
-        
+
         // 发出成功事件，父组件会处理导航
         emit('success', res.data)
       }

@@ -126,7 +126,17 @@
 
           <!-- 帖子标题 -->
           <h3 class="post-title">
-            {{ post.title }}
+            <span class="post-title-text">{{ post.title }}</span>
+            <el-tag
+              v-if="showModerationBadge && moderationBadgeLabel(post)"
+              :type="moderationBadgeType(post)"
+              size="small"
+              effect="dark"
+              class="moderation-badge"
+              :title="post.moderation_status === 'rejected' && post.violation_reason ? post.violation_reason : undefined"
+            >
+              {{ moderationBadgeLabel(post) }}
+            </el-tag>
           </h3>
 
           <!-- 帖子内容/图片（紧凑模式） -->
@@ -269,6 +279,11 @@
     selectedPostIds: {
       type: Array,
       default: () => []
+    },
+    /** 在个人帖子等场景展示审核状态角标 */
+    showModerationBadge: {
+      type: Boolean,
+      default: false
     }
   })
   const userStore = useUserStore()
@@ -295,6 +310,21 @@
   const viewModeText = computed(() => {
     return viewModeMap[viewMode.value] || '紧凑'
   })
+
+  const moderationBadgeLabel = (post) => {
+    const s = post.moderation_status
+    if (!s || s === 'approved') return ''
+    if (s === 'pending') return '待审核'
+    if (s === 'rejected') return '未通过'
+    return String(s)
+  }
+
+  const moderationBadgeType = (post) => {
+    const s = post.moderation_status
+    if (s === 'pending') return 'danger'
+    if (s === 'rejected') return 'info'
+    return 'success'
+  }
 
   const handleSortChange = (command) => {
     currentSort.value = sortMap[command] || '最佳'
@@ -919,6 +949,20 @@
   margin: 4px 0 8px 0;
   line-height: 1.4;
   transition: color 0.3s ease;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.post-title-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.moderation-badge {
+  flex-shrink: 0;
+  font-weight: 600;
 }
 
 .post-item:hover .post-title {

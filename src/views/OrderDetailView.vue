@@ -42,6 +42,12 @@
                 <div v-else-if="order.status === 'completed'" class="status-desc">
                   订单已完成，感谢您的购买
                 </div>
+                <div v-else-if="order.status === 'refunded'" class="status-desc">
+                  订单已退款
+                </div>
+                <div v-else-if="order.status === 'cancelled'" class="status-desc">
+                  订单已取消
+                </div>
               </div>
             </div>
             <div class="status-actions">
@@ -57,11 +63,41 @@
                 <el-button type="danger" @click="handleCancel">
                   取消订单
                 </el-button>
+                <template v-if="canMallRefundOnly">
+                  <el-button type="warning" plain @click="openMallBuyerRefundDialog">
+                    申请退款
+                  </el-button>
+                </template>
+                <template v-else-if="mallBuyerRefundCode === 'refund'">
+                  <el-tag type="warning">
+                    退款申请处理中
+                  </el-tag>
+                </template>
+                <template v-else-if="mallBuyerRefundCode === 'refund_return'">
+                  <el-tag type="warning">
+                    退款退货申请处理中
+                  </el-tag>
+                </template>
               </template>
               <template v-else-if="order.status === 'shipped'">
                 <el-button type="primary" @click="handleConfirm">
                   确认收货
                 </el-button>
+                <template v-if="canMallRefundReturn">
+                  <el-button type="warning" plain @click="openMallBuyerRefundDialog">
+                    申请退款退货
+                  </el-button>
+                </template>
+                <template v-else-if="mallBuyerRefundCode === 'refund'">
+                  <el-tag type="warning">
+                    退款申请处理中
+                  </el-tag>
+                </template>
+                <template v-else-if="mallBuyerRefundCode === 'refund_return'">
+                  <el-tag type="warning">
+                    退款退货申请处理中
+                  </el-tag>
+                </template>
               </template>
             </div>
           </div>
@@ -139,7 +175,7 @@
                 class="item-row"
               >
                 <el-image
-                  :src="item.cover_image || '/placeholder.png'"
+                  :src="firstProductImageUrl(item.cover_image)"
                   :alt="item.name"
                   class="item-image"
                   fit="cover"
@@ -194,7 +230,8 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { ArrowLeft, CircleCheck, Clock, Box, Close } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
-  import { getOrderDetail, payOrder, cancelOrder, confirmOrder } from '@/axios/mall'
+  import { getOrderDetail, payOrder, cancelOrder, confirmOrder, requestMallBuyerRefund } from '@/axios/mall'
+  import { firstProductImageUrl } from '@/utils/productImages'
 
   const route = useRoute()
   const router = useRouter()
@@ -203,13 +240,28 @@
   const orderItems = ref([])
   const loading = ref(false)
 
+  const mallBuyerRefundCode = computed(() => {
+    const r = order.value?.buyer_refund_request
+    if (r == null || r === '' || r === 'none') return null
+    return String(r).trim()
+  })
+
+  const canMallRefundOnly = computed(
+    () => order.value?.status === 'paid' && !mallBuyerRefundCode.value
+  )
+
+  const canMallRefundReturn = computed(
+    () => order.value?.status === 'shipped' && !mallBuyerRefundCode.value
+  )
+
   const statusIcon = computed(() => {
     const iconMap = {
       pending: Clock,
       paid: Clock,
       shipped: Box,
       completed: CircleCheck,
-      cancelled: Close
+      cancelled: Close,
+      refunded: Close
     }
     return iconMap[order.value?.status] || Clock
   })
@@ -220,7 +272,8 @@
       paid: 'status-info',
       shipped: 'status-primary',
       completed: 'status-success',
-      cancelled: 'status-info'
+      cancelled: 'status-info',
+      refunded: 'status-error'
     }
     return classMap[order.value?.status] || ''
   })
@@ -231,7 +284,8 @@
       paid: '已支付',
       shipped: '已发货',
       completed: '已完成',
-      cancelled: '已取消'
+      cancelled: '已取消',
+      refunded: '已退款'
     }
     return labelMap[status] || status
   }
@@ -294,6 +348,38 @@
       if (error !== 'cancel') {
         ElMessage.error(error.response?.data?.message || '取消订单失败')
       }
+    }
+  }
+
+  const openMallBuyerRefundDialog = async () => {
+    if (!order.value) return
+    const isReturn = canMallRefundReturn.value
+    const title = isReturn ? '申请退款退货' : '申请退款'
+    const message = isReturn
+      ? '当前订单已发货，将发起退款退货申请。请后续与商家沟通退回商品及退款事宜。'
+      : '当前订单已支付、商家未发货，将发起仅退款申请。商家可在店铺订单中处理。'
+    try {
+      const { value } = await ElMessageBox.prompt(
+        `${message}\n\n说明（选填，500 字内）：`,
+        title,
+        {
+          confirmButtonText: '提交申请',
+          cancelButtonText: '取消',
+          inputPlaceholder: '选填',
+          inputPattern: /^[\s\S]{0,500}$/,
+          inputErrorMessage: '说明过长'
+        }
+      )
+      const res = await requestMallBuyerRefund(order.value.id, { reason: value || '' })
+      if (res.success && res.code === 200) {
+        ElMessage.success(res.message || '提交成功')
+        fetchOrderDetail()
+      } else {
+        ElMessage.error(res.message || '提交失败')
+      }
+    } catch (error) {
+      if (error === 'cancel') return
+      ElMessage.error(error.response?.data?.message || error.message || '提交失败')
     }
   }
 

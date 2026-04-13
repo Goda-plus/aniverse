@@ -125,6 +125,76 @@ exports.listByMedia = async (req, res, next) => {
   }
 }
 
+// 当前用户提交的名场面（含待审核/未通过）
+exports.listMine = async (req, res, next) => {
+  try {
+    const userId = req.user?.id
+    if (!userId) return res.cc(false, '请先登录', 401)
+
+    const page = parseInt(req.query.page, 10) || 1
+    const rawSize = parseInt(req.query.pageSize, 10) || 10
+    const pageSize = rawSize < 1 ? 10 : Math.min(rawSize, 50)
+    const safePage = page < 1 ? 1 : page
+    const offset = (safePage - 1) * pageSize
+
+    const countSql = 'SELECT COUNT(*) AS total FROM scene_moments sm WHERE sm.submitter_id = ?'
+    const [{ total }] = await conMysql(countSql, [userId])
+
+    const listSql = `
+      SELECT
+        sm.*,
+        m.title_native as media_title_native,
+        (SELECT GROUP_CONCAT(t.name)
+          FROM scene_moment_tags smt
+          JOIN tags t ON smt.tag_id = t.id
+          WHERE smt.scene_id = sm.id
+        ) AS tag_names,
+        (SELECT 1 FROM scene_moment_likes sml WHERE sml.scene_id = sm.id AND sml.user_id = ? LIMIT 1) AS liked,
+        (SELECT 1 FROM favorites f WHERE f.target_type = 'scene_moment' AND f.target_id = sm.id AND f.user_id = ? LIMIT 1) AS favorited
+      FROM scene_moments sm
+      LEFT JOIN media m ON sm.media_id = m.id
+      WHERE sm.submitter_id = ?
+      ORDER BY sm.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+    const list = await conMysql(listSql, [userId, userId, userId, pageSize, offset])
+
+    const formatted = list.map((row) => {
+      let imageUrls = []
+      if (row.image_url) {
+        try {
+          const parsed = JSON.parse(row.image_url)
+          imageUrls = Array.isArray(parsed) ? parsed : [row.image_url]
+        } catch (e) {
+          imageUrls = [row.image_url]
+        }
+      }
+
+      return {
+        ...row,
+        image_url: imageUrls,
+        liked: Boolean(row.liked),
+        favorited: Boolean(row.favorited),
+        tag_names: row.tag_names ? String(row.tag_names).split(',') : []
+      }
+    })
+
+    const totalPages = Math.ceil(total / pageSize) || 0
+
+    res.cc(true, '获取我的名场面成功', 200, {
+      list: formatted,
+      pagination: {
+        total,
+        totalPages,
+        currentPage: safePage,
+        pageSize
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
 // 详情：名场面 + 标签 + 角色 + 登录态（liked/favorited）
 exports.getDetail = async (req, res, next) => {
   try {
@@ -350,9 +420,10 @@ exports.create = async (req, res, next) => {
       await conMysql(`INSERT IGNORE INTO scene_moment_characters (scene_id, character_id) VALUES ${placeholders}`, params)
     }
 
-    // 如果需要人工审核，添加到审核队列
     if (initialModerationStatus === 'pending') {
-      await this.addToModerationQueue(sceneId, submitterId, moderationResult)
+      await exports.addToModerationQueue(sceneId, submitterId, moderationResult, contentForModeration, 'pending')
+    } else if (initialModerationStatus === 'rejected') {
+      await exports.addToModerationQueue(sceneId, submitterId, moderationResult, contentForModeration, 'rejected')
     }
 
     // 更新用户审核统计
@@ -369,32 +440,31 @@ exports.create = async (req, res, next) => {
   }
 }
 
-// 添加到审核队列
-exports.addToModerationQueue = async (sceneId, userId, moderationResult) => {
+// 添加到审核队列（字段与帖子入队一致，便于后台统一查询）
+exports.addToModerationQueue = async (sceneId, userId, moderationResult, contentForModeration, queueStatus = 'pending') => {
+  const contentText = `${contentForModeration.title || ''} ${contentForModeration.quote_text || ''} ${contentForModeration.description || ''}`
+    .trim()
+    .substring(0, 500)
   const insertQueueSql = `
     INSERT INTO moderation_queue
-    (content_type, content_id, user_id, priority, reason, auto_moderation_score, triggered_rules)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (content_type, content_id, user_id, content_text, content_html, moderation_reason, severity_score, priority, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
 
-  // 根据违规严重程度确定优先级
-  let priority = 'normal'
-  if (moderationResult.score >= 20) {
-    priority = 'high'
-  } else if (moderationResult.score >= 10) {
-    priority = 'urgent'
-  }
-
-  const reason = moderationResult.violations.map(v => v.reason).join('; ')
+  const reason = moderationResult.violations.map(v => v.reason).join('; ') ||
+    (queueStatus === 'rejected' ? '自动审核拒绝' : '自动审核标记为待人工审核')
+  const priority = moderationResult.score > 50 ? 'high' : moderationResult.score > 20 ? 'normal' : 'low'
 
   await conMysql(insertQueueSql, [
     'scene_moment',
     sceneId,
     userId,
-    priority,
-    reason || '自动审核标记为待人工审核',
+    contentText || null,
+    null,
+    reason,
     moderationResult.score,
-    JSON.stringify(moderationResult.triggeredRules)
+    priority,
+    queueStatus
   ])
 }
 

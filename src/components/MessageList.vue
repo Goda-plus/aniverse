@@ -39,8 +39,23 @@
         >
           多选
         </el-button>
+        <el-button
+          v-if="canReportPrivateUser"
+          text
+          type="danger"
+          size="small"
+          @click="reportUserVisible = true"
+        >
+          举报用户
+        </el-button>
       </div>
     </div>
+
+    <ReportDialog
+      v-model="reportUserVisible"
+      target-type="user"
+      :target-id="privateChatPeerId || 0"
+    />
 
     <!-- 搜索框 -->
     <div v-if="showSearch" class="search-container">
@@ -294,11 +309,12 @@
 </template>
 
 <script setup>
-  import { ref, computed, watch, nextTick, onMounted, defineExpose } from 'vue'
+  import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, defineExpose } from 'vue'
   import { Loading, Check, CircleCheck, InfoFilled, Search, Close, ArrowUp, ArrowDown, DocumentCopy, Download, Delete, Document, Select } from '@element-plus/icons-vue'
   import { ElMessage } from 'element-plus'
   import RichTextEditor from './RichTextEditor.vue'
   import MessageContextMenu from './MessageContextMenu.vue'
+  import ReportDialog from './ReportDialog.vue'
   import { throttle, debounce } from '@/utils/throttleDebounce'
 
   // eslint-disable-next-line no-undef
@@ -359,11 +375,13 @@
   const loadedMessageCount = ref(20) // 默认加载最新的20条消息
   const loadingMoreMessages = ref(false) // 加载更多消息的状态
   const hasMoreMessages = ref(true) // 是否还有更多消息可以加载
+  const scrollToBottomTimer = ref(null)
 
   // 消息菜单相关状态
   const menuVisible = ref(false)
   const selectedMessage = ref(null)
   const menuPosition = ref({ x: 0, y: 0 })
+  const reportUserVisible = ref(false)
 
   // 获取当前房间信息
   const currentRoom = computed(() => {
@@ -392,6 +410,20 @@
       return currentRoom.value.members[0].avatar_url || null
     }
     return null
+  })
+
+  const privateChatPeerId = computed(() => {
+    const r = currentRoom.value
+    if (!r || r.is_group || !r.members?.length) return null
+    const id = Number(r.members[0].id)
+    return Number.isFinite(id) ? id : null
+  })
+
+  const canReportPrivateUser = computed(() => {
+    const peer = privateChatPeerId.value
+    const me = props.currentUserId
+    if (peer == null || me == null) return false
+    return peer !== Number(me)
   })
 
   // 判断是否为自己的消息
@@ -438,12 +470,16 @@
 
   // 滚动到底部
   function scrollToBottom () {
-    if (messagesContainerRef.value) {
-      // 使用 setTimeout 确保DOM完全渲染
-      setTimeout(() => {
-        messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
-      }, 50)
+    // 使用 setTimeout 确保DOM完全渲染，回调中再次判空避免切换视图时空引用
+    if (scrollToBottomTimer.value) {
+      clearTimeout(scrollToBottomTimer.value)
+      scrollToBottomTimer.value = null
     }
+    scrollToBottomTimer.value = setTimeout(() => {
+      const container = messagesContainerRef.value
+      if (!container) return
+      container.scrollTop = container.scrollHeight
+    }, 50)
   }
 
   // 发送消息（直接发送HTML内容，包含文本和媒体）
@@ -718,7 +754,7 @@
 
     // 记录当前滚动位置，用于加载完成后保持位置
     const container = messagesContainerRef.value
-    const scrollHeight = container.scrollHeight
+    const scrollHeight = container?.scrollHeight || 0
 
     // 通知父组件加载更多消息，一次加载20条
     emit('load-more-messages', {
@@ -799,6 +835,10 @@
     }
   })
 
+  const handleGlobalKeydown = (event) => {
+    // 预留快捷键位
+  }
+
   onMounted(() => {
     scrollToBottom()
 
@@ -808,10 +848,20 @@
     }
 
     // 全局键盘快捷键
-    const handleKeydown = (event) => {
-      // 预留快捷键位
+    document.addEventListener('keydown', handleGlobalKeydown)
+  })
+
+  onBeforeUnmount(() => {
+    if (scrollToBottomTimer.value) {
+      clearTimeout(scrollToBottomTimer.value)
+      scrollToBottomTimer.value = null
     }
-    document.addEventListener('keydown', handleKeydown)
+
+    if (messagesContainerRef.value) {
+      messagesContainerRef.value.removeEventListener('scroll', handleScroll)
+    }
+
+    document.removeEventListener('keydown', handleGlobalKeydown)
   })
 
   // 暴露方法给父组件
@@ -826,7 +876,7 @@
   display: flex;
   height: 100%;
   flex-direction: column;
-  background: var(--bg-color, #1a1a1b);
+  background: var(--bg-secondary);
   position: relative;
 }
 
@@ -840,8 +890,8 @@
 
 .messages-header {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, #343536);
-  background: var(--header-bg, #272729);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -854,7 +904,7 @@
 }
 
 .messages-room-name {
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
 }
@@ -868,8 +918,8 @@
 /* 搜索容器样式 */
 .search-container {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, #343536);
-  background: var(--bg-secondary, #1a1a1b);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .search-results {
@@ -881,7 +931,7 @@
 
 .search-result-count {
   font-size: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
 }
 
 .search-navigation {
@@ -892,7 +942,7 @@
 
 .search-position {
   font-size: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   min-width: 60px;
   text-align: center;
 }
@@ -904,6 +954,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: var(--bg-primary);
 }
 
 .loading-container {
@@ -913,7 +964,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
 }
 
 .loading-more-container {
@@ -923,7 +974,7 @@
   justify-content: center;
   gap: 8px;
   padding: 16px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -934,9 +985,9 @@
   justify-content: center;
   gap: 8px;
   padding: 16px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 12px;
-  border-top: 1px solid var(--border-color, #343536);
+  border-top: 1px solid var(--border-color);
   margin-top: 16px;
 }
 
@@ -948,7 +999,7 @@
 }
 
 .empty-messages p {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -992,7 +1043,7 @@
 
 .message-avatar {
   flex-shrink: 0;
-  border: 2px solid var(--border-color, #343536);
+  border: 2px solid var(--border-color);
   transition: border-color 0.2s ease;
 }
 
@@ -1017,9 +1068,9 @@
 
 .message-content {
   padding: 10px 14px;
-  background: var(--hover-bg, #343536);
+  background: var(--bg-hover);
   border-radius: 18px;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.5;
   word-wrap: break-word;
@@ -1056,7 +1107,7 @@
 
 .message-item:not(.own-message) .message-content::before {
   left: -6px;
-  border-right-color: var(--hover-bg, #343536);
+  border-right-color: var(--bg-hover);
   border-left: 0;
 }
 
@@ -1068,7 +1119,7 @@
 
 .message-time {
   font-size: 11px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   padding: 0 4px;
 }
 
@@ -1092,12 +1143,12 @@
 }
 
 .status-icon.sending {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   animation: spin 1s linear infinite;
 }
 
 .status-icon.sent {
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
 }
 
 .status-icon.read {
@@ -1115,7 +1166,7 @@
 
 .message-input-container {
   padding: 4px 16px;
-  border-top: 1px solid var(--border-color, #343536);
+  border-top: 1px solid var(--border-color);
   display: flex;
   flex: 1;
   max-height: min-content;
@@ -1137,7 +1188,7 @@
 
 .action-button {
   padding: 8px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   transition: color 0.2s;
 }
 
@@ -1158,8 +1209,8 @@
 /* 消息菜单 */
 .message-menu {
   position: fixed;
-  background: var(--bg-secondary, #1a1a1b);
-  border: 1px solid var(--border-color, #343536);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   z-index: 1000;
@@ -1179,7 +1230,7 @@
 }
 
 .menu-item:hover {
-  background: var(--bg-hover, #272729);
+  background: var(--bg-hover);
 }
 
 .menu-item .el-icon {
@@ -1191,7 +1242,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   font-size: 12px;
   font-style: italic;
   padding: 4px 8px;
@@ -1199,7 +1250,7 @@
 
 .recall-icon {
   font-size: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
 }
 
 /* 图片消息样式 */
@@ -1266,9 +1317,9 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-secondary, #2a2b2e);
+  background: var(--bg-tertiary);
   border-radius: 8px;
-  border: 1px solid var(--border-color, #3a3b3e);
+  border: 1px solid var(--border-color);
 }
 
 .file-icon {
@@ -1283,14 +1334,14 @@
 
 .file-name {
   font-size: 14px;
-  color: var(--text-color, #d7dadc);
+  color: var(--text-primary);
   font-weight: 500;
   word-break: break-all;
 }
 
 .file-size {
   font-size: 12px;
-  color: var(--text-color-secondary, #818384);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 
@@ -1312,12 +1363,12 @@
 }
 
 .messages-container::-webkit-scrollbar-thumb {
-  background: var(--border-color, #343536);
+  background: var(--border-color);
   border-radius: 4px;
 }
 
 .messages-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-color-secondary, #818384);
+  background: var(--text-secondary);
 }
 
 /* 移动端响应式 */

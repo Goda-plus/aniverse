@@ -218,7 +218,7 @@
             @open-chat="openFriendChat"
             @back="switchView('chat')"
             @set-remark="handleSetRemark"
-            @delete-friend="handleDeleteFriend"
+            @friend-deleted="handleFriendDeleted"
           />
 
           <!-- 聊天消息视图 -->
@@ -312,7 +312,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { initSocket } from '@/utils/socket'
   import { getRoomList, createRoom, getChatHistory, deleteMessage, hideMessage } from '@/axios/chat'
-  import { getFriendList, addFriend, searchUsers, updateFriendRemark, deleteFriend } from '@/axios/friend'
+  import { getFriendList, addFriend, searchUsers, updateFriendRemark } from '@/axios/friend'
   import { useUserStore } from '@/stores/user'
   import { throttle, debounce } from '@/utils/throttleDebounce'
   import { gsap } from 'gsap'
@@ -330,11 +330,15 @@
     visible: {
       type: Boolean,
       default: false
+    },
+    initialRoomId: {
+      type: [Number, String],
+      default: null
     }
   })
 
   // eslint-disable-next-line no-undef
-  const emit = defineEmits(['update:visible', 'close'])
+  const emit = defineEmits(['update:visible', 'close', 'room-initialized'])
 
   // 状态管理
   const isVisible = computed({
@@ -382,6 +386,26 @@
 
   const friendIdSet = computed(() => new Set(friends.value.map(f => Number(f.id))))
 
+  async function tryOpenInitialRoom (roomId) {
+    const normalizedRoomId = Number(roomId)
+    if (!normalizedRoomId || !isVisible.value) {
+      return
+    }
+
+    const matchedRoom = chatRooms.value.find(r => Number(r.id) === normalizedRoomId)
+    if (!matchedRoom) {
+      return
+    }
+
+    if (Number(activeRoomId.value) === normalizedRoomId) {
+      emit('room-initialized', normalizedRoomId)
+      return
+    }
+
+    await selectRoom(matchedRoom)
+    emit('room-initialized', normalizedRoomId)
+  }
+
   // 创建防抖版本的搜索用户函数
   const debouncedSearchUsers = debounce(async (keyword) => {
     if (!keyword.trim()) {
@@ -410,6 +434,7 @@
       nextTick(() => {
         initDraggable()
       })
+      tryOpenInitialRoom(props.initialRoomId)
     } else {
       // 窗口隐藏时销毁拖拽实例
       if (draggableInstance.value) {
@@ -417,6 +442,11 @@
         draggableInstance.value = null
       }
     }
+  })
+
+  watch(() => props.initialRoomId, (newRoomId) => {
+    if (!newRoomId) return
+    tryOpenInitialRoom(newRoomId)
   })
 
   // 初始化 Socket
@@ -439,6 +469,9 @@
     if (socket.value) {
       socket.value.off('chatMessage')
       socket.value.off('messageRecalled')
+      socket.value.off('friendDeleted')
+      socket.value.off('friendListUpdated')
+      socket.value.off('chatBlocked')
     }
     // 销毁拖拽实例
     if (draggableInstance.value) {
@@ -522,6 +555,54 @@
       ])
     })
 
+    // 统一好友列表刷新事件（例如对方接受了我的好友申请）
+    socket.value.on('friendListUpdated', async () => {
+      await Promise.all([
+        loadFriends(),
+        loadChatRooms()
+      ])
+    })
+
+    // 监听好友删除通知：刷新好友与聊天列表，必要时关闭当前聊天
+    socket.value.on('friendDeleted', async (data) => {
+      await Promise.all([
+        loadFriends(),
+        loadChatRooms()
+      ])
+
+      // 单向删除：只有删除发起方才需要强制关闭当前与对方的会话
+      if (Number(data?.byUserId) !== Number(currentUserId.value)) {
+        return
+      }
+
+      const deletedFriendId = Number(data?.friendId)
+      if (!deletedFriendId) return
+
+      // 若当前在与被删除好友私聊，回到聊天空态
+      const activeRoom = chatRooms.value.find(r => Number(r.id) === Number(activeRoomId.value))
+      if (
+        activeRoom &&
+        !activeRoom.is_group &&
+        Array.isArray(activeRoom.members) &&
+        activeRoom.members.some(member => Number(member.id) === deletedFriendId)
+      ) {
+        activeRoomId.value = null
+        messages.value = []
+      }
+    })
+
+    // 监听聊天权限被拦截（例如已不是好友）
+    socket.value.on('chatBlocked', async (data) => {
+      ElMessage.warning(data?.message || '当前无法发送消息')
+      await Promise.all([
+        loadFriends(),
+        loadChatRooms()
+      ])
+      messages.value = []
+      activeRoomId.value = null
+      currentView.value = 'chat'
+    })
+
     // 监听新消息通知（当前不在聊天中的消息）
     socket.value.on('newMessageNotification', (data) => {
       // 如果不是当前活跃的聊天室，才显示通知
@@ -562,9 +643,10 @@
   async function loadChatRooms () {
     loadingRooms.value = true
     try {
-      const res = await getRoomList()
+      const res = await getRoomList({ scene: 'friend' })
       if (res.success) {
         chatRooms.value = res.data || []
+        await tryOpenInitialRoom(props.initialRoomId)
       }
     } catch (error) {
       ElMessage.error('加载聊天列表失败')
@@ -609,7 +691,8 @@
     try {
       const res = await createRoom({
         memberIds: [friend.id],
-        name: null
+        name: null,
+        scene: 'friend'
       })
       if (res.success) {
         const roomId = res.data.roomId
@@ -684,35 +767,17 @@
     }
   }
 
-  async function handleDeleteFriend (friend) {
-    try {
-      await ElMessageBox.confirm(
-        `确定要删除好友 "${friend.username}" 吗？删除后将无法恢复。`,
-        '删除好友',
-        {
-          confirmButtonText: '确定删除',
-          cancelButtonText: '取消',
-          type: 'warning',
-          confirmButtonClass: 'el-button--danger'
-        }
-      )
+  async function handleFriendDeleted (friendId) {
+    const normalizedFriendId = Number(friendId)
+    if (!normalizedFriendId) return
 
-      const res = await deleteFriend({ friendId: friend.id })
+    await Promise.all([
+      loadFriends(),
+      loadChatRooms()
+    ])
 
-      if (res.success) {
-        ElMessage.success('好友删除成功')
-        // 重新加载好友列表
-        await loadFriends()
-        // 如果当前显示的是这个好友的详情页，返回聊天
-        if (selectedFriend.value && selectedFriend.value.id === friend.id) {
-          switchView('chat')
-        }
-      }
-
-    } catch (error) {
-      if (error !== 'cancel') {
-        ElMessage.error(error.response?.data?.message || '删除好友失败')
-      }
+    if (selectedFriend.value && Number(selectedFriend.value.id) === normalizedFriendId) {
+      switchView('chat')
     }
   }
 
@@ -1090,7 +1155,8 @@
 
       const res = await createRoom({
         memberIds: [friend.id],
-        name: null // 私聊不需要名称
+        name: null, // 私聊不需要名称
+        scene: 'friend'
       })
 
       if (res.success) {
@@ -1189,7 +1255,8 @@
     try {
       const res = await createRoom({
         memberIds: selectedGroupMembers.value,
-        name: groupName.value.trim()
+        name: groupName.value.trim(),
+        scene: 'friend'
       })
       if (res.success) {
         const roomId = res.data.roomId

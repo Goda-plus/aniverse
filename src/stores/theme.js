@@ -80,8 +80,8 @@ export const useThemeStore = defineStore('theme', () => {
     try {
       isLoading.value = true
       const response = await getUserTheme()
-      if (response.data && response.data.code === 200) {
-        const themeData = response.data.data
+      if (response && response.code === 200) {
+        const themeData = response.data
         // 应用数据库中的设置
         mode.value = themeData.preset_theme || 'dark'
         blurAmount.value = themeData.setting_blur ? parseInt(themeData.setting_blur) : 15
@@ -235,8 +235,8 @@ export const useThemeStore = defineStore('theme', () => {
         if (['light', 'dark', 'auto'].includes(newMode)) {
           try {
             const response = await applyPresetTheme({ preset: newMode })
-            if (response.data && response.data.code === 200) {
-              const themeData = response.data.data
+            if (response && response.code === 200) {
+              const themeData = response.data
               // 应用返回的完整主题配置
               blurAmount.value = themeData.setting_blur ? parseInt(themeData.setting_blur) : 15
               opacityAmount.value = themeData.setting_opacity ? parseInt(themeData.setting_opacity) : 100
@@ -380,12 +380,12 @@ export const useThemeStore = defineStore('theme', () => {
     if (currentTheme.value === 'customer') {
       // 仅在自定义模式下应用颜色变量
       Object.entries(colorSettings.value).forEach(([key, value]) => {
-        root.style.setProperty(`--${key.replace('_', '-')}`, value)
+        root.style.setProperty(`--${key.replace(/_/g, '-')}`, value)
       })
     } else {
       // 退出自定义模式时清除自定义颜色变量，让 .theme-light / .theme-dark 的样式生效
       Object.keys(colorSettings.value).forEach((key) => {
-        root.style.removeProperty(`--${key.replace('_', '-')}`)
+        root.style.removeProperty(`--${key.replace(/_/g, '-')}`)
       })
     }
   }
@@ -438,6 +438,11 @@ export const useThemeStore = defineStore('theme', () => {
   // 处理用户登录状态变化
   async function onUserLogin () {
     await loadThemeFromDB()
+    // 登录后从数据库恢复到最新设置后，立即重新应用到 DOM
+    updateTheme()
+    applySettingControls()
+    applyBackgroundImage()
+    applyColorSettings()
   }
 
   function onUserLogout () {

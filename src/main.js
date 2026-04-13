@@ -4,11 +4,14 @@ import 'element-plus/dist/index.css'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import { installPermissionDirectives } from './directives/permission'
 import './styles/base.css'
 import './styles/element-plus.css'
 import './styles/wangEditor.css'
 // 引入wangEditor
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
+
+const CHUNK_RELOAD_GUARD = 'aniverse_chunk_reload_pending'
 
 // 处理 ResizeObserver 循环错误
 const resizeObserverErrHandler = (err) => {
@@ -25,11 +28,21 @@ window.addEventListener('error', resizeObserverErrHandler)
 window.addEventListener('unhandledrejection', (event) => {
   if (event.reason && event.reason.message && event.reason.message.includes('ResizeObserver loop completed with undelivered notifications')) {
     event.preventDefault()
+    return
+  }
+  const msg = event.reason?.message || String(event.reason || '')
+  if (/Loading chunk .* failed|ChunkLoadError|Failed to fetch dynamically imported module/i.test(msg)) {
+    if (sessionStorage.getItem(CHUNK_RELOAD_GUARD)) return
+    sessionStorage.setItem(CHUNK_RELOAD_GUARD, '1')
+    event.preventDefault()
+    window.location.reload()
   }
 })
 
 const app = createApp(App)
-app.use(createPinia())
+const pinia = createPinia()
+app.use(pinia)
+installPermissionDirectives(app)
 app.use(router)
 // 配置 Element Plus，避免 ResizeObserver 循环
 app.use(ElementPlus, {
@@ -44,3 +57,4 @@ app.use(ElementPlus, {
 app.component('WangEditor', Editor)
 app.component('WangEditorToolbar', Toolbar)
 app.mount('#app')
+sessionStorage.removeItem(CHUNK_RELOAD_GUARD)

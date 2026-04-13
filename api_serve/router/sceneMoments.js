@@ -28,6 +28,9 @@ const upload = multer({ storage })
 // 列出某作品下的名场面（公开接口，支持可选登录态）
 router.get('/media/:mediaId', optionalAuth, sceneMomentHandler.listByMedia)
 
+// 我的名场面贡献（需登录；必须在 /:id 之前注册）
+router.get('/my', sceneMomentHandler.listMine)
+
 // 名场面详情（公开接口，支持可选登录态）
 router.get('/:id', optionalAuth, sceneMomentHandler.getDetail)
 

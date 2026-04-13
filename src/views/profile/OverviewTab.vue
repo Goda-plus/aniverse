@@ -772,7 +772,7 @@
 
 .personal-signature {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
 .overview-layout {
@@ -793,7 +793,7 @@
 .panel-title {
   font-size: 18px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
   margin: 0 0 16px 0;
 }
 
@@ -810,7 +810,7 @@
 
 .activity-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 12px;
 }
 
@@ -823,7 +823,7 @@
 
 .activity-day {
   aspect-ratio: 1;
-  background: #2a2a2e;
+  background: var(--bg-tertiary);
   border-radius: 2px;
   min-width: 8px;
   min-height: 8px;
@@ -854,7 +854,7 @@
 
 .genre-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
@@ -867,7 +867,7 @@
 .genre-tag {
   padding: 12px;
   border-radius: 6px;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .genre-tag.genre-fantasy {
@@ -975,14 +975,14 @@
 
 .genre-entries {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .genre-progress-bar {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1076,21 +1076,21 @@
 
 .edit-genres-tip {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
 /* Anime 面板 */
 .anime-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
 /* Characters 面板 */
 .characters-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
@@ -1104,7 +1104,7 @@
   aspect-ratio: 3/4;
   border-radius: 6px;
   overflow: hidden;
-  background: #2a2a2e;
+  background: var(--bg-tertiary);
   position: relative;
 }
 
@@ -1132,7 +1132,7 @@
 
 .no-collections {
   text-align: center;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   font-size: 14px;
   padding: 20px;
 }
@@ -1146,7 +1146,7 @@
 }
 
 .expand-button {
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 14px;
   display: inline-flex;
   align-items: center;
@@ -1171,7 +1171,7 @@
 /* Statistics 面板 */
 .statistics-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 20px;
 }
 
@@ -1189,14 +1189,14 @@
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   margin-bottom: 4px;
   line-height: 1.2;
 }
 
 .stat-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1208,7 +1208,7 @@
 .progress-bar {
   width: 100%;
   height: 10px;
-  background: #2a2a2e;
+  background: var(--bg-tertiary);
   border-radius: 5px;
   overflow: hidden;
   position: relative;
@@ -1226,7 +1226,7 @@
   justify-content: space-between;
   margin-top: 8px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
 /* Activity 面板 */
@@ -1243,7 +1243,7 @@
 
 .activity-footprint-label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
@@ -1271,7 +1271,7 @@
   flex-shrink: 0;
   border-radius: 4px;
   overflow: hidden;
-  background: #2a2a2e;
+  background: var(--bg-tertiary);
 }
 
 .activity-thumbnail img {
@@ -1289,7 +1289,7 @@
 
 .activity-description {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
   line-height: 1.5;
   margin-bottom: 8px;
 }
@@ -1302,7 +1302,7 @@
 
 .activity-time {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
 .activity-icons {
@@ -1320,7 +1320,8 @@
 }
 
 .heart-icon.heart-grey {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-secondary);
+  opacity: 0.55;
 }
 
 /* Activity 分页器样式 */
@@ -1332,13 +1333,13 @@
 
 .activity-pagination .el-pagination {
   --el-pagination-bg-color: var(--card-bg, #1a1a1b);
-  --el-pagination-text-color: rgba(255, 255, 255, 0.7);
+  --el-pagination-text-color: var(--text-secondary);
   --el-pagination-border-color: var(--border-color, #343536);
-  --el-pagination-button-color: rgba(255, 255, 255, 0.7);
+  --el-pagination-button-color: var(--text-secondary);
   --el-pagination-button-bg-color: var(--card-bg, #1a1a1b);
   --el-pagination-button-hover-color: #409eff;
-  --el-pagination-button-disabled-color: rgba(255, 255, 255, 0.3);
-  --el-pagination-button-disabled-bg-color: rgba(255, 255, 255, 0.1);
+  --el-pagination-button-disabled-color: var(--text-secondary);
+  --el-pagination-button-disabled-bg-color: var(--bg-tertiary);
 }
 
 /* 响应式设计 */

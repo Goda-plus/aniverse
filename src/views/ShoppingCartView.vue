@@ -46,7 +46,7 @@
                 @change="handleItemSelect(item)"
               />
               <el-image
-                :src="item.cover_image || '/placeholder.png'"
+                :src="firstProductImageUrl(item.cover_image)"
                 :alt="item.name"
                 class="item-image"
                 fit="cover"
@@ -123,6 +123,7 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import { getCart, updateCartItem, removeCartItem } from '@/axios/mall'
+  import { firstProductImageUrl } from '@/utils/productImages'
 
   const router = useRouter()
 

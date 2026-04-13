@@ -76,14 +76,40 @@
         
 
         <div class="actions">
-          <el-button size="small" :type="scene.liked ? 'primary' : 'default'" @click="onLike">
-            👍 {{ scene.likes_count || 0 }}
+          <el-button
+            text
+            class="action-button"
+            :class="{ active: scene.liked }"
+            @click="onLike"
+          >
+            <span>👍</span>
+            <span>{{ scene.likes_count || 0 }}</span>
           </el-button>
-          <el-button size="small" :type="scene.favorited ? 'warning' : 'default'" @click="onFavorite">
-            ⭐ {{ scene.favourites_count || 0 }}
+          <el-button
+            text
+            class="action-button"
+            :class="{ active: scene.favorited }"
+            @click="onFavorite"
+          >
+            <span>⭐</span>
+            <span>{{ scene.favourites_count || 0 }}</span>
           </el-button>
-          <span class="stat">💬 {{ scene.comments_count || 0 }}</span>
-          <span class="stat">👁 {{ scene.views || 0 }}</span>
+          <div class="action-stat">
+            <span>💬</span>
+            <span>{{ scene.comments_count || 0 }}</span>
+          </div>
+          <div class="action-stat">
+            <span>👁</span>
+            <span>{{ scene.views || 0 }}</span>
+          </div>
+          <el-button
+            v-if="userStore.isLoggedIn && scene?.submitter_id !== userStore.user?.id"
+            text
+            class="action-button danger"
+            @click="openReportScene"
+          >
+            举报
+          </el-button>
         </div>
       </div>
 
@@ -104,6 +130,12 @@
         @comment-count-change="handleCommentCountChange"
       />
     </div>
+
+    <ReportDialog
+      v-model="reportDialogVisible"
+      target-type="scene_moment"
+      :target-id="scene?.id || 0"
+    />
   </el-drawer>
 </template>
 
@@ -112,6 +144,7 @@
   import { ElMessage } from 'element-plus'
   import { useUserStore } from '@/stores/user'
   import CommentList from '@/components/CommentList.vue'
+  import ReportDialog from '@/components/ReportDialog.vue'
   import { toggleFavorite } from '@/axios/favorite'
   import {
     getSceneMomentDetail,
@@ -132,6 +165,11 @@
   })
 
   const userStore = useUserStore()
+  const reportDialogVisible = ref(false)
+
+  function openReportScene () {
+    reportDialogVisible.value = true
+  }
 
   const loading = ref(false)
   const scene = ref(null)
@@ -399,13 +437,47 @@
 .actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
+  flex-wrap: wrap;
 }
 
-.stat {
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  color: var(--text-secondary, #818384);
   font-size: 12px;
-  color: rgba(156, 163, 175, 0.95);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.action-button:hover {
+  color: var(--text-primary, #d7dadc);
+  background: var(--bg-hover, #343536);
+}
+
+.action-button.active {
+  color: var(--text-primary, #d7dadc);
+  background: var(--bg-secondary, #272729);
+}
+
+.action-button.danger {
+  color: #ef4444;
+}
+
+.action-button.danger:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.action-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #818384);
 }
 
 

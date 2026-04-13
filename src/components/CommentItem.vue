@@ -98,6 +98,14 @@
                   <el-icon><Share /></el-icon>
                   <span>共享</span>
                 </div>
+                <div
+                  v-if="userStore.isLoggedIn && !isOwnComment"
+                  class="menu-item"
+                  @click="openReportComment"
+                >
+                  <el-icon><Warning /></el-icon>
+                  <span>举报</span>
+                </div>
                 <div 
                   class="menu-item danger" 
                   :class="{ disabled: !canDelete }"
@@ -133,6 +141,12 @@
         />
       </div>
     </div>
+
+    <ReportDialog
+      v-model="reportDialogVisible"
+      :target-type="reportCommentTargetType"
+      :target-id="comment.id"
+    />
   </div>
 </template>
 
@@ -141,8 +155,9 @@
   import { useRoute } from 'vue-router'
   import { useUserStore } from '@/stores/user'
   import { userVote } from '@/axios/vote'
-  import { Plus, Minus, ChatLineRound, Share, Delete, MoreFilled, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+  import { Plus, Minus, ChatLineRound, Share, Delete, MoreFilled, ArrowUp, ArrowDown, Warning } from '@element-plus/icons-vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
+  import ReportDialog from './ReportDialog.vue'
 
   const props = defineProps({
     comment: {
@@ -171,6 +186,22 @@
 
   const userStore = useUserStore()
   const route = useRoute()
+  const reportDialogVisible = ref(false)
+  const reportCommentTargetType = computed(() =>
+    props.commentType === 'scene_moment' ? 'scene_comment' : 'comment'
+  )
+  const isOwnComment = computed(() => {
+    const uid = userStore.user?.id
+    const cid = props.comment?.user_id
+    if (uid == null || cid == null) return false
+    return String(uid) === String(cid)
+  })
+
+  function openReportComment () {
+    showMenu.value = false
+    reportDialogVisible.value = true
+  }
+
   const isCollapsed = ref(false)
   const isHighlighted = ref(false)
   

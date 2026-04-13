@@ -32,16 +32,37 @@ async function testScheduler () {
 
   } catch (error) {
     console.error('❌ 测试失败:', error.message)
-    process.exit(1)
+    throw error
   }
 }
 
 // 如果直接运行此脚本，则执行测试
 if (require.main === module) {
   testScheduler()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1))
 }
 
 module.exports = { testScheduler }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

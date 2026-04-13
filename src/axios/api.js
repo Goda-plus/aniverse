@@ -56,3 +56,6 @@ export * from './match'
 
 // 用户兴趣标签相关接口
 export * from './userInterest'
+
+// 举报
+export * from './report'

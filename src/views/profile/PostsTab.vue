@@ -35,6 +35,7 @@
           :posts="posts" 
           :show-recommendation="false"
           :show-checkbox="true"
+          :show-moderation-badge="true"
           :selected-post-ids="selectedPostIds"
           @vote="handleVote"
           @comment="handleComment"
@@ -137,7 +138,10 @@
       rewardCount: 0,
       userVote: apiPost.user_vote || 0,
       createdAt: new Date(apiPost.created_at).getTime(),
-      recommended: false
+      recommended: false,
+      moderation_status: apiPost.moderation_status || 'approved',
+      moderation_score: apiPost.moderation_score != null ? Number(apiPost.moderation_score) : 0,
+      violation_reason: apiPost.violation_reason || null
     }
   }
 

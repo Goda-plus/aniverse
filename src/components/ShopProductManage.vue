@@ -90,8 +90,8 @@
 
         <el-table-column label="状态" width="100">
           <template #default="scope">
-            <el-tag :type="getStatusType(scope.row.status)">
-              {{ getStatusText(scope.row.status) }}
+            <el-tag :type="getStatusType(getProductStatus(scope.row))">
+              {{ getStatusText(getProductStatus(scope.row)) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -119,10 +119,10 @@
               </el-button>
               <el-button
                 size="small"
-                :type="scope.row.status === 'active' ? 'warning' : 'success'"
+                :type="getProductStatus(scope.row) === 'active' ? 'warning' : 'success'"
                 @click="toggleProductStatus(scope.row)"
               >
-                {{ scope.row.status === 'active' ? '下架' : '上架' }}
+                {{ getProductStatus(scope.row) === 'active' ? '下架' : '上架' }}
               </el-button>
               <el-button size="small" type="danger" @click="DeleteProduct(scope.row)">
                 删除
@@ -253,6 +253,14 @@
     return textMap[status] || status
   }
 
+  const getProductStatus = (product) => {
+    if (product?.status) return product.status
+    if (product?.is_listed !== undefined && product?.is_listed !== null) {
+      return Number(product.is_listed) === 1 ? 'active' : 'inactive'
+    }
+    return 'active'
+  }
+
   // 事件处理
   const handleSelectionChange = (selection) => {
     selectedProducts.value = selection
@@ -283,7 +291,8 @@
 
   const toggleProductStatus = async (product) => {
     try {
-      const newStatus = product.status === 'active' ? 'inactive' : 'active'
+      const currentStatus = getProductStatus(product)
+      const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
       const actionText = newStatus === 'active' ? '上架' : '下架'
 
       const res = await updateProduct(product.product_id, { status: newStatus })

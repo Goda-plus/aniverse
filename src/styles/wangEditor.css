@@ -20,6 +20,11 @@ div[class*="w-e-"][class*="select"] {
   color: var(--text-primary) !important;
 }
 
+/* 插入图片等弹窗：避免被 el-dialog / 遮罩层盖住 */
+.w-e-modal {
+  z-index: 3001 !important;
+}
+
 /* 弹出层内的所有文本元素 - 但不覆盖编辑器内容区域的内联样式 */
 div[class*="w-e-"] input,
 div[class*="w-e-"] textarea,

@@ -33,6 +33,7 @@ router.post('/orders', mallHandler.createOrder)
 router.post('/orders/:id/pay', mallHandler.payOrder)
 router.post('/orders/:id/confirm', mallHandler.confirmOrder)
 router.post('/orders/:id/cancel', mallHandler.cancelOrder)
+router.post('/orders/:id/buyer-refund-request', mallHandler.requestBuyerOrderRefund)
 
 // 商品评价
 router.get('/reviews', mallHandler.listProductReviews)

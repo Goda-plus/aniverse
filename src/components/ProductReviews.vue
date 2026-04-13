@@ -22,7 +22,7 @@
             <el-rate
               v-model="newRating"
               :max="5"
-              allow-half={false}
+              allow-half="{false}"
             />
             <span v-if="newRating" class="rating-score">
               {{ newRating.toFixed(1) }} 分

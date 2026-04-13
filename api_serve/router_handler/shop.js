@@ -10,6 +10,30 @@ function parsePagination (req) {
   return { page: safePage, pageSize: safePageSize, offset }
 }
 
+// 尝试兼容两类字段：
+// 1) is_listed / is_approved（商城前台使用）
+// 2) status（部分旧表结构）
+async function applyProductStatusUpdate (productId, status) {
+  const listedValue = status === 'active' ? 1 : 0
+  try {
+    await conMysql(
+      'UPDATE products SET is_listed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [listedValue, productId]
+    )
+    return
+  } catch (err) {
+    // 兼容没有 is_listed 字段的场景
+    if (!['ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_FIELD'].includes(err.code)) {
+      throw err
+    }
+  }
+
+  await conMysql(
+    'UPDATE products SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [status, productId]
+  )
+}
+
 // ==================== 店铺管理 ====================
 
 // 获取店铺列表
@@ -57,12 +81,21 @@ exports.listShops = async (req, res, next) => {
         s.created_at,
         u.nickname,
         u.username,
-        COUNT(p.id) as product_count
+        (
+          SELECT COUNT(*)
+          FROM products p
+          WHERE p.shop_id = s.shop_id
+        ) AS product_count,
+        (
+          SELECT COUNT(DISTINCT o.id)
+          FROM orders o
+          JOIN order_items oi ON oi.order_id = o.id
+          JOIN products p2 ON p2.id = oi.product_id
+          WHERE p2.shop_id = s.shop_id
+        ) AS order_count
       FROM shops s
       JOIN users u ON s.seller_id = u.id
-      LEFT JOIN products p ON s.shop_id = p.shop_id
       ${where}
-      GROUP BY s.shop_id
       ORDER BY s.rating DESC, s.total_sales DESC
       LIMIT ? OFFSET ?
     `
@@ -259,7 +292,7 @@ exports.updateShop = async (req, res, next) => {
 exports.getShopProducts = async (req, res, next) => {
   try {
     const { id } = req.params
-    const { keyword, category_id, status = 'active', is_featured } = req.query
+    const { keyword, category_id, status = '', is_featured } = req.query
     const { page, pageSize, offset } = parsePagination(req)
 
     if (!id) {
@@ -269,11 +302,13 @@ exports.getShopProducts = async (req, res, next) => {
     let where = 'WHERE p.shop_id = ?'
     const params = [id]
 
-    // Note: products table may not have status field
-    // if (status) {
-    //   where += ' AND p.status = ?'
-    //   params.push(status)
-    // }
+    if (status === 'active') {
+      // 前台商城状态仅用 is_listed 做区分（你的 products 表里没有 status 列）
+      where += ' AND p.is_listed = 1'
+    } else if (status === 'inactive') {
+      // 兼容旧数据：只有 is_listed=0 才视为非上架（NULL 会在 CASE 中归为 active）
+      where += ' AND p.is_listed = 0'
+    }
 
     if (category_id) {
       where += ' AND p.category_id = ?'
@@ -301,7 +336,11 @@ exports.getShopProducts = async (req, res, next) => {
     const listSql = `
       SELECT
         p.id as product_id,
-        p.*
+        p.*,
+        CASE
+          WHEN p.is_listed IS NOT NULL THEN IF(p.is_listed = 1, 'active', 'inactive')
+          ELSE 'active'
+        END AS status
       FROM products p
       LEFT JOIN product_categories pc ON p.category_id = pc.id
       ${where}
@@ -329,6 +368,8 @@ exports.createProduct = async (req, res, next) => {
       shop_id,
       name,
       description,
+      detail_html,
+      detail_text,
       category_id,
       price,
       stock,
@@ -358,15 +399,17 @@ exports.createProduct = async (req, res, next) => {
 
     const sql = `
       INSERT INTO products
-        (shop_id, category_id, name, description, price, stock, cover_image,
+        (shop_id, category_id, name, description, detail_html, detail_text, price, stock, cover_image,
          specifications, material, is_featured, weight, dimensions, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     const result = await conMysql(sql, [
       shop_id,
       category_id || null,
       name,
       description || '',
+      detail_html || null,
+      detail_text || null,
       price,
       stock || 0,
       images ? JSON.stringify(images) : null,
@@ -392,6 +435,8 @@ exports.updateProduct = async (req, res, next) => {
     const {
       name,
       description,
+      detail_html,
+      detail_text,
       category_id,
       price,
       original_price,
@@ -433,6 +478,14 @@ exports.updateProduct = async (req, res, next) => {
       fields.push('description = ?')
       params.push(description)
     }
+    if (detail_html !== undefined) {
+      fields.push('detail_html = ?')
+      params.push(detail_html)
+    }
+    if (detail_text !== undefined) {
+      fields.push('detail_text = ?')
+      params.push(detail_text)
+    }
     if (category_id !== undefined) {
       fields.push('category_id = ?')
       params.push(category_id)
@@ -456,7 +509,7 @@ exports.updateProduct = async (req, res, next) => {
       params.push(stock)
     }
     if (images !== undefined) {
-      fields.push('images = ?')
+      fields.push('cover_image = ?')
       params.push(images ? JSON.stringify(images) : null)
     }
     if (specifications !== undefined) {
@@ -467,11 +520,12 @@ exports.updateProduct = async (req, res, next) => {
       fields.push('material = ?')
       params.push(material)
     }
-    // Note: products table may not have status field
-    // if (status !== undefined) {
-    //   fields.push('status = ?')
-    //   params.push(status)
-    // }
+    if (status !== undefined) {
+      if (!['active', 'inactive'].includes(status)) {
+        return res.cc(false, '商品状态值不合法', 400)
+      }
+      // 这里不直接 fields.push，统一在后面做兼容写入
+    }
     if (is_featured !== undefined) {
       fields.push('is_featured = ?')
       params.push(is_featured ? 1 : 0)
@@ -489,19 +543,24 @@ exports.updateProduct = async (req, res, next) => {
       params.push(tags)
     }
 
-    if (fields.length === 0) {
+    if (fields.length === 0 && status === undefined) {
       return res.cc(false, '没有需要更新的字段', 400)
     }
 
-    fields.push('updated_at = CURRENT_TIMESTAMP')
-    params.push(id)
+    if (fields.length > 0) {
+      fields.push('updated_at = CURRENT_TIMESTAMP')
+      params.push(id)
+      const sql = `
+        UPDATE products
+        SET ${fields.join(', ')}
+        WHERE id = ?
+      `
+      await conMysql(sql, params)
+    }
 
-    const sql = `
-      UPDATE products
-      SET ${fields.join(', ')}
-      WHERE id = ?
-    `
-    await conMysql(sql, params)
+    if (status !== undefined) {
+      await applyProductStatusUpdate(id, status)
+    }
 
     res.cc(true, '商品更新成功', 200)
   } catch (err) {
@@ -682,6 +741,279 @@ exports.getMyShop = async (req, res, next) => {
     }
 
     res.cc(true, '获取店铺信息成功', 200, shops[0])
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ====================
+// 店主独立后台：订单管理
+// ====================
+
+// 获取店主订单列表（可按店铺、状态、订单号搜索）
+exports.listSellerOrders = async (req, res, next) => {
+  try {
+    const sellerId = req.user.id
+    const { status, shop_id, order_number } = req.query
+    const { page, pageSize, offset } = parsePagination(req)
+
+    // 如果传了 shop_id，需要校验该店铺确实属于当前店主
+    if (shop_id) {
+      const shopCheckSql = 'SELECT shop_id FROM shops WHERE shop_id = ? AND seller_id = ?'
+      const shops = await conMysql(shopCheckSql, [shop_id, sellerId])
+      if (!shops.length) return res.cc(false, '店铺不存在或无权限', 404)
+    }
+
+    let where = 'WHERE s.seller_id = ?'
+    const params = [sellerId]
+
+    if (shop_id) {
+      where += ' AND s.shop_id = ?'
+      params.push(shop_id)
+
+      // 只返回“该订单只包含该店铺商品”的情况，避免详情/售后处理时发现还有其他店铺商品
+      where += ` AND o.id IN (
+        SELECT oi2.order_id
+        FROM order_items oi2
+        JOIN products p2 ON oi2.product_id = p2.id
+        GROUP BY oi2.order_id
+        HAVING COUNT(DISTINCT p2.shop_id) = 1 AND MIN(p2.shop_id) = ?
+      )`
+      params.push(shop_id)
+    }
+
+    if (status) {
+      where += ' AND o.status = ?'
+      params.push(status)
+    }
+
+    if (order_number) {
+      where += ' AND o.order_number LIKE ?'
+      params.push(`%${order_number}%`)
+    }
+
+    const countSql = `
+      SELECT COUNT(DISTINCT o.id) AS total
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      JOIN products p ON oi.product_id = p.id
+      JOIN shops s ON p.shop_id = s.shop_id
+      ${where}
+    `
+    const [{ total }] = await conMysql(countSql, params)
+
+    const listSql = `
+      SELECT DISTINCT
+        o.id,
+        o.order_number,
+        o.user_id AS buyer_user_id,
+        o.total_amount,
+        o.status,
+        o.payment_method,
+        o.payment_time,
+        o.shipped_time,
+        o.delivered_time,
+        o.cancelled_time,
+        o.buyer_refund_request,
+        o.buyer_refund_reason,
+        o.buyer_refund_requested_at,
+        o.created_at,
+        o.updated_at
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      JOIN products p ON oi.product_id = p.id
+      JOIN shops s ON p.shop_id = s.shop_id
+      ${where}
+      ORDER BY o.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+    const rows = await conMysql(listSql, [...params, pageSize, offset])
+
+    res.cc(true, '获取店主订单列表成功', 200, {
+      list: rows,
+      page,
+      pageSize,
+      total
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 获取店主订单详情（只返回店主的商品项；并校验订单归属）
+exports.getSellerOrderDetail = async (req, res, next) => {
+  try {
+    const sellerId = req.user.id
+    const { id } = req.params
+    const shopId = req.query.shop_id || req.query.shopId || null
+
+    if (!id) return res.cc(false, '缺少订单ID', 400)
+
+    if (shopId) {
+      const shopCheckSql = 'SELECT shop_id FROM shops WHERE shop_id = ? AND seller_id = ?'
+      const shops = await conMysql(shopCheckSql, [shopId, sellerId])
+      if (!shops.length) return res.cc(false, '店铺不存在或无权限', 404)
+    }
+
+    // 校验该订单包含的所有 shop_id 都属于当前店主
+    const involvedShopsSql = `
+      SELECT DISTINCT p.shop_id
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      WHERE oi.order_id = ?
+    `
+    const involvedShops = await conMysql(involvedShopsSql, [id])
+    if (!involvedShops.length) return res.cc(false, '订单不存在', 404)
+
+    const involvedShopIds = involvedShops.map(r => r.shop_id)
+    const sellerShops = await conMysql('SELECT shop_id FROM shops WHERE seller_id = ?', [sellerId])
+    const sellerShopIds = sellerShops.map(r => r.shop_id)
+
+    if (!involvedShopIds.every(sid => sellerShopIds.includes(sid))) {
+      return res.cc(false, '该订单不属于你的店铺', 403)
+    }
+
+    // 若传入 shopId，则要求订单只包含该 shop 的商品（避免一个订单多个店铺无法正确处理售后）
+    if (shopId) {
+      if (!involvedShopIds.every(sid => Number(sid) === Number(shopId))) {
+        return res.cc(false, '该订单包含其他店铺商品，无法处理', 403)
+      }
+    }
+
+    const orderSql = `
+      SELECT
+        o.*,
+        a.recipient_name,
+        a.phone,
+        a.province,
+        a.city,
+        a.district,
+        a.detail_address,
+        a.postal_code
+      FROM orders o
+      JOIN addresses a ON o.address_id = a.id
+      WHERE o.id = ?
+    `
+    const orders = await conMysql(orderSql, [id])
+    if (!orders.length) return res.cc(false, '订单不存在', 404)
+
+    const order = orders[0]
+
+    let itemsWhere = 'WHERE oi.order_id = ?'
+    const itemsParams = [id]
+    if (shopId) {
+      itemsWhere += ' AND p.shop_id = ?'
+      itemsParams.push(shopId)
+    }
+
+    const itemsSql = `
+      SELECT
+        oi.*,
+        p.name,
+        p.cover_image
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      ${itemsWhere}
+      ORDER BY oi.id ASC
+    `
+    const items = await conMysql(itemsSql, itemsParams)
+
+    res.cc(true, '获取店主订单详情成功', 200, { order, items })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// 更新店主订单状态（发货/完成/取消/退款）
+exports.updateSellerOrderStatus = async (req, res, next) => {
+  try {
+    const sellerId = req.user.id
+    const { id } = req.params
+    const { status } = req.body
+    const shopId = req.query.shop_id || req.query.shopId || req.body.shop_id || null
+
+    if (!id) return res.cc(false, '缺少订单ID', 400)
+    if (!status) return res.cc(false, '缺少 status', 400)
+
+    // 店主端只开放这些状态
+    const allowed = ['shipped', 'completed', 'cancelled', 'refunded']
+    if (!allowed.includes(status)) return res.cc(false, '无效的订单状态', 400)
+
+    // 校验订单归属 & shop 过滤（同 getSellerOrderDetail）
+    const involvedShopsSql = `
+      SELECT DISTINCT p.shop_id
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      WHERE oi.order_id = ?
+    `
+    const involvedShops = await conMysql(involvedShopsSql, [id])
+    if (!involvedShops.length) return res.cc(false, '订单不存在', 404)
+
+    const involvedShopIds = involvedShops.map(r => r.shop_id)
+    const sellerShops = await conMysql('SELECT shop_id FROM shops WHERE seller_id = ?', [sellerId])
+    const sellerShopIds = sellerShops.map(r => r.shop_id)
+
+    if (!involvedShopIds.every(sid => sellerShopIds.includes(sid))) {
+      return res.cc(false, '该订单不属于你的店铺', 403)
+    }
+
+    if (shopId) {
+      if (!involvedShopIds.every(sid => Number(sid) === Number(shopId))) {
+        return res.cc(false, '该订单包含其他店铺商品，无法处理', 403)
+      }
+    }
+
+    // 校验当前订单状态，避免跳步
+    const currentSql = 'SELECT status FROM orders WHERE id = ?'
+    const currents = await conMysql(currentSql, [id])
+    if (!currents.length) return res.cc(false, '订单不存在', 404)
+    const currentStatus = currents[0].status
+
+    if (status === 'shipped' && currentStatus !== 'paid') {
+      return res.cc(false, `订单状态为"${currentStatus}"，无法发货`, 400)
+    }
+    if (status === 'completed' && currentStatus !== 'shipped') {
+      return res.cc(false, `订单状态为"${currentStatus}"，无法完成`, 400)
+    }
+    if (status === 'cancelled' && !['pending', 'paid'].includes(currentStatus)) {
+      return res.cc(false, `订单状态为"${currentStatus}"，无法取消`, 400)
+    }
+    if (status === 'refunded' && !['paid', 'shipped'].includes(currentStatus)) {
+      return res.cc(false, `订单状态为"${currentStatus}"，无法退款`, 400)
+    }
+
+    // 取消/退款：恢复库存
+    if (['cancelled', 'refunded'].includes(status)) {
+      const itemsSql = 'SELECT product_id, quantity FROM order_items WHERE order_id = ?'
+      const items = await conMysql(itemsSql, [id])
+      for (const item of items) {
+        await conMysql(
+          'UPDATE products SET stock = stock + ? WHERE id = ?',
+          [item.quantity, item.product_id]
+        )
+      }
+    }
+
+    const setParts = ['status = ?']
+    const params = [status]
+
+    if (status === 'shipped') setParts.push('shipped_time = CURRENT_TIMESTAMP')
+    if (status === 'completed') setParts.push('delivered_time = CURRENT_TIMESTAMP')
+    if (status === 'cancelled') setParts.push('cancelled_time = CURRENT_TIMESTAMP')
+    if (status === 'refunded') {
+      setParts.push('buyer_refund_request = \'none\'')
+      setParts.push('buyer_refund_reason = NULL')
+      setParts.push('buyer_refund_requested_at = NULL')
+    }
+
+    setParts.push('updated_at = CURRENT_TIMESTAMP')
+
+    const sql = `UPDATE orders SET ${setParts.join(', ')} WHERE id = ?`
+    const result = await conMysql(sql, [...params, id])
+
+    if (result.affectedRows === 0) return res.cc(false, '订单不存在', 404)
+
+    res.cc(true, '更新订单状态成功', 200)
   } catch (err) {
     next(err)
   }

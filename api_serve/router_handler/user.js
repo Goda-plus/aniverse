@@ -61,6 +61,11 @@ exports.login = async (req, res, next) => {
 
     const user = result[0]
 
+    // 用户表 status=banned 时禁止登录（与库中 online/outline/banned 枚举及后台封禁一致）
+    if (user.status === 'banned') {
+      return res.cc(false, '账号已被封禁', 403)
+    }
+
     // 封禁校验（若迁移未执行，user_bans 表不存在会被忽略）
     try {
       const banRows = await conMysql(

@@ -12,7 +12,9 @@
 
     <!-- 商铺列表 -->
     <div v-if="loading" class="shops-loading">
-      <el-icon class="is-loading"><Loading /></el-icon>
+      <el-icon class="is-loading">
+        <Loading />
+      </el-icon>
       <span>加载中...</span>
     </div>
     <div v-else-if="shops.length > 0" class="shops-list">
@@ -92,6 +94,13 @@
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
+            <el-button
+              link
+              type="primary"
+              @click="goSellerOrders(shop); $event.stopPropagation()"
+            >
+              订单管理
+            </el-button>
           </div>
         </div>
       </div>
@@ -154,6 +163,10 @@
 
   const goShopDetail = (shop) => {
     router.push({ name: 'shop-detail', params: { id: shop.shop_id } })
+  }
+
+  const goSellerOrders = (shop) => {
+    router.push({ name: 'seller-orders', query: { shopId: shop.shop_id } })
   }
 
   const goCreateShop = () => {

@@ -51,7 +51,7 @@
                 <el-button type="primary" icon="Star">
                   收藏店铺
                 </el-button>
-                <el-button icon="ChatDotRound">
+                <el-button icon="ChatDotRound" @click="startCustomerServiceChat">
                   联系卖家
                 </el-button>
               </div>
@@ -63,6 +63,9 @@
                 </el-button>
                 <el-button @click="showProductManage">
                   商品管理
+                </el-button>
+                <el-button type="success" @click="goSellerOrders">
+                  订单管理
                 </el-button>
               </div>
             </div>
@@ -173,17 +176,13 @@
 
             <!-- 商品网格 -->
             <div class="products-section">
-              <div v-if="products.length === 0 && !loading" class="empty-state">
-                <el-empty description="暂无商品" />
-              </div>
-              <div v-else class="products-grid">
-                <ProductCard
-                  v-for="product in products"
-                  :key="product.product_id"
-                  :product="product"
-                  :action="'cart'"
-                />
-              </div>
+              <ShopProductsList
+                :products="products"
+                :is-owner="isOwner"
+                :loading="loading"
+                @refresh="loadProducts"
+                @edit="openEditProduct"
+              />
 
               <!-- 分页 -->
               <div v-if="total > pageSize" class="pagination-container">
@@ -209,6 +208,11 @@
             <div class="contact-section">
               <h3>联系我们</h3>
               <p>如有问题请通过以下方式联系：</p>
+              <div class="contact-chat-action">
+                <el-button type="primary" :icon="ChatDotRound" @click="startCustomerServiceChat">
+                  在线联系客服
+                </el-button>
+              </div>
               <div v-if="shop?.contact_info" class="contact-info">
                 <div v-for="(value, key) in shop.contact_info" :key="key" class="contact-item">
                   <span class="contact-label">{{ getContactLabel(key) }}：</span>
@@ -280,11 +284,12 @@
   import { ElMessage } from 'element-plus'
   import { Search, Star, ChatDotRound, Plus } from '@element-plus/icons-vue'
   import MainContentLayout from '@/components/MainContentLayout.vue'
-  import ProductCard from '@/components/ProductCard.vue'
+  import ShopProductsList from '@/components/ShopProductsList.vue'
   import ShopSettingsForm from '@/components/ShopSettingsForm.vue'
   import ShopProductManage from '@/components/ShopProductManage.vue'
   import ProductForm from '@/components/ProductForm.vue'
   import { getShopDetail, getShopProducts, getShopFeaturedProducts } from '@/axios/shop'
+  import { createRoom } from '@/axios/chat'
   import { useUserStore } from '@/stores/user'
 
   const route = useRoute()
@@ -343,7 +348,7 @@
       const params = {
         page: currentPage.value,
         pageSize: pageSize.value,
-        id:shopId.value,
+        status: isOwner.value ? '' : 'active',
         ...productFilters.value
       }
 
@@ -361,6 +366,13 @@
       loading.value = false
     }
   }
+
+  // 避免店主页面在店铺信息尚未加载完成前先请求导致筛选错误
+  watch(isOwner, (next) => {
+    if (next && activeTab.value === 'products') {
+      loadProducts()
+    }
+  })
 
   const getLevelText = (level) => {
     if (!level) return '普通店铺'
@@ -402,6 +414,13 @@
 
   const showProductManage = () => {
     showProductDialog.value = true
+  }
+
+  const goSellerOrders = () => {
+    router.push({
+      name: 'seller-orders',
+      query: { shopId: String(shopId.value) }
+    })
   }
 
   const openAddProduct = () => {
@@ -455,6 +474,44 @@
       qq: 'QQ'
     }
     return labelMap[key] || key
+  }
+
+  const startCustomerServiceChat = async () => {
+    if (!userStore.isLoggedIn) {
+      ElMessage.warning('请先登录后联系客服')
+      router.push({ path: '/login', query: { redirect: route.fullPath } })
+      return
+    }
+
+    if (!shop.value?.seller_id) {
+      ElMessage.warning('暂无可联系的卖家')
+      return
+    }
+
+    if (isOwner.value) {
+      ElMessage.info('您当前是店主账号，无需联系客服')
+      return
+    }
+
+    try {
+      const res = await createRoom({
+        memberIds: [shop.value.seller_id],
+        scene: 'shop_service',
+        shopId: Number(shopId.value),
+        shopName: shop.value.shop_name
+      })
+
+      if (!res.success || !res.data?.roomId) {
+        ElMessage.error(res.message || '创建客服会话失败')
+        return
+      }
+
+      window.dispatchEvent(new CustomEvent('open-shop-service-chat', {
+        detail: { roomId: Number(res.data.roomId) }
+      }))
+    } catch (error) {
+      ElMessage.error(error.response?.data?.message || '创建客服会话失败')
+    }
   }
 
   // 监听路由变化
@@ -790,6 +847,10 @@
           color: var(--text-primary);
         }
       }
+    }
+
+    .contact-chat-action {
+      margin-bottom: 16px;
     }
   }
 }

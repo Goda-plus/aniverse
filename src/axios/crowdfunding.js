@@ -23,6 +23,18 @@ export const getMyCrowdfundingProjects = (params) => request.get('/api/crowdfund
 export const getCrowdfundingProjectBackers = (projectId, params) =>
   request.get(`/api/crowdfunding/projects/${projectId}/backers`, { params })
 
+// 发起人：支持订单列表（回报履约）
+export const listCrowdfundingCreatorBackings = (params) =>
+  request.get('/api/crowdfunding/creator/backings', { params })
+
+// 发起人：支持订单详情
+export const getCrowdfundingCreatorBackingDetail = (id) =>
+  request.get(`/api/crowdfunding/creator/backings/${id}`)
+
+// 发起人：更新回报发货状态
+export const updateCrowdfundingCreatorBackingShipping = (id, data) =>
+  request.put(`/api/crowdfunding/creator/backings/${id}/shipping-status`, data)
+
 // 获取发起人统计（公开）
 export const getCrowdfundingCreatorStats = (creatorId) =>
   request.get(`/api/crowdfunding/creators/${creatorId}/stats`)
@@ -38,6 +50,10 @@ export const backCrowdfundingProject = (data) => request.post('/api/crowdfunding
 
 // 获取我的支持记录（需登录）
 export const getMyCrowdfundingBackings = (params) => request.get('/api/crowdfunding/my-backings', { params })
+
+// 支持者：按物流状态发起退款（未发货）或退款退货（已发货/已送达）
+export const requestCrowdfundingBuyerRefund = (id, data) =>
+  request.post(`/api/crowdfunding/backings/${id}/buyer-refund-request`, data || {})
 
 // ==================== 项目更新 ====================
 // 创建项目更新（需登录，创建者）

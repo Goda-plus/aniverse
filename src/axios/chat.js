@@ -4,7 +4,7 @@ import request from './api_index'
 export const getChatHistory = (params) => request.get('/api/chat/history', { params })
 
 // 获取房间列表
-export const getRoomList = () => request.get('/api/chatRoom/list')
+export const getRoomList = (params) => request.get('/api/chatRoom/list', { params })
 
 // 发送聊天消息
 export const sendChatMsg = (data) => request.post('/api/chat/send', data)

@@ -62,7 +62,7 @@
                     class="item-row"
                   >
                     <el-image
-                      :src="item.cover_image || '/placeholder.png'"
+                      :src="firstProductImageUrl(item.cover_image)"
                       :alt="item.name"
                       class="item-image"
                       fit="cover"
@@ -76,10 +76,27 @@
                       </div>
                     </div>
                     <div class="item-quantity">
-                      x{{ item.quantity }}
+                      <el-input-number
+                        v-model="item.quantity"
+                        :min="1"
+                        :max="item.stock"
+                        :disabled="item.stock === 0 || item.updating"
+                        size="small"
+                        @change="handleQuantityChange(item)"
+                      />
                     </div>
                     <div class="item-total">
                       ￥{{ (item.price * item.quantity).toFixed(2) }}
+                    </div>
+                    <div class="item-actions">
+                      <el-button
+                        link
+                        type="danger"
+                        :loading="item.removing"
+                        @click="handleRemoveItem(item)"
+                      >
+                        删除
+                      </el-button>
                     </div>
                   </div>
                 </div>
@@ -149,7 +166,8 @@
   import { ElMessage, ElMessageBox } from 'element-plus'
   import MainContentLayout from '@/components/MainContentLayout.vue'
   import AddressManage from '@/components/AddressManage.vue'
-  import { getCart, listAddresses, createOrder } from '@/axios/mall'
+  import { getCart, listAddresses, createOrder, updateCartItem, removeCartItem } from '@/axios/mall'
+  import { firstProductImageUrl } from '@/utils/productImages'
 
   const router = useRouter()
 
@@ -177,7 +195,11 @@
         // 只显示选中的商品
         cartItems.value = (response.data || []).filter(item => 
           item.selected === 1 || item.selected === true
-        )
+        ).map(item => ({
+          ...item,
+          updating: false,
+          removing: false
+        }))
         if (cartItems.value.length === 0) {
           ElMessage.warning('请先在购物车中选择要结算的商品')
           router.push('/mall/cart')
@@ -272,6 +294,50 @@
       if (error !== 'cancel') {
         ElMessage.error(error.response?.data?.message || '创建订单失败')
       }
+    }
+  }
+
+  // 修改结算商品数量
+  const handleQuantityChange = async (item) => {
+    item.updating = true
+    try {
+      const prevQuantity = item.quantity
+      await updateCartItem({
+        product_id: item.product_id,
+        quantity: item.quantity
+      })
+      // 防止接口返回后本地值被外部改写时不一致
+      item.quantity = prevQuantity
+    } catch (error) {
+      ElMessage.error(error.response?.data?.message || '修改数量失败')
+      await fetchCart()
+    } finally {
+      item.updating = false
+    }
+  }
+
+  // 从结算页删除商品
+  const handleRemoveItem = async (item) => {
+    try {
+      await ElMessageBox.confirm(`确定删除商品"${item.name}"吗？`, '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+      item.removing = true
+      await removeCartItem({ product_id: item.product_id })
+      cartItems.value = cartItems.value.filter(cartItem => cartItem.product_id !== item.product_id)
+      ElMessage.success('商品已删除')
+      if (cartItems.value.length === 0) {
+        ElMessage.warning('已无可结算商品，返回购物车')
+        router.push('/mall/cart')
+      }
+    } catch (error) {
+      if (error !== 'cancel') {
+        ElMessage.error(error.response?.data?.message || '删除失败')
+      }
+    } finally {
+      item.removing = false
     }
   }
 
@@ -380,7 +446,7 @@
 
 .item-row {
   display: grid;
-  grid-template-columns: 80px 1fr auto auto;
+  grid-template-columns: 80px 1fr auto auto auto;
   gap: 16px;
   align-items: center;
   color: var(--text-primary);
@@ -415,6 +481,11 @@
 .item-quantity {
   font-size: 16px;
   color: var(--el-text-color-regular);
+}
+
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .item-total {
@@ -478,11 +549,12 @@
 
   .item-row {
     grid-template-columns: 60px 1fr;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto auto auto;
   }
 
   .item-quantity,
-  .item-total {
+  .item-total,
+  .item-actions {
     grid-column: 2;
     justify-self: flex-end;
   }

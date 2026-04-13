@@ -10,6 +10,7 @@ const adminContentHandler = require('../router_handler/adminContent')
 const adminMallHandler = require('../router_handler/adminMall')
 const adminCrowdfundingHandler = require('../router_handler/adminCrowdfunding')
 const adminStatsHandler = require('../router_handler/adminStats')
+const shopHandler = require('../router_handler/shop')
 
 // ============================================
 // 认证相关接口（不需要权限校验，但登录需要JWT）
@@ -75,11 +76,12 @@ router.put('/roles/:id', checkPermission('role.manage'), adminRoleHandler.update
 router.delete('/roles/:id', checkPermission('role.manage'), adminRoleHandler.deleteRole)
 
 // ============================================
-// 系统设置 & 操作日志（需要 statistics.read 或 admin.manage）
+// 系统设置（需 admin.manage）；操作日志：登录即可，数据范围在 handler 内按权限收缩
 // ============================================
 router.get('/settings', checkPermission('admin.manage'), adminSystemHandler.listSettings)
 router.put('/settings', checkPermission('admin.manage'), adminSystemHandler.upsertSetting)
-router.get('/logs', checkPermission('statistics.read'), adminSystemHandler.listAdminLogs)
+router.post('/maintenance/run', checkPermission('admin.manage'), adminSystemHandler.runMaintenanceJob)
+router.get('/logs', adminSystemHandler.listAdminLogs)
 
 // ============================================
 // 用户管理（user.read / user.ban）
@@ -95,6 +97,7 @@ router.put('/users/:id/ban', checkPermission('user.ban'), adminUserHandler.banOr
 router.get('/moderation/queue', checkPermission('post.review'), moderationHandler.getModerationQueue)
 router.get('/moderation/queue/detail', checkPermission('post.review'), moderationHandler.getModerationQueueDetail)
 router.post('/moderation/review', checkPermission('post.review'), moderationHandler.reviewContent)
+router.post('/moderation/queue/status', checkPermission('post.review'), moderationHandler.setModerationQueueStatus)
 router.post('/moderation/assign', checkPermission('post.review'), moderationHandler.assignModerationTask)
 router.get('/moderation/stats', checkPermission('statistics.read'), moderationHandler.getModerationStats)
 router.get('/moderation/posts', checkPermission('post.review'), moderationHandler.getAllPostsForModeration)
@@ -121,16 +124,23 @@ router.put('/feedback/:id/handle', checkPermission('report.handle'), adminConten
 // ============================================
 // 电商运营管理（商品/订单/评价）
 // ============================================
+router.get('/mall/shops', checkPermission('product.read'), shopHandler.listShops)
+router.get('/mall/shops/:id', checkPermission('product.read'), adminMallHandler.getShopDetail)
+router.put('/mall/shops/:id/status', checkPermission('product.manage'), adminMallHandler.updateShopStatus)
 router.get('/mall/products', checkPermission('product.read'), adminMallHandler.listProducts)
+router.get('/mall/products/:id', checkPermission('product.read'), adminMallHandler.getProductDetail)
 router.put('/mall/products/:id', checkPermission('product.manage'), adminMallHandler.updateProduct)
 router.get('/mall/orders', checkPermission('order.read'), adminMallHandler.listOrders)
+router.get('/mall/orders/:id', checkPermission('order.read'), adminMallHandler.getOrderDetail)
 router.put('/mall/orders/:id/status', checkPermission('order.ship'), adminMallHandler.updateOrderStatus)
 router.get('/mall/reviews', checkPermission('product.read'), adminMallHandler.listReviews)
 router.put('/mall/reviews/:id/approve', checkPermission('product.manage'), adminMallHandler.approveReview)
 
 // 众筹审核（复用 product.manage 权限）
 router.get('/crowdfunding/projects', checkPermission('product.manage'), adminCrowdfundingHandler.listProjects)
+router.get('/crowdfunding/projects/:id', checkPermission('product.manage'), adminCrowdfundingHandler.getProjectDetail)
 router.put('/crowdfunding/projects/:id/review', checkPermission('product.manage'), adminCrowdfundingHandler.reviewProject)
+router.put('/crowdfunding/projects/:id/moderate', checkPermission('product.manage'), adminCrowdfundingHandler.moderateProject)
 
 // ============================================
 // 数据统计与分析（statistics.read）

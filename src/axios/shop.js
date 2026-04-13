@@ -38,3 +38,15 @@ export const addFeaturedProduct = (shopId, data) => request.post(`/api/shop/${sh
 
 // 移除橱窗推荐商品
 export const removeFeaturedProduct = (shopId, productId) => request.delete(`/api/shop/${shopId}/featured/${productId}`)
+
+// ====================
+// 店主订单管理（独立后台）
+// ====================
+// 获取店主订单列表
+export const listSellerOrders = (params) => request.get('/api/shop/seller/orders', { params })
+
+// 获取店主订单详情
+export const getSellerOrderDetail = (id, params) => request.get(`/api/shop/seller/orders/${id}`, { params })
+
+// 更新店主订单状态（发货/完成/取消/退款等）
+export const updateSellerOrderStatus = (id, data, params) => request.put(`/api/shop/seller/orders/${id}/status`, data, { params })

@@ -79,6 +79,73 @@ exports.listProjects = async (req, res) => {
   }
 }
 
+// 项目详情（管理端）
+exports.getProjectDetail = async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.cc(false, '缺少项目ID', 400)
+
+    const projectSql = `
+      SELECT
+        p.*,
+        u.username AS creator_name,
+        u.avatar_url AS creator_avatar,
+        ROUND((p.current_amount / NULLIF(p.goal_amount, 0)) * 100, 2) AS progress_percentage,
+        DATEDIFF(p.end_date, NOW()) AS days_remaining
+      FROM crowdfunding_projects p
+      LEFT JOIN users u ON u.id = p.creator_id
+      WHERE p.id = ?
+      LIMIT 1
+    `
+    const projects = await db.conMysql(projectSql, [id])
+    if (!projects.length) return res.cc(false, '项目不存在', 404)
+
+    const imagesSql = `
+      SELECT id, image_url, sort_order
+      FROM crowdfunding_project_images
+      WHERE project_id = ?
+      ORDER BY sort_order ASC, id ASC
+    `
+    const tiersSql = `
+      SELECT
+        id,
+        title,
+        description,
+        amount,
+        max_backers,
+        current_backers,
+        reward_description,
+        estimated_delivery,
+        shipping_included,
+        sort_order
+      FROM crowdfunding_tiers
+      WHERE project_id = ?
+      ORDER BY sort_order ASC, amount ASC
+    `
+    const updatesSql = `
+      SELECT id, title, content, is_public, created_at, updated_at
+      FROM crowdfunding_updates
+      WHERE project_id = ?
+      ORDER BY created_at DESC
+    `
+
+    const [images, tiers, updates] = await Promise.all([
+      db.conMysql(imagesSql, [id]),
+      db.conMysql(tiersSql, [id]),
+      db.conMysql(updatesSql, [id])
+    ])
+
+    res.cc(true, '获取成功', 200, {
+      project: projects[0],
+      images,
+      tiers,
+      updates
+    })
+  } catch (err) {
+    res.cc(false, '获取失败', 500)
+  }
+}
+
 // 审核项目（approve/reject）
 exports.reviewProject = async (req, res) => {
   try {
@@ -90,7 +157,15 @@ exports.reviewProject = async (req, res) => {
     const projects = await db.conMysql('SELECT id, title, status FROM crowdfunding_projects WHERE id = ? LIMIT 1', [id])
     if (!projects.length) return res.cc(false, '项目不存在', 404)
 
-    const newStatus = action === 'approve' ? 'active' : 'rejected'
+    const cur = projects[0].status
+    if (action === 'approve' && !['pending_review', 'draft'].includes(cur)) {
+      return res.cc(false, '仅待审核/草稿状态可执行「通过」', 400)
+    }
+    if (action === 'reject' && ['cancelled', 'rejected'].includes(cur)) {
+      return res.cc(false, '项目已取消/下架', 400)
+    }
+
+    const newStatus = action === 'approve' ? 'active' : 'cancelled'
     await db.conMysql(
       'UPDATE crowdfunding_projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [newStatus, id]
@@ -100,6 +175,52 @@ exports.reviewProject = async (req, res) => {
     res.cc(true, '审核成功', 200)
   } catch (err) {
     res.cc(false, '审核失败', 500)
+  }
+}
+
+// 监管：暂停 / 取消（与待审核「通过/驳回」分流）
+exports.moderateProject = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { action, reason } = req.body
+    if (!id) return res.cc(false, '缺少项目ID', 400)
+    if (!['pause', 'cancel'].includes(action)) {
+      return res.cc(false, 'action 必须为 pause 或 cancel', 400)
+    }
+
+    const projects = await db.conMysql(
+      'SELECT id, title, status FROM crowdfunding_projects WHERE id = ? LIMIT 1',
+      [id]
+    )
+    if (!projects.length) return res.cc(false, '项目不存在', 404)
+
+    const cur = projects[0].status
+    let newStatus
+
+    if (action === 'pause') {
+      if (!['active', 'successful'].includes(cur)) {
+        return res.cc(false, '仅众筹中或已成功的项目可暂停', 400)
+      }
+      newStatus = 'paused'
+    } else {
+      if (['cancelled', 'rejected', 'failed', 'draft', 'pending_review'].includes(cur)) {
+        return res.cc(false, '当前状态不可执行取消', 400)
+      }
+      const r = reason != null ? String(reason).trim() : ''
+      if (!r) return res.cc(false, '请填写取消原因', 400)
+      newStatus = 'cancelled'
+    }
+
+    await db.conMysql(
+      'UPDATE crowdfunding_projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [newStatus, id]
+    )
+
+    const reasonSuffix = action === 'cancel' && reason ? `，原因：${reason}` : ''
+    await recordAdminLog(req, 'moderate_crowdfunding', `众筹监管 ${id} ${action} -> ${newStatus}${reasonSuffix}`, 'crowdfunding_project', id)
+    res.cc(true, '操作成功', 200)
+  } catch (err) {
+    res.cc(false, '操作失败', 500)
   }
 }
 
