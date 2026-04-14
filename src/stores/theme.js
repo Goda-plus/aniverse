@@ -75,6 +75,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   // Database operations
   async function loadThemeFromDB () {
+    // 未登录用户没有服务端主题配置，直接跳过
     if (!userStore.isLoggedIn) return
 
     try {
@@ -82,7 +83,7 @@ export const useThemeStore = defineStore('theme', () => {
       const response = await getUserTheme()
       if (response && response.code === 200) {
         const themeData = response.data
-        // 应用数据库中的设置
+        // 应用数据库中的设置到 store（本地 state 作为单一数据源）
         mode.value = themeData.preset_theme || 'dark'
         blurAmount.value = themeData.setting_blur ? parseInt(themeData.setting_blur) : 15
         opacityAmount.value = themeData.setting_opacity ? parseInt(themeData.setting_opacity) : 100
@@ -100,7 +101,7 @@ export const useThemeStore = defineStore('theme', () => {
           ...(themeData.card_border ? { card_border: themeData.card_border } : {})
         }
 
-        // 更新本地存储作为备份
+        // 更新本地存储作为备份：接口失败或离线时仍可回退到最近一次有效设置
         localStorage.setItem('theme-mode', mode.value)
         localStorage.setItem('setting-blur', blurAmount.value.toString())
         localStorage.setItem('setting-opacity', opacityAmount.value.toString())
@@ -127,6 +128,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function saveThemeToDB () {
+    // 游客模式只保存在 localStorage
     if (!userStore.isLoggedIn) return
 
     try {
@@ -147,6 +149,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function saveColorSettingsToDB () {
+    // 仅登录用户可持久化到数据库
     if (!userStore.isLoggedIn) return
 
     try {
@@ -164,7 +167,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   // actions
   async function initTheme () {
-    // 首先同步应用本地存储的主题设置，确保样式立即生效
+    // 先同步应用本地设置，避免首屏等待接口造成“闪烁/白屏样式跳变”
     updateTheme()
     applyColorSettings()
 
@@ -172,7 +175,7 @@ export const useThemeStore = defineStore('theme', () => {
     if (userStore.isLoggedIn) {
       try {
         await loadThemeFromDB()
-        // 数据库加载完成后，重新应用主题（如果数据库设置与本地不同）
+        // 数据库加载后统一再应用一次，覆盖本地默认值
         updateTheme()
         applyColorSettings()
       } catch (error) {
@@ -181,7 +184,7 @@ export const useThemeStore = defineStore('theme', () => {
       }
     }
 
-    // 监听系统主题变化（如果模式是 auto）
+    // auto 模式下监听系统主题变化；当前实现仍以“时间段”决定浅/深色
     if (mode.value === 'auto') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
       mediaQuery.addEventListener('change', () => {
@@ -219,17 +222,18 @@ export const useThemeStore = defineStore('theme', () => {
       root.classList.add('theme-customer')
     }
 
-    // 每次主题切换时同步处理颜色变量，避免自定义模式污染预设主题
+    // 每次切换主题都处理一次颜色变量，避免 customer 模式变量残留
     applyColorSettings()
   }
 
   async function setMode (newMode, saveToDB = true) {
+    // 只接受约定模式，避免非法值污染状态
     if (['light', 'dark', 'auto', 'customer'].includes(newMode)) {
       mode.value = newMode
       localStorage.setItem('theme-mode', newMode)
       updateTheme()
 
-      // 如果用户已登录，且需要保存到数据库
+      // 登录且允许写库时，同步服务端主题
       if (userStore.isLoggedIn && saveToDB) {
         // 对于预置主题(light, dark, auto)，使用applyPresetTheme API
         if (['light', 'dark', 'auto'].includes(newMode)) {
@@ -237,7 +241,7 @@ export const useThemeStore = defineStore('theme', () => {
             const response = await applyPresetTheme({ preset: newMode })
             if (response && response.code === 200) {
               const themeData = response.data
-              // 应用返回的完整主题配置
+              // 以服务端返回配置为准，保证预设主题与后端定义一致
               blurAmount.value = themeData.setting_blur ? parseInt(themeData.setting_blur) : 15
               opacityAmount.value = themeData.setting_opacity ? parseInt(themeData.setting_opacity) : 100
               backgroundImage.value = themeData.background_pattern || ''
@@ -253,7 +257,7 @@ export const useThemeStore = defineStore('theme', () => {
                 card_border: themeData.card_border
               }
 
-              // 更新本地存储
+              // 更新本地缓存，避免刷新后又回到旧值
               localStorage.setItem('setting-blur', blurAmount.value.toString())
               localStorage.setItem('setting-opacity', opacityAmount.value.toString())
               localStorage.setItem('color-settings', JSON.stringify(colorSettings.value))
@@ -290,6 +294,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function setBlurAmount (amount, saveToDB = true) {
+    // 该值用于 CSS 变量 --setting-blur（单位 px 在 applySettingControls 中补齐）
     blurAmount.value = amount
     localStorage.setItem('setting-blur', amount.toString())
     applySettingControls()
@@ -301,6 +306,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function setOpacityAmount (amount, saveToDB = true) {
+    // 保持 0-100 的百分比语义，具体表现由 CSS 使用场景决定
     opacityAmount.value = amount
     localStorage.setItem('setting-opacity', amount.toString())
     applySettingControls()
@@ -316,7 +322,7 @@ export const useThemeStore = defineStore('theme', () => {
     root.style.setProperty('--setting-blur', `${blurAmount.value}px`)
     root.style.setProperty('--setting-opacity', opacityAmount.value.toString())
 
-    // 圆角预设映射
+    // 预设 -> 实际 CSS 值映射，便于控制面板只操作“语义选项”
     const borderRadiusMap = {
       none: '0px',
       small: '4px',
@@ -337,6 +343,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function setBorderRadiusPreset (preset) {
+    // 非法值直接忽略，避免写入错误配置
     if (!['none', 'small', 'medium', 'large'].includes(preset)) return
     borderRadiusPreset.value = preset
     localStorage.setItem('border-radius-preset', preset)
@@ -344,6 +351,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function setFontSizePreset (preset) {
+    // 非法值直接忽略，避免写入错误配置
     if (!['small', 'medium', 'large'].includes(preset)) return
     fontSizePreset.value = preset
     localStorage.setItem('font-size-preset', preset)
@@ -351,6 +359,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function setBackgroundImage (imageUrl, saveToDB = true) {
+    // 统一将空值归一化为 ''，便于判断和移除本地缓存
     backgroundImage.value = imageUrl || ''
     if (imageUrl) {
       localStorage.setItem('background-image', imageUrl)
@@ -378,12 +387,12 @@ export const useThemeStore = defineStore('theme', () => {
     const root = document.documentElement
 
     if (currentTheme.value === 'customer') {
-      // 仅在自定义模式下应用颜色变量
+      // 仅在 customer 模式下注入颜色变量，避免覆盖预设主题的 class 样式
       Object.entries(colorSettings.value).forEach(([key, value]) => {
         root.style.setProperty(`--${key.replace(/_/g, '-')}`, value)
       })
     } else {
-      // 退出自定义模式时清除自定义颜色变量，让 .theme-light / .theme-dark 的样式生效
+      // 退出 customer 时清理变量，让 .theme-light/.theme-dark 接管渲染
       Object.keys(colorSettings.value).forEach((key) => {
         root.style.removeProperty(`--${key.replace(/_/g, '-')}`)
       })
@@ -391,6 +400,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function setColorSetting (key, value) {
+    // 防御：只允许修改已声明字段，防止写入未知 key
     if (!(key in colorSettings.value)) return
     colorSettings.value = { ...colorSettings.value, [key]: value || defaultColorSettings[key] }
     localStorage.setItem('color-settings', JSON.stringify(colorSettings.value))
@@ -403,6 +413,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   async function resetSettings () {
+    // 重置本地状态与缓存到“默认暗色方案”
     blurAmount.value = 15
     opacityAmount.value = 100
     backgroundImage.value = ''
@@ -419,7 +430,7 @@ export const useThemeStore = defineStore('theme', () => {
     applyBackgroundImage()
     applyColorSettings()
 
-    // 如果用户已登录，重置数据库设置
+    // 登录用户同时重置服务端配置，确保多端一致
     if (userStore.isLoggedIn) {
       try {
         await resetUserTheme()
@@ -430,6 +441,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function initSettings () {
+    // 仅做 DOM 应用，不发请求、不改状态
     applySettingControls()
     applyBackgroundImage()
     applyColorSettings()
@@ -437,6 +449,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   // 处理用户登录状态变化
   async function onUserLogin () {
+    // 登录后以服务端为准覆盖本地，并立即刷新 DOM 变量/类名
     await loadThemeFromDB()
     // 登录后从数据库恢复到最新设置后，立即重新应用到 DOM
     updateTheme()
@@ -446,8 +459,7 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function onUserLogout () {
-    // 用户登出时，保持本地设置不变，不清空
-    // 这样下次登录时仍然可以使用本地设置作为默认值
+    // 登出不清理本地主题，保证游客态也能延续当前视觉体验
   }
 
   // 监听用户登录状态变化

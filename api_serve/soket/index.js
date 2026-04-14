@@ -78,6 +78,14 @@ async function canSendInFriendDirectRoom (roomId, userId) {
   return { ok: true }
 }
 
+async function getRoomMemberIds (roomId) {
+  const rows = await conMysql(
+    'SELECT user_id FROM chat_room_members WHERE room_id = ?',
+    [roomId]
+  )
+  return rows.map(row => Number(row.user_id)).filter(id => Number.isFinite(id))
+}
+
 let io = null
 
 module.exports = function initSocket (server) {
@@ -190,6 +198,20 @@ module.exports = function initSocket (server) {
           messageType: messageType || 'text',
           time: new Date()
         })
+
+        // 给非发送者推送“新消息通知”，用于未进入当前房间时的实时提醒
+        const memberIds = await getRoomMemberIds(msg.room_id)
+        memberIds
+          .filter(memberId => Number(memberId) !== Number(msg.user_id))
+          .forEach(memberId => {
+            sendToUser(io, memberId, 'newMessageNotification', {
+              roomId: msg.room_id,
+              userId: msg.user_id,
+              fromUser: msg.username,
+              content: msg.content_text || msg.content,
+              time: new Date()
+            })
+          })
       } catch (error) {
         console.error('消息存储失败:', error)
       }

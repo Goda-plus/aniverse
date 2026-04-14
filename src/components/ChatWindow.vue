@@ -827,6 +827,14 @@
     return div.innerText || div.textContent || ''
   }
 
+  // 检查HTML中是否包含可发送的媒体内容（仅图片也允许发送）
+  function hasMediaContent (html) {
+    if (!html) return false
+    const div = document.createElement('div')
+    div.innerHTML = html
+    return Boolean(div.querySelector('img, video, audio, iframe, embed, object'))
+  }
+
   // 发送消息
   async function sendMessage (content) {
     if (!content || !content.trim() || !activeRoomId.value || sendingMessage.value) return
@@ -835,8 +843,10 @@
     // 提取纯文本内容
     const contentText = extractPlainText(messageContent).trim()
 
-    // 如果纯文本为空，则不发送
-    if (!contentText) return
+    // 允许仅发送媒体内容（例如只有图片）
+    const containsMedia = hasMediaContent(messageContent)
+    if (!contentText && !containsMedia) return
+    const previewText = contentText || '[图片]'
 
     const tempId = Date.now()
     
@@ -846,7 +856,7 @@
       user_id: currentUserId.value,
       username: userStore.username,
       content: messageContent,
-      content_text: contentText,
+      content_text: previewText,
       messageType: 'text',
       created_at: new Date().toISOString(),
       status: 'sending' // 添加发送状态
@@ -859,10 +869,10 @@
         socket.value.emit('chatMessage', {
           roomId: activeRoomId.value.toString(),
           content: messageContent,
-          content_text: contentText
+          content_text: previewText
         })
         // 手动更新房间的最后消息（因为服务器可能不会广播给自己）
-        updateRoomLastMessage(activeRoomId.value, contentText, userStore.username)
+        updateRoomLastMessage(activeRoomId.value, previewText, userStore.username)
         // 消息会通过 socket 监听器更新（替换临时消息）
       } else {
         ElMessage.warning('连接已断开，请刷新页面')
@@ -1087,7 +1097,7 @@
 
     if (messageType === 'image') {
       // 图片消息：content是HTML格式，包含img标签
-      baseMessage.content = `<img src="${url}" alt="图片" style="max-width: 240px; border-radius: 12px;">`
+      baseMessage.content = `<img src="${url}" alt="图片" style="display:block; width:auto; height:auto; max-width:240px; max-height:260px; border-radius:12px; object-fit:contain;">`
       baseMessage.imageUrl = url // 保留imageUrl以便其他地方使用
     } else if (messageType === 'video') {
       // 视频消息：content是HTML格式，包含video标签

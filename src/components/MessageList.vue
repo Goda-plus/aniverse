@@ -1095,6 +1095,17 @@
   margin-right: 12px;
 }
 
+/* 约束 v-html 注入的图片尺寸，避免超大图撑爆气泡 */
+.message-content :deep(img) {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 240px;
+  max-height: 260px;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
 /* 消息气泡尾巴 */
 .message-content::before {
   content: '';
@@ -1407,6 +1418,11 @@
   .message-content {
     font-size: 13px;
     padding: 6px 10px;
+  }
+
+  .message-content :deep(img) {
+    max-width: 180px;
+    max-height: 180px;
   }
 
   .message-time {
