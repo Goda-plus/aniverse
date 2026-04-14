@@ -147,7 +147,7 @@ module.exports = function initSocket (server) {
       // 如果没有提供 content_text，从 content 中提取纯文本（处理 HTML）
       let plainText = content_text
       if (!plainText && content) {
-        // 简单的 HTML 标签移除（如果后端需要处理）
+        // 简单的 HTML 标签移除
         plainText = content.replace(/<[^>]*>/g, '').trim()
       }
       // 如果仍然为空，使用 content 作为后备

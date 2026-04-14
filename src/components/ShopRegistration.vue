@@ -186,7 +186,7 @@
       <div class="agreement-content">
         <h3>一、入驻条件</h3>
         <p>1. 您必须是已注册并登录的用户</p>
-        <p>2. 每个用户只能创建一个店铺</p>
+        <p>2. 每个用户可创建多个店铺</p>
         <p>3. 店铺名称必须唯一，不能与其他店铺重复</p>
 
         <h3>二、店铺管理</h3>
@@ -213,11 +213,11 @@
 
 <script setup>
   import { ref, reactive, computed, watch, defineProps, defineEmits } from 'vue'
-  import { ElMessage, ElMessageBox } from 'element-plus'
+  import { ElMessage } from 'element-plus'
   import { Plus } from '@element-plus/icons-vue'
   import { useRouter } from 'vue-router'
   import { useUserStore } from '@/stores/user'
-  import { createShop, getMyShop } from '@/axios/shop'
+  import { createShop } from '@/axios/shop'
 
   const props = defineProps({
     modelValue: {
@@ -274,41 +274,6 @@
     Authorization: `Bearer ${localStorage.getItem('token')}`
   }
 
-  // 检查用户是否已有店铺
-  const checkExistingShop = async () => {
-    try {
-      loading.value = true
-      const res = await getMyShop()
-      if (res.success) {
-        ElMessageBox.confirm(
-          '您已经拥有店铺了，是否前往店铺管理？',
-          '提示',
-          {
-            confirmButtonText: '前往店铺',
-            cancelButtonText: '取消',
-            type: 'info'
-          }
-        ).then(() => {
-          router.push(`/shop/${res.data.shop_id}`)
-          handleClose()
-        }).catch(() => {
-          handleClose()
-        })
-        return true
-      }
-      return false
-    } catch (error) {
-      // 404表示没有店铺，这是正常的
-      if (error.response?.status === 404) {
-        return false
-      }
-      console.error('检查店铺失败:', error)
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
-
   // 监听对话框打开
   watch(visible, async (newVal) => {
     if (newVal) {
@@ -317,12 +282,6 @@
         ElMessage.warning('请先登录')
         handleClose()
         router.push('/login')
-        return
-      }
-
-      // 检查是否已有店铺
-      const hasShop = await checkExistingShop()
-      if (hasShop) {
         return
       }
 

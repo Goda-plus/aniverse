@@ -173,13 +173,6 @@ exports.createShop = async (req, res, next) => {
       return res.cc(false, '店铺名称不能为空', 400)
     }
 
-    // 检查用户是否已有店铺
-    const checkSql = 'SELECT shop_id FROM shops WHERE seller_id = ?'
-    const existing = await conMysql(checkSql, [user_id])
-    if (existing.length > 0) {
-      return res.cc(false, '您已经拥有店铺了', 400)
-    }
-
     // 检查店铺名称是否重复
     const nameCheckSql = 'SELECT shop_id FROM shops WHERE shop_name = ?'
     const nameExisting = await conMysql(nameCheckSql, [shop_name])
